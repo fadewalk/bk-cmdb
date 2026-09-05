@@ -163,11 +163,19 @@ export const deleteClassification = (id) => http.delete(`/delete/objectclassific
 export const createModelAttribute = (data) => http.post('/create/objectattr', {
   bk_supplier_account: '0', ...data
 })
+export const updateModelAttribute = (id, data) =>
+  http.put(`/update/objectattr/${id}`, { bk_supplier_account: '0', ...data })
 export const deleteModelAttribute = (id) => http.delete(`/delete/objectattr/${id}`)
 
 // ---------- 关联类型 ----------
 export const searchAssociationTypes = () =>
   http.post('/find/associationtype', { condition: {}, page: { start: 0, limit: 100 } })
+export const createAssociationType = (data) =>
+  http.post('/create/associationtype', { ...data })
+export const updateAssociationType = (id, data) =>
+  http.put(`/update/associationtype/${id}`, { ...data })
+export const deleteAssociationType = (id) =>
+  http.delete(`/delete/associationtype/${id}`)
 
 // ---------- 服务模板 ----------
 export const searchServiceTemplates = (bizId, page) =>

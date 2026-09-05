@@ -83,7 +83,8 @@
               <span v-if="f.__unique === 'single'" class="unique-tag">单独唯一</span>
               <span v-else-if="f.__unique === 'union'" class="unique-tag">联合唯一</span>
               <span v-if="f.isrequired" class="required-tag">必填</span>
-              <div class="f-del" v-if="!f.ispre" @click="removeField(f)"><el-icon><Close /></el-icon></div>
+              <el-icon v-if="!f.ispre" class="f-edit" @click.stop="openFieldForm(f)"><Edit /></el-icon>
+              <div class="f-del" v-if="!f.ispre" @click.stop="removeField(f)"><el-icon><Close /></el-icon></div>
             </div>
           </div>
         </div>
@@ -129,17 +130,17 @@
       </template>
     </div>
 
-    <!-- 新建字段 -->
-    <el-dialog v-model="fieldFormVisible" title="新建字段" width="460px">
+    <!-- 新建/编辑字段 -->
+    <el-dialog v-model="fieldFormVisible" :title="fieldForm.id ? '编辑字段' : '新建字段'" width="460px">
       <el-form label-width="90px">
         <el-form-item label="字段 ID" required>
-          <el-input v-model="fieldForm.bk_property_id" placeholder="英文唯一标识" />
+          <el-input v-model="fieldForm.bk_property_id" :disabled="!!fieldForm.id" placeholder="英文唯一标识" />
         </el-form-item>
         <el-form-item label="字段名称" required>
           <el-input v-model="fieldForm.bk_property_name" />
         </el-form-item>
         <el-form-item label="类型" required>
-          <el-select v-model="fieldForm.bk_property_type" style="width: 100%">
+          <el-select v-model="fieldForm.bk_property_type" style="width: 100%" :disabled="!!fieldForm.id">
             <el-option label="短字符 singlechar" value="singlechar" />
             <el-option label="长字符 longchar" value="longchar" />
             <el-option label="数字 int" value="int" />
@@ -166,8 +167,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Edit, Close } from '@element-plus/icons-vue'
 import {
-  http, searchModels, searchModelAttributes, createModelAttribute, deleteModelAttribute,
+  http, searchModels, searchModelAttributes, createModelAttribute, deleteModelAttribute, updateModelAttribute,
   getModelStatistics
 } from '../../api/cmdb'
 
@@ -182,7 +184,7 @@ const tab = ref('fields')
 const attrs = ref([])
 const fieldKeyword = ref('')
 const fieldFormVisible = ref(false)
-const fieldForm = ref({ bk_property_id: '', bk_property_name: '', bk_property_type: 'singlechar', isrequired: false })
+const fieldForm = ref({ id: null, bk_property_id: '', bk_property_name: '', bk_property_type: 'singlechar', isrequired: false })
 
 const assocs = ref([])
 const assocLoading = ref(false)
@@ -294,16 +296,39 @@ async function loadAssocs() {
   }
 }
 
-function openFieldForm() {
-  fieldForm.value = { bk_property_id: '', bk_property_name: '', bk_property_type: 'singlechar', isrequired: false }
+function openFieldForm(field) {
+  if (field) {
+    fieldForm.value = {
+      id: field.id,
+      bk_property_id: field.bk_property_id,
+      bk_property_name: field.bk_property_name,
+      bk_property_type: field.bk_property_type || 'singlechar',
+      isrequired: !!field.isrequired
+    }
+  } else {
+    fieldForm.value = { id: null, bk_property_id: '', bk_property_name: '', bk_property_type: 'singlechar', isrequired: false }
+  }
   fieldFormVisible.value = true
 }
 
 async function saveField() {
+  if (!fieldForm.value.bk_property_id || !fieldForm.value.bk_property_name) {
+    ElMessage.warning('请填写字段 ID 和名称')
+    return
+  }
   saving.value = true
   try {
-    await createModelAttribute({ bk_obj_id: objId, ...fieldForm.value })
-    ElMessage.success('字段已创建')
+    if (fieldForm.value.id) {
+      await updateModelAttribute(fieldForm.value.id, {
+        bk_obj_id: objId,
+        bk_property_name: fieldForm.value.bk_property_name,
+        isrequired: fieldForm.value.isrequired
+      })
+      ElMessage.success('字段已更新')
+    } else {
+      await createModelAttribute({ bk_obj_id: objId, ...fieldForm.value })
+      ElMessage.success('字段已创建')
+    }
     fieldFormVisible.value = false
     const attrsData = await searchModelAttributes(objId)
     attrs.value = attrsData || []
@@ -416,7 +441,13 @@ onMounted(load)
   background: #fff; border-radius: 2px; padding: 0 4px;
   color: #979BA5; cursor: pointer;
 }
-.field-card:hover .f-del { display: block; }
+.f-edit {
+  display: none; position: absolute; top: 8px; right: 30px;
+  background: #fff; border-radius: 2px; padding: 0 4px;
+  color: #979BA5; cursor: pointer;
+}
+.field-card:hover .f-del, .field-card:hover .f-edit { display: inline-flex; }
 .field-card:hover .unique-tag, .field-card:hover .required-tag { display: none; }
 .f-del:hover { color: #EA3636; }
+.f-edit:hover { color: #3A84FF; }
 </style>
