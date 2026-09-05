@@ -47,10 +47,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { listHostsWithoutApp } from '../api/cmdb'
 
 const router = useRouter()
+const route = useRoute()
 
 const keyword = ref('')
 const page = ref(1)
@@ -90,5 +91,9 @@ function goDetail(row) {
   router.push({ path: '/host-detail', query: { id: row.bk_host_id } })
 }
 
-onMounted(load)
+onMounted(() => {
+  const ip = route.query.ip
+  if (ip) keyword.value = String(ip)
+  load()
+})
 </script>

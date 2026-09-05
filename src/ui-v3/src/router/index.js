@@ -12,7 +12,7 @@ const router = createRouter({
       component: () => import('../layout/MainLayout.vue'),
       redirect: '/index',
       children: [
-        { path: 'index', name: 'Index', component: () => import('../views/Dashboard.vue'), meta: { title: '首页' } },
+        { path: 'index', name: 'Index', component: () => import('../views/IndexHome.vue'), meta: { title: '首页' } },
 
         // 业务
         { path: 'business/topo', name: 'Topo', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑' } },
