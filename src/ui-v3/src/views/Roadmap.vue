@@ -39,7 +39,9 @@ const items = [
   { module: '业务集/归档业务', desc: '业务集列表、归档业务查看与恢复', status: 'done' },
   { module: '云资源', desc: '云区域/云账户列表(独立模式无云供应商)', status: 'done' },
 
-  { module: '编辑器深度对齐', desc: '进程模板全字段编辑、服务实例克隆、集群/模块全属性编辑、字段分组', status: 'doing' },
+  { module: '编辑器深度对齐', desc: '进程模板全字段编辑(含 bind_info 端口绑定)/删除、进程实例编辑/删除、服务实例克隆、集群/模块属性编辑', status: 'done' },
+
+  { module: '低频增强项', desc: '字段分组管理、host-apply 规则创建向导、服务实例批量创建(可用 API 覆盖)', status: 'doing' },
 
   { module: '集群模板同步', desc: '集群模板变更同步(set-sync),低频,可走 cmdb_ctl', status: 'todo' },
   { module: '云资源同步', desc: '云资源发现(依赖云供应商插件,独立模式无后端数据)', status: 'todo' },

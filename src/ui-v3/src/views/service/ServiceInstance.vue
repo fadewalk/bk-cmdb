@@ -21,8 +21,9 @@
             <el-button link type="primary" @click="showProcesses(row)">{{ row.process_count ?? '查看' }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" @click="openClone(row)">克隆</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -77,7 +78,7 @@
     <el-drawer v-model="procDrawer" :title="`「${procInstName}」进程实例`" size="55%">
       <div class="table-toolbar">
         <div class="spacer" />
-        <el-button :icon="'Plus'" type="primary" size="small" @click="procFormVisible = true">新增进程</el-button>
+        <el-button :icon="'Plus'" type="primary" size="small" @click="openAddProcess">新增进程</el-button>
       </div>
       <el-table :data="processes" v-loading="procLoading" size="default">
         <el-table-column label="进程名称" min-width="130">
@@ -92,42 +93,59 @@
         <el-table-column label="启动用户" width="110">
           <template #default="{ row }">{{ row.property?.user || '-' }}</template>
         </el-table-column>
-        <el-table-column label="工作路径" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.property?.work_path || '-' }}</template>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openEditProcess(row)">编辑</el-button>
+            <el-button link type="danger" @click="removeProcess(row)">删除</el-button>
+          </template>
         </el-table-column>
       </el-table>
       <el-empty v-if="!procLoading && processes.length === 0" description="该服务实例暂无进程,可点击右上角「新增进程」" :image-size="80" />
-
-      <el-dialog v-model="procFormVisible" title="新增进程" width="480px" append-to-body>
-        <el-form label-width="90px">
-          <el-form-item label="进程名称" required>
-            <el-input v-model="procForm.bk_process_name" placeholder="如 java / nginx" />
-          </el-form-item>
-          <el-form-item label="监听 IP">
-            <el-input v-model="procForm.bk_bind_ip" />
-          </el-form-item>
-          <el-form-item label="端口">
-            <el-input v-model="procForm.port" placeholder="如 8080,多个用逗号分隔" />
-          </el-form-item>
-          <el-form-item label="启动用户">
-            <el-input v-model="procForm.user" />
-          </el-form-item>
-          <el-form-item label="工作路径">
-            <el-input v-model="procForm.work_path" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="procFormVisible = false">取消</el-button>
-          <el-button type="primary" @click="addProcess">创建</el-button>
-        </template>
-      </el-dialog>
     </el-drawer>
+
+    <!-- 进程实例新增/编辑(共享表单) -->
+    <ProcessFormDialog
+      :visible="procFormVisible"
+      :title="procEditing ? '编辑进程' : '新增进程'"
+      mode="instance"
+      :form="procForm"
+      :saving="procSaving"
+      @update:visible="procFormVisible = $event"
+      @save="saveProcess"
+    />
+
+    <!-- 克隆服务实例 -->
+    <el-dialog v-model="cloneDialog" title="克隆服务实例" width="560px">
+      <el-alert type="info" :closable="false" style="margin-bottom: 14px"
+        :title="`将把「${cloneSource?.name}」的进程配置复制到目标模块的其他主机上`" />
+      <el-form label-width="90px">
+        <el-form-item label="目标模块">
+          <el-cascader
+            v-model="cloneModulePath"
+            :options="moduleOptions"
+            :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
+            style="width: 100%"
+            @change="loadCloneHosts"
+          />
+        </el-form-item>
+        <el-form-item label="目标主机" required>
+          <el-select v-model="cloneHostId" filterable style="width: 100%" placeholder="选择一台主机">
+            <el-option v-for="h in cloneHosts" :key="h.bk_host_id" :label="h.bk_host_innerip || `主机 ${h.bk_host_id}`" :value="h.bk_host_id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cloneDialog = false">取消</el-button>
+        <el-button type="primary" :loading="cloning" :disabled="!cloneHostId || !cloneModulePath" @click="submitClone">克隆</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
@@ -240,22 +258,139 @@ async function submitCreate() {
   }
 }
 
-// ---------- 新增进程实例 ----------
+// ---------- 新增/编辑进程实例 ----------
 const procFormVisible = ref(false)
-const procForm = ref({ bk_process_name: '', bk_bind_ip: '127.0.0.1', port: '', user: 'root', work_path: '/tmp' })
+const procSaving = ref(false)
+const procEditing = ref(null)
+const procForm = ref({})
 
-async function addProcess() {
-  if (!procForm.value.bk_process_name) {
+function openAddProcess() {
+  procEditing.value = null
+  procForm.value = { bk_func_name: '', bk_process_name: '', bk_bind_ip: '127.0.0.1', port: '', user: 'root', work_path: '/tmp', start_cmd: '', stop_cmd: '', description: '' }
+  procFormVisible.value = true
+}
+
+function openEditProcess(row) {
+  procEditing.value = row
+  procForm.value = {
+    bk_process_id: row.property?.bk_process_id,
+    bk_func_name: row.property?.bk_func_name || '',
+    bk_process_name: row.property?.bk_process_name || '',
+    bk_bind_ip: row.property?.bk_bind_ip || '127.0.0.1',
+    port: row.property?.port || '',
+    user: row.property?.user || 'root',
+    work_path: row.property?.work_path || '/tmp',
+    start_cmd: row.property?.start_cmd || '',
+    stop_cmd: row.property?.stop_cmd || '',
+    description: row.property?.description || ''
+  }
+  procFormVisible.value = true
+}
+
+async function saveProcess() {
+  if (!procForm.value.bk_func_name) {
     ElMessage.warning('请输入进程名称')
     return
   }
-  const info = { ...procForm.value, bk_func_name: procForm.value.bk_process_name }
-  if (info.port) info.port = String(info.port)
-  await createProcessInstance(bizId.value, procInstId.value, info)
-  ElMessage.success('进程已创建')
-  procFormVisible.value = false
+  procSaving.value = true
+  try {
+    const info = { ...procForm.value }
+    if (info.port) info.port = String(info.port)
+    if (procEditing.value) {
+      const pid = info.bk_process_id
+      delete info.bk_process_id
+      await http.post('/update/proc/process_instance/by_ids', {
+        bk_biz_id: bizId.value,
+        process_ids: [pid],
+        update_data: info
+      })
+      ElMessage.success('进程已更新')
+    } else {
+      delete info.bk_process_id
+      await createProcessInstance(bizId.value, procInstId.value, info)
+      ElMessage.success('进程已创建')
+    }
+    procFormVisible.value = false
+    const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
+    processes.value = data?.info || data || []
+  } finally {
+    procSaving.value = false
+  }
+}
+
+async function removeProcess(row) {
+  const pid = row.property?.bk_process_id
+  await ElMessageBox.confirm(`确定删除进程「${row.property?.bk_func_name || pid}」?`, '删除确认', { type: 'warning' })
+  await http.delete('/delete/proc/process_instance', {
+    bk_biz_id: bizId.value,
+    process_instance_ids: [pid]
+  })
+  ElMessage.success('已删除')
   const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
   processes.value = data?.info || data || []
+}
+
+// ---------- 克隆服务实例 ----------
+const cloneDialog = ref(false)
+const cloning = ref(false)
+const cloneSource = ref(null)
+const cloneModulePath = ref(null)
+const cloneHostId = ref(null)
+const cloneHosts = ref([])
+const cloneSourceProcesses = ref([])
+
+async function openClone(row) {
+  cloneSource.value = row
+  cloneModulePath.value = row.bk_module_id ?? null
+  cloneHostId.value = null
+  cloneHosts.value = []
+  cloneDialog.value = true
+  await loadModuleOptions()
+  // 拉取源实例的进程配置
+  const data = await searchProcessInstances(bizId.value, row.id, { start: 0, limit: 100 })
+  cloneSourceProcesses.value = ((data?.info || data || [])).map((p) => p.property || {})
+  if (row.bk_module_id) loadCloneHosts()
+}
+
+async function loadCloneHosts() {
+  cloneHostId.value = null
+  cloneHosts.value = []
+  if (!cloneModulePath.value) return
+  const data = await listHostsWithNoSvcInst(bizId.value, cloneModulePath.value)
+  const ids = data?.bk_host_ids || []
+  if (ids.length > 0) {
+    const hostData = await listBizHosts(bizId.value, { start: 0, limit: 500 })
+    const all = hostData?.info?.map((h) => h.host || h) || []
+    cloneHosts.value = all.filter((h) => ids.includes(h.bk_host_id))
+  }
+}
+
+async function submitClone() {
+  cloning.value = true
+  try {
+    await createServiceInstance(bizId.value, cloneModulePath.value, [{
+      bk_host_id: cloneHostId.value,
+      service_instance_name: `${cloneSource.value.name || cloneSource.value.id}-clone`,
+      processes: cloneSourceProcesses.value.map((p) => ({
+        process_info: {
+          bk_process_name: p.bk_process_name || p.bk_func_name || '',
+          bk_func_name: p.bk_func_name || '',
+          bk_bind_ip: p.bk_bind_ip || '127.0.0.1',
+          port: p.port || '',
+          user: p.user || 'root',
+          work_path: p.work_path || '/tmp',
+          start_cmd: p.start_cmd || '',
+          stop_cmd: p.stop_cmd || '',
+          description: p.description || ''
+        }
+      }))
+    }])
+    ElMessage.success('克隆成功')
+    cloneDialog.value = false
+    load()
+  } finally {
+    cloning.value = false
+  }
 }
 
 async function load() {

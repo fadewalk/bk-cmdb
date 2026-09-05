@@ -89,10 +89,23 @@
     </el-dialog>
 
     <!-- 重命名集群 / 模块 -->
-    <el-dialog v-model="renameDialog" :title="renameTarget?.type === 'set' ? '重命名集群' : '重命名模块'" width="420px">
-      <el-form label-width="90px" @submit.prevent>
-        <el-form-item label="新名称" required>
+    <el-dialog v-model="renameDialog" :title="renameTarget?.type === 'set' ? '编辑集群' : '编辑模块'" width="440px">
+      <el-form label-width="100px" @submit.prevent>
+        <el-form-item :label="renameTarget?.type === 'set' ? '集群名称' : '模块名称'" required>
           <el-input v-model="renameName" />
+        </el-form-item>
+        <el-form-item v-if="renameTarget?.type === 'set'" label="集群描述">
+          <el-input v-model="renameDesc" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item v-if="renameTarget?.type === 'module'" label="模块类型">
+          <el-select v-model="renameModuleType" style="width: 100%">
+            <el-option label="常规" value="1" />
+            <el-option label="数据库" value="2" />
+            <el-option label="中间件" value="3" />
+            <el-option label="程序" value="4" />
+            <el-option label="缓存" value="5" />
+            <el-option label="其他" value="99" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -145,10 +158,14 @@ function openCreateModule(setNode) {
 const renameDialog = ref(false)
 const renameTarget = ref(null)
 const renameName = ref('')
+const renameDesc = ref('')
+const renameModuleType = ref('1')
 
 function openRename(node) {
   renameTarget.value = node
   renameName.value = node.label
+  renameDesc.value = node.setDesc || node.moduleDesc || ''
+  renameModuleType.value = node.moduleType || '1'
   renameDialog.value = true
 }
 
@@ -161,9 +178,15 @@ async function saveRename() {
   try {
     const t = renameTarget.value
     if (t.type === 'set') {
-      await updateSet(bizId.value, t.setId, { bk_set_name: renameName.value })
+      await updateSet(bizId.value, t.setId, {
+        bk_set_name: renameName.value,
+        bk_set_desc: renameDesc.value
+      })
     } else {
-      await updateModule(bizId.value, t.setId, t.moduleId, { bk_module_name: renameName.value })
+      await updateModule(bizId.value, t.setId, t.moduleId, {
+        bk_module_name: renameName.value,
+        bk_module_type: renameModuleType.value
+      })
     }
     ElMessage.success('已更新')
     renameDialog.value = false

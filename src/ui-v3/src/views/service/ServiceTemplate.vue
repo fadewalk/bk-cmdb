@@ -72,9 +72,26 @@
         <el-table-column label="工作路径" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.work_path || '-' }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openEditProcTpl(row)">编辑</el-button>
+            <el-button link type="danger" @click="removeProcTpl(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-empty v-if="!tplDetailLoading && tplProcesses.length === 0" description="该模板暂无进程" :image-size="80" />
     </el-drawer>
+
+    <!-- 进程模板新增/编辑(共享表单) -->
+    <ProcessFormDialog
+      :visible="procTplDialog"
+      title="进程模板"
+      mode="template"
+      :form="procTplForm"
+      :saving="saving"
+      @update:visible="procTplDialog = $event"
+      @save="saveProcTpl"
+    />
 
     <!-- 新建服务模板 -->
     <el-dialog v-model="tplFormVisible" title="新建服务模板" width="440px">
@@ -93,34 +110,13 @@
         <el-button type="primary" :loading="saving" @click="saveTpl">创建</el-button>
       </template>
     </el-dialog>
-
-    <!-- 新增进程模板 -->
-    <el-dialog v-model="procTplDialog" title="新增进程模板" width="480px" append-to-body>
-      <el-form label-width="90px">
-        <el-form-item label="进程名称" required>
-          <el-input v-model="procTplForm.bk_func_name" placeholder="如 java / nginx" />
-        </el-form-item>
-        <el-form-item label="端口">
-          <el-input v-model="procTplForm.port" placeholder="如 8080" />
-        </el-form-item>
-        <el-form-item label="启动用户">
-          <el-input v-model="procTplForm.user" />
-        </el-form-item>
-        <el-form-item label="工作路径">
-          <el-input v-model="procTplForm.work_path" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="procTplDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveProcTpl">创建</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http
@@ -145,13 +141,65 @@ const tplDetailId = ref(null)
 
 const procTplDialog = ref(false)
 const saving = ref(false)
-const procTplForm = ref({ bk_func_name: '', port: '', user: 'root', work_path: '/tmp' })
+const procTplForm = ref({})
 const procTplTarget = ref(null)
+const procTplEditing = ref(null) // 编辑中的进程模板原始数据
+
+// 展示行 → 表单对象(模板模式带 __bind_* 编辑字段)
+function tplRowToForm(row) {
+  return {
+    id: row.id,
+    bk_func_name: row.bk_func_name === '-' ? '' : row.bk_func_name,
+    bk_process_name: row.bk_func_name === '-' ? '' : row.bk_func_name,
+    user: row.user === '-' ? '' : row.user,
+    work_path: row.work_path === '-' ? '' : row.work_path,
+    start_cmd: row.start_cmd || '',
+    stop_cmd: row.stop_cmd || '',
+    description: row.description || '',
+    __bind_port: row.port === '-' ? '' : row.port,
+    __bind_ip: row.bindIp || '1',
+    __bind_protocol: row.bindProtocol || '1',
+    __bind_row_id: row.bindRowId
+  }
+}
 
 function openAddProcTpl(row) {
   procTplTarget.value = row
-  procTplForm.value = { bk_func_name: '', port: '', user: 'root', work_path: '/tmp' }
+  procTplEditing.value = null
+  procTplForm.value = tplRowToForm({ bk_func_name: '-', user: '-', work_path: '-', port: '-' })
+  procTplForm.value.__bind_row_id = undefined
   procTplDialog.value = true
+}
+
+function openEditProcTpl(row) {
+  procTplEditing.value = row
+  procTplTarget.value = templates.value.find((t) => t.id === row.serviceTemplateId) || { id: row.serviceTemplateId }
+  procTplForm.value = tplRowToForm(row)
+  procTplDialog.value = true
+}
+
+// 组装模板全量 property(该接口为覆盖式更新,必须提交所有字段)
+function buildTemplateProperty(form) {
+  const prop = {}
+  const textFields = ['bk_func_name', 'bk_process_name', 'user', 'work_path', 'start_cmd', 'stop_cmd', 'description']
+  for (const f of textFields) {
+    prop[f] = { value: form[f] || '', as_default_value: !!form[f] }
+  }
+  if (form.__bind_port) {
+    prop.bind_info = {
+      value: [{
+        row_id: form.__bind_row_id ?? 1,
+        ip: { value: form.__bind_ip || '1', as_default_value: true },
+        port: { value: String(form.__bind_port), as_default_value: true },
+        protocol: { value: form.__bind_protocol || '1', as_default_value: true },
+        enable: { value: true, as_default_value: true }
+      }],
+      as_default_value: true
+    }
+  } else {
+    prop.bind_info = { value: [], as_default_value: true }
+  }
+  return prop
 }
 
 async function saveProcTpl() {
@@ -161,22 +209,38 @@ async function saveProcTpl() {
   }
   saving.value = true
   try {
-    const spec = {}
-    for (const key of ['bk_func_name', 'bk_process_name', 'port', 'user', 'work_path', 'bk_bind_ip']) {
-      const v = key === 'bk_process_name' ? procTplForm.value.bk_func_name : procTplForm.value[key]
-      if (v !== undefined && v !== '') spec[key] = { value: v, as_default_value: true }
+    const property = buildTemplateProperty(procTplForm.value)
+    if (procTplEditing.value) {
+      await http.put('/update/proc/proc_template', {
+        bk_biz_id: bizId.value,
+        process_template_id: procTplEditing.value.id,
+        process_property: property
+      })
+      ElMessage.success('进程模板已更新')
+    } else {
+      await http.post('/createmany/proc/proc_template', {
+        bk_biz_id: bizId.value,
+        service_template_id: procTplTarget.value.id,
+        processes: [{ spec: property }]
+      })
+      ElMessage.success('进程模板已创建')
     }
-    await http.post('/createmany/proc/proc_template', {
-      bk_biz_id: bizId.value,
-      service_template_id: procTplTarget.value.id,
-      processes: [{ spec }]
-    })
-    ElMessage.success('进程模板已创建')
     procTplDialog.value = false
     showTplDetail(procTplTarget.value)
   } finally {
     saving.value = false
   }
+}
+
+async function removeProcTpl(row) {
+  await ElMessageBox.confirm(`确定删除进程模板「${row.bk_func_name}」?`, '删除确认', { type: 'warning' })
+  await http.delete('/deletemany/proc/proc_template', {
+    bk_biz_id: bizId.value,
+    process_templates: [row.id]
+  })
+  ElMessage.success('已删除')
+  const target = templates.value.find((t) => t.id === row.serviceTemplateId) || { id: row.serviceTemplateId, name: tplDetailName.value }
+  showTplDetail(target)
 }
 
 // ---------- 新建服务模板 ----------
@@ -261,13 +325,23 @@ async function showTplDetail(row) {
       service_template_id: row.id,
       page: { start: 0, limit: 100 }
     })
-    tplProcesses.value = (data?.info || []).map((t) => ({
-      id: t.id,
-      bk_func_name: t.property?.bk_func_name?.value || t.bk_process_name || '-',
-      port: t.property?.port?.value || '-',
-      user: t.property?.user?.value || '-',
-      work_path: t.property?.work_path?.value || '-'
-    }))
+    tplProcesses.value = (data?.info || []).map((t) => {
+      const bind = t.property?.bind_info?.value?.[0]
+      return {
+        id: t.id,
+        serviceTemplateId: t.service_template_id,
+        bk_func_name: t.property?.bk_func_name?.value || '-',
+        port: bind?.port?.value?.value || bind?.port?.value || '-',
+        bindIp: bind?.ip?.value?.value || bind?.ip?.value,
+        bindProtocol: bind?.protocol?.value?.value || bind?.protocol?.value,
+        bindRowId: bind?.row_id,
+        user: t.property?.user?.value || '-',
+        work_path: t.property?.work_path?.value || '-',
+        start_cmd: t.property?.start_cmd?.value || '',
+        stop_cmd: t.property?.stop_cmd?.value || '',
+        description: t.property?.description?.value || ''
+      }
+    })
   } finally { tplDetailLoading.value = false }
 }
 
