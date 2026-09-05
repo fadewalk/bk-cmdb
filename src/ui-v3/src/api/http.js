@@ -8,6 +8,14 @@ const http = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
+// 独立模式(skip-login):全局注入用户/开发商账号头,与老版 preload 设置对齐。
+// 部分接口(如 find/classificationobject)按 X-Bkcmdb-User 过滤归属,缺失时返回空列表。
+http.interceptors.request.use((config) => {
+  config.headers['X-Bkcmdb-User'] = 'admin'
+  config.headers['X-Bkcmdb-Supplier-Account'] = '0'
+  return config
+})
+
 function isHtml(data) {
   return typeof data === 'string' && /<html|<!doctype/i.test(data)
 }
