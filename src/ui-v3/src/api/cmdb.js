@@ -123,6 +123,27 @@ export const createHostFavorite = (data) => http.post('/hosts/favorites/add', da
 export const deleteHostFavorite = (id) => http.delete(`/hosts/favorites/${id}`)
 export const incrHostFavorite = (id) => http.put(`/hosts/favorites/${id}/incr`)
 
+// 资源目录 CRUD
+export const listResourceDirectory = (data) =>
+  http.post('/findmany/resource/directory', data || {})
+export const createResourceDirectory = (data) =>
+  http.post('/create/resource/directory', data)
+export const updateResourceDirectory = (moduleId, data) =>
+  http.put(`/update/resource/directory/${moduleId}`, data)
+export const deleteResourceDirectory = (moduleId) =>
+  http.delete(`/delete/resource/directory/${moduleId}`)
+export const transferHostsToDirectory = (data) =>
+  http.post('/host/transfer/resource/directory', data)
+// 主机属性更新
+export const updateHostProperties = (hostId, bizId, data) =>
+  http.post(`/table/update/instance/object/host/bk_biz_id/${bizId || 0}/inst/${hostId}`, data)
+
+// ---------- 资源池主机列表 ----------
+export const searchHostsResource = (data) =>
+  http.post('/findmany/hosts/search/resource', data)
+export const listHostsInIdle = (bizId, data) =>
+  http.post(`/hosts/app/${bizId}/list_hosts`, data)
+
 // 批量导入主机(走 multipart/form-data,file + params)
 export const importHosts = (file, params) => {
   const form = new FormData()
