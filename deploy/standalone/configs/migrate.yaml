@@ -1,0 +1,20 @@
+# admin_server 本地引导配置(独立模式)
+# admin_server 启动时读取本文件,并把同目录下的
+# mongodb/redis/common/extra 配置 + 错误码/多语言资源刷入 ZooKeeper,
+# 其余服务进程均从 ZooKeeper 拉取配置。
+
+# 配置中心 / 注册中心(ZooKeeper)
+configServer:
+  addrs: zookeeper:2181
+registerServer:
+  addrs: zookeeper:2181
+
+# 其余配置文件所在目录
+confs:
+  dir: /data/cmdb/cmdb_adminserver/configures
+
+# 错误码与多语言资源
+errors:
+  res: /data/cmdb/resources/errors
+language:
+  res: /data/cmdb/resources/language

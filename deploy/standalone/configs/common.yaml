@@ -1,0 +1,193 @@
+# 公共配置(独立模式)
+# 原则:所有蓝鲸平台对接项(ESB/GSE/权限中心/监控/日志平台/ES)全部关闭或置空,
+#       服务启动与核心功能不依赖任何蓝鲸组件。
+
+# elasticsearch 全文检索:关闭
+es:
+  fullTextSearch: "off"
+  url: http://127.0.0.1:9200
+  usr: ""
+  pwd: ""
+
+# ESB(蓝鲸 PaaS API):独立模式不使用,仅占位
+esb:
+  addr: http://127.0.0.1:9999
+  appCode: bk_cmdb
+  appSecret: ""
+  insecureSkipVerify: true
+  certFile:
+  keyFile:
+  caFile:
+  password:
+
+# operation_server:运营统计本地可用,不依赖外部组件
+operationServer:
+  timer:
+    spec: 00:30
+  disableOperationStatistic: false
+
+# auth_server(蓝鲸权限中心)专属配置:独立模式不部署 auth_server,占位
+authServer:
+  address: http://127.0.0.1:9999
+  appCode: bk_cmdb
+  appSecret: ""
+  authCenter:
+    tls:
+      insecureSkipVerify: true
+      certFile:
+      keyFile:
+      caFile:
+      password:
+  supplierID: "0"
+  skipViewBizAuth: false
+
+# cloudServer:独立模式不部署,占位
+cloudServer:
+  cryptor:
+    enableCryptor: false
+    secretKeyUrl: ""
+    secretsAddrs: ""
+    secretsToken: ""
+    secretsProject: ""
+    secretsEnv: ""
+  syncTask:
+    syncPeriodMinutes: 10
+
+# 新版加解密:关闭
+crypto:
+  enabled: false
+  algorithm: CLASSIC
+  sm4:
+    key: ""
+  aesGcm:
+    key: ""
+
+# datacollection:主机快照走 redis 模式(独立模式无采集源,处于待机状态)
+datacollection:
+  hostsnap:
+    reportMode: redis
+    changeRangePercent: 10
+    rateLimiter:
+      qps: 40
+      burst: 100
+    timeWindow:
+      atTime:
+      checkIntervalHours: 1
+      windowMinutes: 15
+
+# 监控:noop 插件,不上报
+monitor:
+  pluginName: noop
+  enableMonitor: false
+  dataID: 0
+  queueSize: 100
+  bkMonitorReportUrl:
+  accessToken:
+  rateLimiter:
+    qps: 10
+    burst: 20
+
+cacheService:
+  briefTopologySyncIntervalMinutes: 15
+
+# openTelemetry:关闭
+openTelemetry:
+  enable: false
+  endpoint:
+  bkDataID:
+  bkDataToken:
+  tls:
+    insecureSkipVerify: true
+    certFile:
+    keyFile:
+    caFile:
+    password:
+
+# eventServer:关闭主机身份下发(依赖 GSE),独立模式必须为 false
+eventServer:
+  hostIdentifier:
+    startUp: false
+    version: v2
+    batchSyncIntervalHours: 6
+    rateLimiter:
+      qps: 200
+      burst: 200
+    fileName: "hostid"
+    linux:
+      filePath: /tmp
+      fileOwner: "root"
+      filePrivilege: 644
+    windows:
+      filePath: /tmp
+      fileOwner: "SYSTEM"
+      filePrivilege: 644
+
+# apiServer:jwt 关闭
+apiServer:
+  jwt:
+    enabled: false
+    publicKey:
+
+# GSE:独立模式不使用,占位
+gse:
+  apiServer:
+    endpoints:
+      - 127.0.0.1:9999
+    insecureSkipVerify: true
+    certFile:
+    keyFile:
+    caFile:
+    password:
+  taskServer:
+    endpoints:
+      - 127.0.0.1:9999
+    insecureSkipVerify: true
+    certFile:
+    keyFile:
+    caFile:
+    password:
+
+# kafka:主机快照 redis 模式下不使用,占位
+kafka:
+  snap:
+    brokers:
+      - 127.0.0.1:9092
+    groupID: bk_cmdb_snapshot_group
+    partition: 1
+    user:
+    password:
+
+httpClient:
+  idleConnTimeoutSeconds: 0
+
+# cmdb 服务间 tls:关闭
+tls:
+  insecureSkipVerify: true
+  certFile:
+  keyFile:
+  caFile:
+  password:
+
+# API 网关(蓝鲸):独立模式不使用,占位
+apiGW:
+  bkGseApiGatewayUrl: http://127.0.0.1:9999
+  bkNoticeApiGatewayUrl: http://127.0.0.1:9999
+  bkCmdbApiGatewayUrl: http://127.0.0.1:9999
+  appCode: bk_cmdb
+  appSecret: ""
+  username: admin
+  tls:
+    insecureSkipVerify: true
+    certFile:
+    keyFile:
+    caFile:
+    password:
+
+# 数据同步服务:独立模式不部署 transfer-service,关闭
+transferService:
+  enableSync: false
+  enableIncrSync: false
+  name:
+  role:
+  syncIntervalHours:
+  transferMediumAddress:

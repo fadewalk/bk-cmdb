@@ -1,0 +1,9 @@
+# 构建上下文裁剪:只保留 go 源码、前端源码与部署所需资源
+.git
+.codegraph
+my-docs
+lancedb
+src/bin
+src/ui/node_modules
+src/ui/mock
+**/node_modules

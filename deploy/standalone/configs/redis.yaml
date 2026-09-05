@@ -1,0 +1,40 @@
+# redis 配置(独立模式:本地 compose 单实例,无认证)
+redis:
+  host: redis:6379
+  pwd: ""
+  sentinelPwd: ""
+  database: "0"
+  maxOpenConns: 1000
+  maxIDleConns: 100
+  masterName: ""
+
+  # 以下几个为 datacollection 模块所需配置(独立模式下无采集源,保持与主实例相同即可)
+  # 接收主机信息数据的 redis
+  snap:
+    host: redis:6379
+    pwd: ""
+    sentinelPwd: ""
+    database: "0"
+    maxOpenConns: 1000
+    maxIdleConns: 100
+    masterName: ""
+
+  # 接收模型实例数据的 redis
+  discover:
+    host: redis:6379
+    pwd: ""
+    sentinelPwd: ""
+    database: "0"
+    maxOpenConns: 1000
+    maxIdleConns: 100
+    masterName: ""
+
+  # 接收硬件数据的 redis
+  netcollect:
+    host: redis:6379
+    pwd: ""
+    sentinelPwd: ""
+    database: "0"
+    maxOpenConns: 1000
+    maxIdleConns: 100
+    masterName: ""

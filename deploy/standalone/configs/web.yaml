@@ -1,0 +1,100 @@
+# web_server 本地配置(独立模式)
+# 关键差异:
+#   - login.version: skip-login   免登录模式(自动以 admin 身份登录),不依赖蓝鲸 PaaS 登录
+#   - site.authscheme / app.authscheme: internal   内置权限,不依赖蓝鲸权限中心
+#   - 所有 bkXXX(蓝鲸 PaaS/ESB)地址仅占位,不会被调用
+
+es:
+  fullTextSearch: "off"
+  url: http://127.0.0.1:9200
+  usr: cmdb
+  pwd: "cmdb1234"
+
+errors:
+  res: /data/cmdb/resources/errors
+language:
+  res: /data/cmdb/resources/language
+
+webServer:
+  api:
+    version: v3
+  session:
+    name: cc3
+    defaultlanguage: zh-cn
+    multipleOwner: "0"
+    skip: "0"
+    userInfo: admin:admin
+  site:
+    domainUrl: http://localhost:8090
+    bkLoginUrl: http://127.0.0.1:9999/login/?app_id=%s&c_url=%s
+    appCode: cc
+    checkUrl: http://127.0.0.1:9999/login/accounts/get_user/?bk_token=
+    resourcesPath: /tmp/
+    htmlRoot: /data/cmdb/cmdb_webserver/web
+    authscheme: internal
+    paas:
+      tls:
+        insecureSkipVerify: true
+        certFile:
+        keyFile:
+        caFile:
+        password:
+  app:
+    authscheme: internal
+  login:
+    version: skip-login
+  changelogPath:
+    ch: /data/cmdb/changelog_user/ch
+    en: /data/cmdb/changelog_user/en
+  jwt:
+    enabled: false
+    publicKey:
+    privateKey:
+
+monitor:
+  pluginName: noop
+  enableMonitor: false
+  dataID: 0
+  queueSize: 100
+  rateLimiter:
+    qps: 10
+    burst: 20
+
+openTelemetry:
+  enable: false
+  endpoint:
+  bkDataID:
+  bkDataToken:
+  tls:
+    insecureSkipVerify: true
+    certFile:
+    keyFile:
+    caFile:
+    password:
+
+tls:
+  insecureSkipVerify: true
+  certFile:
+  keyFile:
+  caFile:
+  password:
+
+redis:
+  host: redis:6379
+  pwd: ""
+  sentinelPwd: ""
+  database: "0"
+  maxOpenConns: 1000
+  maxIDleConns: 100
+
+mongodb:
+  host: mongodb
+  port: "27017"
+  usr: cmdb
+  pwd: "cmdb1234"
+  database: cmdb
+  maxOpenConns: 1000
+  maxIdleConns: 100
+  mechanism: SCRAM-SHA-1
+  rsName: rs0
+  socketTimeoutSeconds: 30

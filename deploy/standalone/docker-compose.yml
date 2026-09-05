@@ -1,0 +1,114 @@
+#******************************************************************************
+# bk-cmdb 独立部署(无蓝鲸平台依赖)
+#
+# 组成:
+#   zookeeper : 服务注册发现 + 配置中心(CMDB 自身的机制,非蓝鲸组件)
+#   mongodb   : 主存储(单节点副本集,CMDB 依赖 change stream)
+#   redis     : 缓存/会话
+#   cmdb      : 全部 Go 服务 + 前端静态资源(单容器多进程)
+#
+# 使用:
+#   docker compose -f deploy/standalone/docker-compose.yml up -d --build
+#   访问 http://localhost:8090(免登录,自动以 admin 身份进入)
+#******************************************************************************
+services:
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: cmdb-zookeeper
+    restart: unless-stopped
+    healthcheck:
+      # ZK 3.8 默认白名单禁用 ruok 等四字命令,改用 bash TCP 连接探测
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  mongodb:
+    image: mongo:4.4
+    container_name: cmdb-mongodb
+    restart: unless-stopped
+    # 首次初始化时自动创建 root 用户并开启认证(--replSet + 认证时官方镜像自动生成 keyfile)
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root1234
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    # mongo4.4 镜像不会自动生成 keyfile,而副本集开启认证必须提供;
+    # 用 entrypoint 包装在首次启动时生成并持久化到独立卷
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        if [ ! -f /data/key/keyfile ]; then
+          mkdir -p /data/key
+          openssl rand -base64 756 > /data/key/keyfile
+          chmod 400 /data/key/keyfile
+          chown 999:999 /data/key/keyfile
+        fi
+        exec /usr/local/bin/docker-entrypoint.sh mongod --replSet rs0 --keyFile /data/key/keyfile --bind_ip_all
+    volumes:
+      - mongodb-data:/data/db
+      - mongo-key:/data/key
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongo -u root -p root1234 --authenticationDatabase admin --quiet --eval 'db.runCommand({ping:1}).ok'"]
+      interval: 10s
+      timeout: 10s
+      retries: 24
+      start_period: 20s
+
+  # 副本集初始化(一次性任务):认证就绪后发起 rs.initiate,成功即退出
+  mongo-init:
+    image: mongo:4.4
+    container_name: cmdb-mongo-init
+    restart: no
+    depends_on:
+      - mongodb
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          if mongo --host mongodb -u root -p root1234 --authenticationDatabase admin --quiet \
+              --eval 'var r=null; try{r=rs.status()}catch(e){}; if(r && r.ok==1){quit(0)}; try{rs.initiate({_id:"rs0",members:[{_id:0,host:"mongodb:27017"}]}).ok}catch(e){quit(1)}' && \
+             mongo --host mongodb -u root -p root1234 --authenticationDatabase admin --quiet --eval 'rs.status().ok' | grep -q 1; then
+            echo "replica set initiated"
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "replica set init failed" >&2
+        exit 1
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: cmdb-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  cmdb:
+    build:
+      context: ../..
+      dockerfile: deploy/standalone/Dockerfile
+    container_name: cmdb
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  mongodb-data:
+  mongo-key:

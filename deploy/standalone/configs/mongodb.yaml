@@ -1,0 +1,26 @@
+# mongodb 配置(独立模式:本地 compose 单节点副本集,SCRAM-SHA-1 认证)
+# 账号由 mongo-init/01-cmdb-user.js 在 mongo 首次初始化时创建
+mongodb:
+  host: mongodb
+  port: "27017"
+  usr: cmdb
+  pwd: "cmdb1234"
+  database: cmdb
+  maxOpenConns: 1000
+  maxIdleConns: 100
+  mechanism: SCRAM-SHA-1
+  rsName: rs0
+  socketTimeoutSeconds: 30
+
+# 事件监听库(独立模式与主库同实例)
+watch:
+  host: mongodb
+  port: "27017"
+  usr: cmdb
+  pwd: "cmdb1234"
+  database: cmdb
+  maxOpenConns: 1000
+  maxIdleConns: 100
+  mechanism: SCRAM-SHA-1
+  rsName: rs0
+  socketTimeoutSeconds: 30
