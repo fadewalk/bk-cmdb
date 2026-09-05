@@ -100,6 +100,29 @@ export const transferHostModule = (bizId, hostIds, moduleIds, isIncrement = fals
 export const transferHostToResource = (bizId, hostIds) =>
   http.post('/hosts/modules/resource', { bk_biz_id: bizId, bk_host_id: hostIds })
 
+// 跨业务转移
+export const transferHostAcrossBiz = (params) =>
+  http.post('/hosts/resource/cross/biz', params)
+// 转移到空闲机
+export const transferHostToIdle = (bizId, hostIds) =>
+  http.post('/hosts/modules/resource/idle', { bk_biz_id: bizId, bk_host_id: hostIds })
+
+// 主机详情 + 快照
+export const getHostBase = (hostId) => http.get(`/hosts/0/${hostId}`)
+export const getHostSnapshot = (hostId) => http.get(`/hosts/snapshot/${hostId}`)
+// 复杂条件搜索
+export const searchHosts = (data) => http.post('/hosts/search', data)
+// 主机实例关联查询
+export const getHostInstTopo = (hostId, data) =>
+  http.post(`/find/instassttopo/host/${hostId}`, data)
+export const searchHostInstAssoc = (data) =>
+  http.post('/findmany/inst/association', data)
+// 主机收藏
+export const listHostFavorites = (data) => http.post('/hosts/favorites', data)
+export const createHostFavorite = (data) => http.post('/hosts/favorites/add', data)
+export const deleteHostFavorite = (id) => http.delete(`/hosts/favorites/${id}`)
+export const incrHostFavorite = (id) => http.put(`/hosts/favorites/${id}/incr`)
+
 // 批量导入主机(走 multipart/form-data,file + params)
 export const importHosts = (file, params) => {
   const form = new FormData()
@@ -110,6 +133,61 @@ export const importHosts = (file, params) => {
     timeout: 60000
   })
 }
+
+// ---------- 主机自动应用(host-apply) ----------
+// 模块模式规则查询
+export const searchHostApplyRules = (bizId, data) =>
+  http.post(`/findmany/host_apply_rule/bk_biz_id/${bizId}`, data)
+// 模板模式规则查询
+export const searchHostApplyTemplateRules = (data) =>
+  http.post('/host/findmany/service_template/host_apply_rule', data)
+// 主机相关规则
+export const searchHostRelatedRules = (bizId, data) =>
+  http.post(`/findmany/host_apply_rule/bk_biz_id/${bizId}/host_related_rules`, data)
+// 应用预览(模块)
+export const previewHostApplyModule = (data) =>
+  http.post('/host/createmany/module/host_apply_plan/preview', data)
+// 应用预览(模板)
+export const previewHostApplyTemplate = (data) =>
+  http.post('/host/createmany/service_template/host_apply_plan/preview', data)
+// 执行应用(模块)
+export const runHostApplyModule = (data) =>
+  http.post('/host/updatemany/module/host_apply_plan/run', data)
+// 执行应用(模板)
+export const runHostApplyTemplate = (data) =>
+  http.post('/updatemany/proc/service_template/host_apply_plan/run', data)
+// 任务状态(模块)
+export const getHostApplyModuleStatus = (data) =>
+  http.post('/host/findmany/module/host_apply_plan/status', data)
+// 任务状态(模板)
+export const getHostApplyTemplateStatus = (data) =>
+  http.post('/findmany/proc/service_template/host_apply_plan/status', data)
+// 启用/禁用自动应用(模块)
+export const setHostApplyModuleEnabled = (bizId, data) =>
+  http.put(`/module/host_apply_enable_status/bk_biz_id/${bizId}`, data)
+// 启用/禁用自动应用(模板)
+export const setHostApplyTemplateEnabled = (bizId, data) =>
+  http.put(`/updatemany/proc/service_template/host_apply_enable_status/biz/${bizId}`, data)
+// 未应用主机数
+export const getInvalidHostCount = (bizId, data) =>
+  http.post('/host/findmany/module/host_apply_plan/invalid_host_count', data)
+// 删除规则(模块)
+export const deleteHostApplyModuleRules = (bizId, data) =>
+  http.delete(`/host/deletemany/module/host_apply_rule/bk_biz_id/${bizId}`, { data })
+// 删除规则(模板)
+export const deleteHostApplyTemplateRules = (bizId, data) =>
+  http.delete(`/deletemany/proc/service_template/host_apply_rule/biz/${bizId}`, { data })
+// 节点查询(规则关联)— 拓扑 / 模板
+export const searchHostApplyRelatedTopo = (bizId, data) =>
+  http.post(`/find/topoinst/bk_biz_id/${bizId}/host_apply_rule_related`, data)
+export const searchHostApplyRelatedTemplate = (data) =>
+  http.post('/find/proc/service_template/host_apply_rule_related', data)
+// 拓扑路径(节点名 → 路径)
+export const getTopoPath = (bizId, data) =>
+  http.post(`/find/topopath/biz/${bizId}`, data)
+// 模块最终规则(模板+模块合并)
+export const getModuleFinalRules = (data) =>
+  http.post('/host/findmany/module/get_module_final_rules', data)
 
 // ---------- 云区域 / 云账户 ----------
 // 独立模式只读云区域,后端 findmany/cloudarea 返回所有区域
@@ -166,6 +244,37 @@ export const createModelAttribute = (data) => http.post('/create/objectattr', {
 export const updateModelAttribute = (id, data) =>
   http.put(`/update/objectattr/${id}`, { bk_supplier_account: '0', ...data })
 export const deleteModelAttribute = (id) => http.delete(`/delete/objectattr/${id}`)
+// 属性排序
+export const updateAttributeSort = (objId, propId, data) =>
+  http.post(`/update/objectattr/index/${objId}/${propId}`, data)
+
+// ---------- 字段分组 ----------
+export const searchFieldGroups = (objId, data) =>
+  http.post(`/find/objectattgroup/object/${objId}`, data || {})
+export const createFieldGroup = (data) =>
+  http.post('/create/objectattgroup', data)
+export const updateFieldGroup = (data) =>
+  http.put('/update/objectattgroup', data)
+export const deleteFieldGroup = (id) =>
+  http.delete(`/delete/objectattgroup/${id}`)
+// 交换分组顺序
+export const switchFieldGroupIndex = (data) =>
+  http.put('/update/objectattgroup/groupindex', data)
+// 移动字段到分组
+export const moveAttributeToGroup = (data) =>
+  http.put('/objectatt/group/property', data)
+export const deleteAttributeGroupAssoc = (objId, propId, groupId) =>
+  http.delete(`/delete/objectattgroupasst/object/${objId}/property/${propId}/group/${groupId}`)
+
+// ---------- 唯一约束 ----------
+export const searchUniques = (objId, data) =>
+  http.post(`/find/objectunique/object/${objId}`, data || {})
+export const createUnique = (objId, data) =>
+  http.post(`/create/objectunique/object/${objId}`, data)
+export const updateUnique = (objId, id, data) =>
+  http.put(`/update/objectunique/object/${objId}/unique/${id}`, data)
+export const deleteUnique = (objId, id) =>
+  http.post(`/delete/objectunique/object/${objId}/unique/${id}`, {})
 
 // ---------- 关联类型 ----------
 export const searchAssociationTypes = () =>

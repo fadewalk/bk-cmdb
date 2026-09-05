@@ -25,6 +25,7 @@ const router = createRouter({
 
         // 资源
         { path: 'resource/index', name: 'ResourceIndex', component: () => import('../views/resource/ResourceIndex.vue'), meta: { title: '资源目录' } },
+        { path: 'resource/catalog/:objId', name: 'ResourceCatalog', component: () => import('../views/resource/ResourceCatalog.vue'), meta: { title: '资源分类' } },
         { path: 'resource/host', name: 'ResourceHost', component: () => import('../views/HostList.vue'), meta: { title: '主机' } },
         { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/Cloud.vue'), meta: { title: '管控区域', tab: 'area' } },
         { path: 'resource/cloud-account', name: 'CloudAccount', component: () => import('../views/cloud/Cloud.vue'), meta: { title: '云账户', tab: 'account' } },

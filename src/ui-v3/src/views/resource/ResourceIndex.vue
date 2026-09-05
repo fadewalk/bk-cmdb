@@ -135,10 +135,12 @@ function selectType(item) {
     router.push(item.route)
     return
   }
-  if (routeMap[item.id]) {
-    router.push(routeMap[item.id])
+  // 通用分类页面:跳到 /resource/catalog/{objId}
+  if (item.id !== 'host' && item.id !== 'biz') {
+    router.push(`/resource/catalog/${item.id}`)
     return
   }
+  // host / biz 维持内嵌切换
   if (item.id === 'host') loadHosts()
   if (item.id === 'biz') loadBiz()
 }

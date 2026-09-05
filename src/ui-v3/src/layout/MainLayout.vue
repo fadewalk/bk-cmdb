@@ -22,7 +22,14 @@ import { useBizStore } from '../stores/biz'
 
 const route = useRoute()
 const bizStore = useBizStore()
-const showNav = computed(() => !!findMenuByPath(route.path))
+const showNav = computed(() => {
+  if (findMenuByPath(route.path)) return true
+  // 资源目录子路由 /resource/catalog/:objId 视为资源类
+  if (route.path.startsWith('/resource/')) return true
+  // 主机详情
+  if (route.path === '/host-detail') return true
+  return false
+})
 
 onMounted(() => {
   bizStore.ensureLoaded()

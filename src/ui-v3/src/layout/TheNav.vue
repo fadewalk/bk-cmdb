@@ -26,10 +26,8 @@
           :class="{ active: isActive(child) }"
           :to="child.path"
         >
-          <h3 class="menu-info">
-            <span class="menu-dot" />
-            <span class="menu-name">{{ child.name }}</span>
-          </h3>
+          <i v-if="child.icon" :class="['bk-cmdb-icon', 'menu-icon', child.icon]" />
+          <span class="menu-name">{{ child.name }}</span>
         </router-link>
       </template>
     </div>
@@ -55,7 +53,7 @@ function isActive(child) {
 
 <style scoped>
 .the-nav {
-  width: 260px;
+  width: 240px;
   height: 100%;
   background: #fff;
   border-right: 1px solid #DCDEE5;
@@ -69,10 +67,11 @@ function isActive(child) {
 }
 .menu-list { flex: 1; padding: 6px 0; }
 .menu-item {
-  display: block;
-  height: 42px;
-  line-height: 42px;
-  padding: 0 0 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 20px;
   color: #63656E;
   font-size: 14px;
   text-decoration: none;
@@ -83,20 +82,13 @@ function isActive(child) {
   background-color: #E1ECFF;
   color: #3A84FF;
 }
-.menu-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 400;
+.menu-icon {
+  font-size: 16px;
+  width: 16px;
+  text-align: center;
+  color: #979BA5;
 }
-.menu-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background-color: #c4c6cc;
-}
-.menu-item.active .menu-dot { background-color: #3A84FF; }
+.menu-item.active .menu-icon { color: #3A84FF; }
+.menu-name { flex: 1; }
 .the-nav.no-child { display: none; }
 </style>
