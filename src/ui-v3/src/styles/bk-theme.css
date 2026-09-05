@@ -1,0 +1,81 @@
+/* ============================================================
+   蓝鲸 CMDB 视觉规范复刻(取自旧版前端 _vars.scss 与布局组件实测值)
+   主色 / 文字 / 边框 / 背景与旧版一致,字号遵循蓝鲸 12px 基准
+   ============================================================ */
+:root {
+  --bk-primary: #3A84FF;
+  --bk-primary-hover: #699df4;
+  --bk-text: #63656E;
+  --bk-text-title: #313238;
+  --bk-text-secondary: #979BA5;
+  --bk-text-disabled: #C4C6CC;
+  --bk-border: #DCDEE5;
+  --bk-border-light: #E7E9EF;
+  --bk-bg-page: #F5F7FA;
+  --bk-danger: #EA3636;
+  --bk-success: #2DCB56;
+  --bk-warning: #ff9c01;
+  --bk-header-bg: #182132;
+  --bk-nav-active-bg: #E1ECFF;
+  --bk-nav-hover-bg: #F6F6F9;
+}
+
+/* Element Plus 主题对齐蓝鲸 */
+:root {
+  --el-color-primary: #3A84FF;
+  --el-color-primary-light-3: #699df4;
+  --el-color-primary-light-5: #9cc0ff;
+  --el-color-primary-light-7: #c5d9ff;
+  --el-color-primary-light-8: #d9e6ff;
+  --el-color-primary-light-9: #E1ECFF;
+  --el-color-primary-dark-2: #2e6ad6;
+  --el-color-danger: #EA3636;
+  --el-color-success: #2DCB56;
+  --el-color-warning: #ff9c01;
+  --el-text-color-primary: #313238;
+  --el-text-color-regular: #63656E;
+  --el-text-color-secondary: #979BA5;
+  --el-text-color-placeholder: #C4C6CC;
+  --el-border-color: #DCDEE5;
+  --el-border-color-light: #E7E9EF;
+  --el-bg-color-page: #F5F7FA;
+  --el-font-size-base: 12px;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 12px;
+  color: var(--bk-text);
+  background-color: var(--bk-bg-page);
+  overflow: hidden;
+}
+
+/* 表格对齐旧版:无边框线、行高紧凑、表头灰底 */
+.el-table { font-size: 12px; color: var(--bk-text); }
+.el-table th.el-table__cell {
+  background-color: #F0F1F5;
+  color: #313238;
+  font-weight: 700;
+}
+.el-table td.el-table__cell, .el-table th.el-table__cell { border-bottom: 1px solid #EBF0F5; }
+.el-table .el-table__row:hover > td.el-table__cell { background-color: #F6F9FE; }
+
+.el-button { font-size: 12px; }
+.el-button--small { font-size: 12px; }
+.el-input__inner, .el-input { font-size: 12px; }
+.el-dialog { font-size: 12px; }
+.el-dialog__title { font-size: 14px !important; color: #313238 !important; }
+.el-drawer__title { font-size: 14px !important; color: #313238 !important; margin-bottom: 0 !important; }
+
+/* 页面容器:旧版为白底卡片、无阴影、四周留白 */
+.page-card {
+  background: #fff;
+  padding: 20px;
+  height: 100%;
+  overflow: auto;
+  box-shadow: none;
+}
+.table-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.table-toolbar .spacer { flex: 1; }

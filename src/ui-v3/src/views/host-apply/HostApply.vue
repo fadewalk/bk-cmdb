@@ -1,9 +1,6 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
-      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 260px" @change="loadModules">
-        <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
-      </el-select>
       <el-select v-model="moduleId" placeholder="选择模块" filterable style="width: 260px" :disabled="!bizId" @change="loadRules">
         <el-option v-for="m in modules" :key="m.id" :label="`${m.set} / ${m.name}`" :value="m.id" />
       </el-select>
@@ -36,14 +33,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  http, searchBusiness, getBizTopoTree, getBizInternalTopo, searchModelAttributes
+  http, getBizTopoTree, getBizInternalTopo, searchModelAttributes
 } from '../../api/cmdb'
+import { useBizStore } from '../../stores/biz'
 
-const bizId = ref(null)
-const bizList = ref([])
+const bizStore = useBizStore()
+const bizId = computed(() => bizStore.bizId)
+const bizList = computed(() => bizStore.bizList)
 const moduleId = ref(null)
 const modules = ref([])
 const rules = ref([])
@@ -110,11 +109,12 @@ async function removeRule(row) {
   loadRules()
 }
 
+watch(bizId, () => { if (bizId.value) loadModules() })
+
 onMounted(async () => {
   const data = await searchBusiness({ start: 0, limit: 200 })
   bizList.value = data?.info || []
   if (bizList.value.length > 0) {
-    bizId.value = bizList.value[0].bk_biz_id
     loadModules()
   }
 })

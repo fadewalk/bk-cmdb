@@ -1,9 +1,7 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
-      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 280px" @change="load">
-        <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
-      </el-select>
+      <span class="page-title">业务拓扑 · {{ bizStore.currentBiz?.bk_biz_name || '未选择业务' }}</span>
       <div class="spacer" />
       <el-button :icon="'Plus'" type="primary" plain :disabled="!bizId" @click="openCreateSet">新建集群</el-button>
       <el-button :icon="'Refresh'" :disabled="!bizId" @click="load">刷新</el-button>
@@ -117,17 +115,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchBusiness, getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, createModule, deleteModule, updateSet, updateModule
 } from '../api/cmdb'
+import { useBizStore } from '../stores/biz'
 
 const route = useRoute()
-const bizId = ref(null)
-const bizList = ref([])
+const bizStore = useBizStore()
+const bizId = computed(() => bizStore.bizId)
+const bizList = computed(() => bizStore.bizList)
 const treeData = ref([])
 const hosts = ref([])
 const currentNode = ref(null)
@@ -231,17 +231,17 @@ async function removeNode(node) {
 }
 
 async function loadBizList() {
-  const data = await searchBusiness({ start: 0, limit: 200 })
-  bizList.value = data?.info || []
-  const fromQuery = Number(route.query.biz)
-  if (fromQuery && bizList.value.some((b) => b.bk_biz_id === fromQuery)) {
-    bizId.value = fromQuery
-    await load()
-  } else if (bizList.value.length > 0) {
-    bizId.value = bizList.value[0].bk_biz_id
-    await load()
+  await bizStore.ensureLoaded()
+  if (bizId.value) {
+    const fromQuery = Number(route.query.biz)
+    if (fromQuery && bizList.value.some((b) => b.bk_biz_id === fromQuery)) {
+      bizStore.select(fromQuery)
+    }
+    load()
   }
 }
+
+watch(bizId, () => load())
 
 // 把 find/topoinst 的通用主线节点(biz/set/自定义层/module)递归映射为树控件数据
 function mapTopoNode(node, parentSetId) {
@@ -318,7 +318,8 @@ async function onNodeClick(node) {
 onMounted(loadBizList)
 </script>
 
-    <style scoped>
+<style scoped>
+.page-title { font-size: 14px; font-weight: 600; color: #313238; }
 .tree-node { display: flex; align-items: center; gap: 6px; }
 .node-actions { visibility: hidden; margin-left: 8px; }
 :deep(.el-tree-node__content:hover) .node-actions { visibility: visible; }

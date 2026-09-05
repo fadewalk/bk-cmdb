@@ -1,9 +1,6 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
-      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 260px" @change="loadAll">
-        <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
-      </el-select>
       <el-tabs v-model="tab" style="flex: 1">
         <el-tab-pane label="服务模板" name="template" />
         <el-tab-pane label="服务分类" name="category" />
@@ -116,15 +113,23 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute } from 'vue-router'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http
 } from '../../api/cmdb'
+import { useBizStore } from '../../stores/biz'
 
-const bizId = ref(null)
-const bizList = ref([])
-const tab = ref('template')
+const route = useRoute()
+const bizStore = useBizStore()
+const bizId = computed(() => bizStore.bizId)
+const bizList = computed(() => bizStore.bizList)
+
+const tab = ref(route.meta.tab || 'template')
+
+// 路由切换(服务分类/集群模板同组件)时同步 tab
+watch(() => route.meta.tab, (v) => { if (v) tab.value = v })
 
 const templates = ref([])
 const tplLoading = ref(false)
@@ -346,13 +351,10 @@ async function showTplDetail(row) {
 }
 
 onMounted(async () => {
-  const data = await searchBusiness({ start: 0, limit: 200 })
-  bizList.value = data?.info || []
-  if (bizList.value.length > 0) {
-    bizId.value = bizList.value[0].bk_biz_id
-    loadAll()
-  }
+  await bizStore.ensureLoaded()
+  if (bizId.value) loadAll()
 })
 
+watch(bizId, () => { if (bizId.value) loadAll() })
 watch(tab, () => { if (bizId.value) loadAll() })
 </script>

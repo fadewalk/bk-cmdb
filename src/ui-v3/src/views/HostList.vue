@@ -1,6 +1,7 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
+      <span style="font-size:14px;font-weight:600;color:#313238">资源目录</span>
       <el-input
         v-model="keyword"
         placeholder="按内网 IP 过滤"

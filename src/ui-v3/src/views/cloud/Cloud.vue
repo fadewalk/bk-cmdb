@@ -34,9 +34,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { http } from '../../api/cmdb'
 
-const tab = ref('area')
+const route = useRoute()
+const tab = ref(route.meta.tab || 'area')
+// 管控区域/云账户为独立菜单入口,tab 由路由 meta 指定
 const areas = ref([])
 const accounts = ref([])
 const loading = ref(false)

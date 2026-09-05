@@ -51,9 +51,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { http, searchModels } from '../../api/cmdb'
 
-const tab = ref('types')
+const route = useRoute()
+const tab = ref(route.meta.tab || 'types')
 const types = ref([])
 const relations = ref([])
 const models = ref([])
