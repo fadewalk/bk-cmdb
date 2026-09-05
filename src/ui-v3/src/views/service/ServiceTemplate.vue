@@ -94,8 +94,11 @@
         <el-table-column prop="creator" label="创建人" width="130">
           <template #default="{ row }">{{ row.creator || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" @click="openSetTplDetail(row)">详情</el-button>
+            <el-button link type="primary" @click="openSetTplSync(row)">同步</el-button>
+            <el-button link type="primary" @click="loadSetTemplateHistory(row)">历史</el-button>
             <el-button link type="danger" @click="removeSetTpl(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -122,6 +125,58 @@
     </template>
 
     <el-empty v-if="!bizId" description="请先选择业务" />
+
+    <!-- 集群模板详情 -->
+    <el-drawer v-model="setDetailDrawer" :title="`「${setDetail?.name}」集群模板详情`" size="60%">
+      <template v-if="setDetail">
+        <el-descriptions :column="2" border size="default" class="set-detail-desc">
+          <el-descriptions-item label="模板 ID">{{ setDetail.id }}</el-descriptions-item>
+          <el-descriptions-item label="名称">{{ setDetail.name }}</el-descriptions-item>
+          <el-descriptions-item label="绑定的服务模板">
+            {{ (setDetail.service_template_ids || []).join(', ') || '--' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="创建人">{{ setDetail.creator || setDetail.bk_created_by || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">
+            {{ (setDetail.create_time || setDetail.bk_created_at || '').replace('T', ' ').slice(0, 19) || '--' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="最近更新">
+            {{ (setDetail.last_time || setDetail.bk_updated_at || '').replace('T', ' ').slice(0, 19) || '--' }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-divider>同步状态</el-divider>
+        <el-table :data="setDetailStatus" v-loading="setDetailLoading" size="small" border max-height="280">
+          <el-table-column prop="bk_module_id" label="模块 ID" width="100" />
+          <el-table-column prop="bk_module_name" label="模块名称" min-width="160" />
+          <el-table-column label="同步状态" width="120">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === 'finished'" type="success" size="small">已同步</el-tag>
+              <el-tag v-else-if="row.status === 'failure'" type="danger" size="small">失败</el-tag>
+              <el-tag v-else type="info" size="small">{{ row.status || '未知' }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </el-drawer>
+
+    <!-- 集群模板同步对话框 -->
+    <el-dialog v-model="setSyncDialog" :title="`同步集群模板「${syncTarget?.name}」`" width="540px">
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
+        title="将模板同步到绑定服务模板已部署的模块;异步任务,可到「同步历史」查看进度" />
+      <el-form label-width="100px">
+        <el-form-item label="模板名称">
+          <span>{{ syncTarget?.name }}</span>
+        </el-form-item>
+        <el-form-item label="目标模块">
+          <el-select v-model="syncModuleIds" multiple style="width: 100%" placeholder="留空则同步所有关联模块">
+            <el-option v-for="m in syncModules" :key="m.bk_module_id" :label="m.bk_module_name" :value="m.bk_module_id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="setSyncDialog = false">取消</el-button>
+        <el-button type="primary" :loading="syncing" @click="doSyncSetTpl">开始同步</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 服务模板进程列表 -->
     <el-drawer v-model="tplDrawer" :title="`「${tplDetailName}」进程模板`" size="45%">
@@ -204,7 +259,8 @@ import { useRoute } from 'vue-router'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
-  searchServiceCategories, searchSetTemplates, http
+  searchServiceCategories, searchSetTemplates, http,
+  getSetTemplateDetail, searchSetTemplateStatus, syncSetTemplateToInstances, searchSetTemplateSyncHistory
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
@@ -491,6 +547,81 @@ async function removeSetTpl(row) {
   })
   ElMessage.success('已删除')
   loadSetTemplates()
+}
+
+// ---------- 集群模板 详情 / 同步 / 差异 ----------
+const setDetailDrawer = ref(false)
+const setDetail = ref(null)
+const setDetailStatus = ref([])
+const setDetailLoading = ref(false)
+const setSyncDialog = ref(false)
+const syncTarget = ref(null)
+const syncModuleIds = ref([])
+const syncModules = ref([])
+const syncing = ref(false)
+
+async function openSetTplDetail(row) {
+  setDetail.value = row
+  setDetailDrawer.value = true
+  setDetailLoading.value = true
+  try {
+    const detail = await getSetTemplateDetail(bizId.value, row.id)
+    if (detail) setDetail.value = { ...row, ...detail }
+    const statusResp = await searchSetTemplateStatus(bizId.value, {
+      bk_biz_id: bizId.value,
+      set_template_ids: [row.id]
+    }).catch(() => ({}))
+    setDetailStatus.value = (statusResp?.info || statusResp?.modules || []).map((m) => ({
+      bk_module_id: m.bk_module_id,
+      bk_module_name: m.bk_module_name || m.bk_module_id,
+      status: m.status
+    }))
+  } catch (e) {
+    setDetailStatus.value = []
+  } finally {
+    setDetailLoading.value = false
+  }
+}
+
+async function openSetTplSync(row) {
+  syncTarget.value = row
+  syncModuleIds.value = []
+  syncModules.value = []
+  setSyncDialog.value = true
+  // 拉已部署的模块作为可选目标
+  try {
+    const statusResp = await searchSetTemplateStatus(bizId.value, { bk_biz_id: bizId.value, set_template_ids: [row.id] }).catch(() => ({}))
+    const list = statusResp?.info || statusResp?.modules || []
+    syncModules.value = list.map((m) => ({ bk_module_id: m.bk_module_id, bk_module_name: m.bk_module_name || m.bk_module_id }))
+  } catch (e) { /* 容忍 */ }
+}
+
+async function doSyncSetTpl() {
+  if (!syncTarget.value) return
+  syncing.value = true
+  try {
+    await syncSetTemplateToInstances(bizId.value, syncTarget.value.id, {
+      bk_biz_id: bizId.value,
+      bk_module_ids: syncModuleIds.value
+    })
+    ElMessage.success('同步任务已提交,可在「同步历史」查看进度')
+    setSyncDialog.value = false
+  } catch (e) {
+    ElMessage.error('同步失败: ' + (e?.message || '后端异常'))
+  } finally {
+    syncing.value = false
+  }
+}
+
+async function loadSetTemplateHistory(row) {
+  // 用 alert 简单呈现历史(完整版另开 dialog)
+  const data = await searchSetTemplateSyncHistory(bizId.value, {
+    bk_biz_id: bizId.value, set_template_ids: [row.id]
+  }).catch(() => ({}))
+  const list = data?.info || []
+  if (!list.length) { ElMessage.info('暂无同步历史'); return }
+  const text = list.slice(0, 5).map((h) => `${h.start_time || ''} → ${h.end_time || ''}  ${h.status || ''}  同步 ${h.success_count || 0}/${h.total_count || 0}`).join('\n')
+  ElMessageBox.alert(text, `「${row.name}」最近 5 条同步历史`, { type: 'info' })
 }
 
 async function loadSetTemplates() {

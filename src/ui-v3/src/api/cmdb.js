@@ -37,9 +37,9 @@ export const searchServiceInstances = (bizId, page) =>
   http.post('/findmany/proc/service_instance', { bk_biz_id: bizId, page, with_name: true })
 export const deleteServiceInstances = (bizId, ids) =>
   http.post('/deletemany/proc/service_instance', { bk_biz_id: bizId, service_instance_ids: ids })
-export const searchProcessInstances = (bizId, serviceInstanceId, page) =>
+export const searchProcessInstances = (serviceInstanceId, page) =>
   http.post('/findmany/proc/process_instance', {
-    bk_biz_id: bizId, service_instance_id: serviceInstanceId, page
+    service_instance_id: serviceInstanceId, page
   })
 
 // 模块下未绑定服务实例的主机
@@ -53,10 +53,10 @@ export const createServiceInstance = (bizId, moduleId, instances) =>
   http.post('/create/proc/service_instance', { bk_biz_id: bizId, bk_module_id: moduleId, instances })
 
 // 创建进程实例(裸进程,不绑定模板)
-export const createProcessInstance = (bizId, serviceInstanceId, processInfo) =>
+export const createProcessInstance = (serviceInstanceId, processInfo) =>
   http.post('/create/proc/process_instance', {
-    bk_biz_id: bizId,
-    service_instance_Id: serviceInstanceId,
+    bk_supplier_account: '0',
+    service_instance_id: serviceInstanceId,
     processes: [{ process_info: processInfo }]
   })
 
@@ -307,6 +307,42 @@ export const updateAssociationType = (id, data) =>
 export const deleteAssociationType = (id) =>
   http.delete(`/delete/associationtype/${id}`)
 
+// ---------- 集群模板 ----------
+export const searchSetTemplates = (bizId, page) =>
+  http.post(`/findmany/topo/set_template/bk_biz_id/${bizId}/web`, { page })
+export const getSetTemplateDetail = (bizId, templateId) =>
+  http.get(`/find/topo/set_template/${templateId}/bk_biz_id/${bizId}`)
+export const createSetTemplate = (bizId, data) =>
+  http.post(`/create/topo/set_template/bk_biz_id/${bizId}`, data)
+export const updateSetTemplate = (bizId, templateId, data) =>
+  http.put(`/update/topo/set_template/${templateId}/bk_biz_id/${bizId}`, data)
+export const deleteSetTemplates = (bizId) =>
+  http.post(`/deletemany/topo/set_template/bk_biz_id/${bizId}`, { data: { ids: [bizId] } })
+export const getSetTemplateServices = (bizId, templateId) =>
+  http.get(`/findmany/topo/set_template/${templateId}/bk_biz_id/${bizId}/service_templates`)
+export const searchSetTemplateStatus = (bizId, data) =>
+  http.post(`/findmany/topo/set_template/bk_biz_id/${bizId}/set_template_status`, data)
+export const searchSetTemplateSyncHistory = (bizId, data) =>
+  http.post(`/findmany/topo/set_template_sync_history/bk_biz_id/${bizId}`, data)
+export const syncSetTemplateToInstances = (bizId, templateId, data) =>
+  http.post(`/updatemany/topo/set_template/${templateId}/bk_biz_id/${bizId}/sync_to_instances`, data)
+
+// ---------- 业务集 ----------
+export const searchBusinessSetTopology = (bizSetId, data) =>
+  http.post(`/find/topoinst/bk_biz_id/${bizSetId}`, data)
+
+// ---------- 字段组合模板 ----------
+export const searchFieldTemplates = (data) =>
+  http.post('/findmany/field_template', data)
+export const getFieldTemplate = (id) =>
+  http.get(`/find/field_template/${id}`)
+export const createFieldTemplate = (data) =>
+  http.post('/create/field_template', data)
+export const updateFieldTemplate = (id, data) =>
+  http.put(`/update/field_template/${id}`, data)
+export const deleteFieldTemplate = (id) =>
+  http.delete(`/delete/field_template/${id}`)
+
 // ---------- 服务模板 ----------
 export const searchServiceTemplates = (bizId, page) =>
   http.post('/findmany/proc/service_template', { bk_biz_id: bizId, page })
@@ -318,10 +354,6 @@ export const searchServiceCategories = (bizId) =>
   http.post('/findmany/proc/service_category/with_statistics', { bk_biz_id: bizId })
 export const createServiceCategory = (bizId, name, parentId) =>
   http.post('/create/proc/service_category', { bk_biz_id: bizId, name, parent_id: parentId })
-
-// 集群模板
-export const searchSetTemplates = (bizId, page) =>
-  http.post(`/findmany/topo/set_template/bk_biz_id/${bizId}/`, { page })
 
 // ---------- 动态分组 ----------
 export const searchDynamicGroups = (bizId, page) =>
