@@ -36,6 +36,14 @@
                     link type="primary" size="small" @click="openCreateModule(data)"
                   >+模块</el-button>
                   <el-button
+                    v-if="data.type === 'set' && !data.isIdle"
+                    link type="primary" size="small" @click="openRename(data)"
+                  >改名</el-button>
+                  <el-button
+                    v-if="data.type === 'module'"
+                    link type="primary" size="small" @click="openRename(data)"
+                  >改名</el-button>
+                  <el-button
                     v-if="(data.type === 'set' && !data.isIdle) || data.type === 'module'"
                     link type="danger" size="small" @click="removeNode(data)"
                   >删除</el-button>
@@ -79,6 +87,19 @@
         <el-button type="primary" :loading="saving" @click="saveNode">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 重命名集群 / 模块 -->
+    <el-dialog v-model="renameDialog" :title="renameTarget?.type === 'set' ? '重命名集群' : '重命名模块'" width="420px">
+      <el-form label-width="90px" @submit.prevent>
+        <el-form-item label="新名称" required>
+          <el-input v-model="renameName" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="renameDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveRename">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -88,7 +109,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchBusiness, getBizTopoTree, getBizInternalTopo, listBizHosts,
-  createSet, deleteSet, createModule, deleteModule
+  createSet, deleteSet, createModule, deleteModule, updateSet, updateModule
 } from '../api/cmdb'
 
 const route = useRoute()
@@ -118,6 +139,38 @@ function openCreateModule(setNode) {
   nodeParent.value = setNode
   nodeName.value = ''
   nodeDialog.value = true
+}
+
+// 重命名集群 / 模块
+const renameDialog = ref(false)
+const renameTarget = ref(null)
+const renameName = ref('')
+
+function openRename(node) {
+  renameTarget.value = node
+  renameName.value = node.label
+  renameDialog.value = true
+}
+
+async function saveRename() {
+  if (!renameName.value) {
+    ElMessage.warning('请输入名称')
+    return
+  }
+  saving.value = true
+  try {
+    const t = renameTarget.value
+    if (t.type === 'set') {
+      await updateSet(bizId.value, t.setId, { bk_set_name: renameName.value })
+    } else {
+      await updateModule(bizId.value, t.setId, t.moduleId, { bk_module_name: renameName.value })
+    }
+    ElMessage.success('已更新')
+    renameDialog.value = false
+    load()
+  } finally {
+    saving.value = false
+  }
 }
 
 async function saveNode() {

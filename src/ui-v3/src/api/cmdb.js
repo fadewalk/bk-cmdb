@@ -21,6 +21,7 @@ export const getBizInternalTopo = (bizId) =>
 export const createSet = (bizId, name) =>
   http.post(`/set/${bizId}`, { bk_set_name: name, bk_parent_id: bizId, bk_supplier_account: '0' })
 export const deleteSet = (bizId, setId) => http.delete(`/set/${bizId}/${setId}`)
+export const updateSet = (bizId, setId, data) => http.put(`/set/${bizId}/${setId}`, data)
 
 export const createModule = (bizId, setId, name) =>
   http.post(`/module/${bizId}/${setId}`, {
@@ -28,6 +29,8 @@ export const createModule = (bizId, setId, name) =>
   })
 export const deleteModule = (bizId, setId, moduleId) =>
   http.delete(`/module/${bizId}/${setId}/${moduleId}`)
+export const updateModule = (bizId, setId, moduleId, data) =>
+  http.put(`/module/${bizId}/${setId}/${moduleId}`, data)
 
 // ---------- 服务实例与进程 ----------
 export const searchServiceInstances = (bizId, page) =>
@@ -37,6 +40,24 @@ export const deleteServiceInstances = (bizId, ids) =>
 export const searchProcessInstances = (bizId, serviceInstanceId, page) =>
   http.post('/findmany/proc/process_instance', {
     bk_biz_id: bizId, service_instance_id: serviceInstanceId, page
+  })
+
+// 模块下未绑定服务实例的主机
+export const listHostsWithNoSvcInst = (bizId, moduleId) =>
+  http.post('/findmany/proc/host/with_no_service_instance', {
+    bk_biz_id: bizId, bk_module_id: moduleId, page: { start: 0, limit: 500 }
+  })
+
+// 创建服务实例(不带进程,后续可在实例下添加进程)
+export const createServiceInstance = (bizId, moduleId, instances) =>
+  http.post('/create/proc/service_instance', { bk_biz_id: bizId, bk_module_id: moduleId, instances })
+
+// 创建进程实例(裸进程,不绑定模板)
+export const createProcessInstance = (bizId, serviceInstanceId, processInfo) =>
+  http.post('/create/proc/process_instance', {
+    bk_biz_id: bizId,
+    service_instance_Id: serviceInstanceId,
+    processes: [{ process_info: processInfo }]
   })
 
 // ---------- 主机 ----------
