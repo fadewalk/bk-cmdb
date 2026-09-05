@@ -79,17 +79,46 @@
 
     <!-- 集群模板 -->
     <template v-if="tab === 'settpl' && bizId">
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
+        title="集群模板需绑定至少一个服务模板;删除集群模板不影响已创建的集群" />
       <div class="table-toolbar">
-        <el-button size="small" type="primary" :icon="'Plus'">新建</el-button>
+        <el-button size="small" type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
+        <div class="spacer" />
       </div>
       <el-table :data="setTemplates" v-loading="setLoading" stripe>
         <el-table-column prop="id" label="模板 ID" width="110" />
         <el-table-column prop="name" label="模板名称" min-width="200" />
+        <el-table-column label="绑定的服务模板" min-width="200">
+          <template #default="{ row }">{{ (row.service_template_ids || []).join(', ') || '--' }}</template>
+        </el-table-column>
         <el-table-column prop="creator" label="创建人" width="130">
           <template #default="{ row }">{{ row.creator || '-' }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="danger" @click="removeSetTpl(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-empty v-if="!setLoading && setTemplates.length === 0" description="该业务暂无集群模板" :image-size="80" />
+
+      <el-dialog v-model="setTplDialog" title="新建集群模板" width="480px">
+        <el-form label-width="110px">
+          <el-form-item label="模板名称" required>
+            <el-input v-model="setTplForm.name" placeholder="如:通用中间件集群" />
+          </el-form-item>
+          <el-form-item label="绑定服务模板" required>
+            <el-select v-model="setTplForm.service_template_ids" multiple style="width: 100%" placeholder="选择一个或多个服务模板">
+              <el-option v-for="t in templates" :key="t.id" :label="t.name" :value="t.id" />
+            </el-select>
+            <div class="hint">若无可选模板,请先到「服务模板」Tab 创建</div>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="setTplDialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="saveSetTpl">创建</el-button>
+        </template>
+      </el-dialog>
     </template>
 
     <el-empty v-if="!bizId" description="请先选择业务" />
@@ -432,6 +461,36 @@ async function loadCategories() {
     }
     categories.value = flat
   } finally { catLoading.value = false }
+}
+
+const setTplDialog = ref(false)
+const setTplForm = ref({ name: '', service_template_ids: [] })
+
+async function saveSetTpl() {
+  if (!setTplForm.value.name || setTplForm.value.service_template_ids.length === 0) {
+    ElMessage.warning('请填写名称并至少绑定一个服务模板')
+    return
+  }
+  saving.value = true
+  try {
+    await http.post(`/create/topo/set_template/bk_biz_id/${bizId.value}/`, {
+      name: setTplForm.value.name,
+      service_template_ids: setTplForm.value.service_template_ids
+    })
+    ElMessage.success('集群模板已创建')
+    setTplDialog.value = false
+    setTplForm.value = { name: '', service_template_ids: [] }
+    loadSetTemplates()
+  } finally { saving.value = false }
+}
+
+async function removeSetTpl(row) {
+  await ElMessageBox.confirm(`确定删除集群模板「${row.name}」?`, '删除确认', { type: 'warning' })
+  await http.delete(`/deletemany/topo/set_template/bk_biz_id/${bizId.value}/`, {
+    set_template_ids: [row.id]
+  })
+  ElMessage.success('已删除')
+  loadSetTemplates()
 }
 
 async function loadSetTemplates() {

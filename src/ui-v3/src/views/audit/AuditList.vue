@@ -2,8 +2,11 @@
   <div class="page-card">
     <h1 class="page-title">操作审计</h1>
     <div class="table-toolbar">
-      <el-select v-model="resourceType" placeholder="资源类型" clearable style="width: 180px">
+      <el-select v-model="resourceType" placeholder="资源类型" clearable style="width: 180px" @change="onTypeChange">
         <el-option v-for="t in dict" :key="t.id" :label="t.name" :value="t.id" />
+      </el-select>
+      <el-select v-model="actionId" placeholder="动作" clearable style="width: 160px">
+        <el-option v-for="a in actionOptions" :key="a.id" :label="a.name" :value="a.id" />
       </el-select>
       <el-date-picker
         v-model="timeRange"
@@ -52,11 +55,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getAuditDict, searchAuditList } from '../../api/cmdb'
 
 const dict = ref([])
 const resourceType = ref('')
+const actionId = ref('')
 const timeRange = ref([])
 const page = ref(1)
 const pageSize = 20
@@ -65,6 +69,15 @@ const rows = ref([])
 const loading = ref(false)
 const detailVisible = ref(false)
 const detailJson = ref('')
+
+const actionOptions = computed(() => {
+  const t = dict.value.find((d) => d.id === resourceType.value)
+  return t ? t.operations || [] : []
+})
+
+function onTypeChange() {
+  actionId.value = ''
+}
 
 function typeName(id) {
   return dict.value.find((d) => d.id === id)?.name || id
@@ -84,7 +97,7 @@ function buildCondition() {
     user: '',
     resource_name: '',
     resource_type_id: resourceType.value || '',
-    action_id: '',
+    action_id: actionId.value || '',
     bk_biz_id: null,
     operation_time: { start, end }
   }
