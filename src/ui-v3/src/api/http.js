@@ -13,6 +13,10 @@ const http = axios.create({
 http.interceptors.request.use((config) => {
   config.headers['X-Bkcmdb-User'] = 'admin'
   config.headers['X-Bkcmdb-Supplier-Account'] = '0'
+  // multipart/form-data 由 axios 根据 FormData 自动生成 boundary,不要手动覆盖
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
+  }
   return config
 })
 

@@ -100,6 +100,32 @@ export const transferHostModule = (bizId, hostIds, moduleIds, isIncrement = fals
 export const transferHostToResource = (bizId, hostIds) =>
   http.post('/hosts/modules/resource', { bk_biz_id: bizId, bk_host_id: hostIds })
 
+// 批量导入主机(走 multipart/form-data,file + params)
+export const importHosts = (file, params) => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('params', JSON.stringify(params))
+  return http.post('/hosts/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000
+  })
+}
+
+// ---------- 云区域 / 云账户 ----------
+// 独立模式只读云区域,后端 findmany/cloudarea 返回所有区域
+export const searchCloudAreas = (page) =>
+  http.post('/findmany/cloudarea', { page })
+export const createCloudArea = (info) =>
+  http.post('/createmany/cloudarea', { info: [info] })
+export const updateCloudArea = (id, info) =>
+  http.put(`/update/cloudarea/${id}`, info)
+export const deleteCloudArea = (id) =>
+  http.delete(`/delete/cloudarea/${id}`)
+export const searchCloudAccounts = (page) =>
+  http.post('/findmany/cloud/account', { page })
+export const createCloudAccount = (params) =>
+  http.post('/create/cloud/account', params)
+
 // ---------- 模型 ----------
 // 全量模型列表
 export const searchModels = (condition = {}) =>

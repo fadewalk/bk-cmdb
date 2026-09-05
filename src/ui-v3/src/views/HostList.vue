@@ -28,7 +28,7 @@
       <!-- 右:列表 -->
       <div class="main-col">
         <div class="toolbar">
-          <el-button size="small" type="primary" :icon="'Plus'">导入主机</el-button>
+          <el-button size="small" type="primary" :icon="'Plus'" @click="importVisible = true">导入主机</el-button>
           <el-button size="small" :disabled="!selectedHosts.length" @click="transferVisible = true">分配到</el-button>
           <el-button size="small" :disabled="!selectedHosts.length">编辑</el-button>
           <el-button size="small" :disabled="!selectedHosts.length">复制</el-button>
@@ -119,15 +119,51 @@
         <el-button type="primary" :loading="transferring" @click="doTransfer">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入主机:支持上传 .csv / .xlsx 或直接粘贴文本 -->
+    <el-dialog v-model="importVisible" title="导入主机" width="720px" top="6vh">
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
+        title="支持 CSV 文件上传,或在下方直接粘贴 Excel/CSV 文本(列:IP,云区域ID,主机名,操作系统)" />
+      <div class="import-toolbar">
+        <el-upload :auto-upload="false" :limit="1" accept=".csv,.xlsx,.xls" :on-change="onFileChange">
+          <el-button size="small" :icon="'Upload'" :loading="parsing">选择文件并预览</el-button>
+        </el-upload>
+        <el-button size="small" @click="downloadTemplate">下载模板</el-button>
+        <el-button size="small" type="primary" :loading="importing" :disabled="!parsedRows.length"
+          @click="submitImport">导入 ({{ parsedRows.length }} 行)</el-button>
+      </div>
+      <el-input
+        v-model="importText"
+        type="textarea"
+        :rows="6"
+        placeholder="一行一台主机,支持逗号或 Tab 分隔:
+10.0.0.100,0,host-100,Linux
+10.0.0.101,0,host-101,Windows"
+        style="margin-top: 8px"
+        @input="parseText"
+      />
+      <el-table :data="parsedRows" max-height="240" size="small" border style="margin-top: 8px">
+        <el-table-column prop="bk_host_innerip" label="内网IP" min-width="130" />
+        <el-table-column prop="bk_cloud_id" label="云区域ID" width="100" />
+        <el-table-column prop="bk_host_name" label="主机名" min-width="140" />
+        <el-table-column prop="bk_os_name" label="操作系统" min-width="120" />
+        <el-table-column label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.__error" type="danger" size="small">{{ row.__error }}</el-tag>
+            <el-tag v-else type="success" size="small">就绪</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  http, listHostsWithoutApp, transferHostModule,
+  http, listHostsWithoutApp, transferHostModule, importHosts,
   getBizTopoTree, getBizInternalTopo
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
@@ -254,6 +290,84 @@ async function doTransfer() {
 }
 
 watch(targetBiz, loadModuleOptions)
+
+// ---------- 导入主机 ----------
+const importVisible = ref(false)
+const importText = ref('')
+const parsedRows = ref([])
+const importing = ref(false)
+const parsing = ref(false)
+
+function parseText() {
+  const lines = importText.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const rows = []
+  for (const line of lines) {
+    // 支持逗号或 Tab 分隔
+    const parts = line.split(/[,\t]/).map((s) => s.trim())
+    const [ip, cloudId, hostName, os] = parts
+    if (!ip) continue
+    let err = ''
+    if (!/^[\d.]+$/.test(ip)) err = 'IP 格式错'
+    else if (cloudId && !/^\d+$/.test(cloudId)) err = '云区域 ID 需为数字'
+    rows.push({
+      bk_host_innerip: ip,
+      bk_cloud_id: cloudId ? Number(cloudId) : 0,
+      bk_host_name: hostName || '',
+      bk_os_name: os || '',
+      __error: err
+    })
+  }
+  parsedRows.value = rows
+}
+
+async function onFileChange(uploadFile) {
+  if (!uploadFile?.raw) return
+  parsing.value = true
+  try {
+    const file = uploadFile.raw
+    const text = await file.text()
+    importText.value = text
+    parseText()
+    ElMessage.success(`已识别 ${parsedRows.value.length} 行`)
+  } catch (e) {
+    ElMessage.error('文件解析失败,请改用文本粘贴')
+  } finally {
+    parsing.value = false
+  }
+}
+
+function downloadTemplate() {
+  const csv = 'IP,云区域ID,主机名,操作系统\n10.0.0.100,0,host-100,Linux\n10.0.0.101,0,host-101,Windows\n'
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'host-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function submitImport() {
+  const valid = parsedRows.value.filter((r) => !r.__error)
+  if (!valid.length) { ElMessage.warning('无可导入的有效行'); return }
+  importing.value = true
+  try {
+    // 构造 multipart 文件
+    const csv = ['IP,云区域ID,主机名,操作系统', ...valid.map((r) =>
+      `${r.bk_host_innerip},${r.bk_cloud_id},${r.bk_host_name},${r.bk_os_name}`
+    )].join('\n')
+    const file = new File([csv], 'hosts.csv', { type: 'text/csv' })
+    await importHosts(file, {})
+    ElMessage.success(`成功导入 ${valid.length} 台主机`)
+    importVisible.value = false
+    importText.value = ''
+    parsedRows.value = []
+    load()
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(() => {
   const ip = route.query.ip
   if (ip) keyword.value = String(ip)
@@ -300,4 +414,5 @@ onMounted(() => {
   padding: 10px 0 0; font-size: 12px; color: #63656E;
 }
 .table-footer .spacer { flex: 1; }
+.import-toolbar { display: flex; align-items: center; gap: 8px; }
 </style>

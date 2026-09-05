@@ -806,7 +806,13 @@ function openSvcInstWizard() {
   loadCandidateHosts()
 }
 function ctxOpenSvcInstWizard() {
+  // 右键菜单触发时 currentNode 未必是当前节点,先切换再开向导
+  const n = ctxMenu.value.node
   ctxMenu.value.visible = false
+  if (n) {
+    currentNode.value = n
+    currentKey.value = n.id
+  }
   openSvcInstWizard()
 }
 

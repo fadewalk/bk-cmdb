@@ -62,11 +62,14 @@
 <script setup>
 // 资源目录:左分类树(带实例计数)+ 右侧列表,对齐旧版 resource/index
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
-  listHostsWithoutApp, searchBusiness, getModelStatistics
+  listHostsWithoutApp, searchBusiness, getModelStatistics,
+  searchCloudAreas, searchCloudAccounts
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
+const router = useRouter()
 const bizStore = useBizStore()
 const keyword = ref('')
 const loading = ref(false)
@@ -76,11 +79,26 @@ const hosts = ref([])
 const bizList = ref([])
 const modelCounts = ref({})
 
+// 路由别名 → ui-v3 实际菜单路径
+const routeMap = {
+  host: '/resource/host',
+  biz: '/business/topo',
+  'biz-set': '/business/topo',
+  'bk_switch': '/resource/host',
+  'bk_router': '/resource/host',
+  'bk_load_balance': '/resource/host',
+  'bk_firewall': '/resource/host'
+}
+
 const groups = computed(() => {
   const hostCount = modelCounts.value.host ?? 0
   const bizCount = bizList.value.length
+  const areaCount = modelCounts.value['bk_cloud_area'] || 0
+  const acctCount = modelCounts.value['bk_cloud_account'] || 0
   return [
-    { name: '主机管理', items: [{ id: 'host', name: '主机', count: hostCount, icon: 'Monitor' }] },
+    { name: '主机管理', items: [
+      { id: 'host', name: '主机', count: hostCount, icon: 'Monitor' }
+    ]},
     {
       name: '组织架构',
       items: [
@@ -95,13 +113,32 @@ const groups = computed(() => {
         const [id, name] = s.split(':')
         return { id, name, count: modelCounts.value[id] || 0, icon: 'Connection' }
       })
+    },
+    {
+      name: '云资源',
+      items: [
+        { id: 'cloud-area', name: '管控区域', count: areaCount, icon: 'CirclePlus', route: '/resource/cloud-area' },
+        { id: 'cloud-account', name: '云账户', count: acctCount, icon: 'User', route: '/resource/cloud-account' },
+        { id: 'cloud-discover', name: '云资源发现', count: 0, icon: 'View', route: '/resource/cloud-discover' }
+      ]
     }
   ]
 })
 
+const flatItems = computed(() => groups.value.flatMap((g) => g.items))
+
 function selectType(item) {
   activeType.value = item.id
   activeName.value = item.name
+  // 联动到独立页:管控区域 / 云账户 / 资源池主机
+  if (item.route) {
+    router.push(item.route)
+    return
+  }
+  if (routeMap[item.id]) {
+    router.push(routeMap[item.id])
+    return
+  }
   if (item.id === 'host') loadHosts()
   if (item.id === 'biz') loadBiz()
 }
@@ -129,12 +166,21 @@ async function loadBiz() {
 async function load() {
   loading.value = true
   try {
-    await loadHosts()
-    await loadBiz()
-    await loadModelCounts()
+    await Promise.allSettled([loadHosts(), loadBiz(), loadModelCounts(), loadCloudCounts()])
   } finally {
     loading.value = false
   }
+}
+
+async function loadCloudCounts() {
+  const [a, acc] = await Promise.allSettled([
+    searchCloudAreas({ start: 0, limit: 1000 }),
+    searchCloudAccounts({ start: 0, limit: 1000 })
+  ])
+  const next = { ...modelCounts.value }
+  if (a.status === 'fulfilled') next['bk_cloud_area'] = (a.value?.info || []).length
+  if (acc.status === 'fulfilled') next['bk_cloud_account'] = (acc.value?.info || []).length
+  modelCounts.value = next
 }
 
 async function loadModelCounts() {
