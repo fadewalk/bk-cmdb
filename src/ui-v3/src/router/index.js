@@ -32,6 +32,7 @@ const router = createRouter({
 
         // 模型
         { path: 'model/management', name: 'Models', component: () => import('../views/model/ModelManage.vue'), meta: { title: '模型管理' } },
+        { path: 'model/management/details/:objId', name: 'ModelDetail', component: () => import('../views/model/ModelDetail.vue'), meta: { title: '模型详情' } },
         { path: 'model/topology', name: 'ModelTopology', component: () => import('../views/model/ModelTopology.vue'), meta: { title: '模型拓扑' } },
         { path: 'model/relation', name: 'ModelRelation', component: () => import('../views/model/AssociationType.vue'), meta: { title: '模型关系', tab: 'relations' } },
         { path: 'model/hierarchy', name: 'ModelHierarchy', component: () => import('../views/model/ModelHierarchy.vue'), meta: { title: '业务层级' } },

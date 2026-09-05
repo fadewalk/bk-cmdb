@@ -1,53 +1,55 @@
 <template>
-  <div class="page-card">
-    <div class="table-toolbar">
-      <el-button :icon="'Plus'" type="primary" @click="openCreateModel">新增</el-button>
-      <el-button :icon="'Upload'">导入</el-button>
-      <el-button :icon="'Download'">导出</el-button>
-      <el-radio-group v-model="statusFilter" size="small" style="margin-left: 8px">
-        <el-radio-button value="all">全部</el-radio-button>
-        <el-radio-button value="on">启用中</el-radio-button>
-        <el-radio-button value="off">已停用</el-radio-button>
-      </el-radio-group>
-      <div class="spacer" />
-      <el-button :icon="'Plus'" plain @click="clsDialog = true">新建分类</el-button>
-      <el-input v-model="keyword" placeholder="请输入关键字" clearable style="width: 220px" :prefix-icon="'Search'" />
-    </div>
+  <div class="model-page">
+    <h1 class="page-title">模型管理</h1>
+    <p class="model-tips">
+      通过模型可以对CMDB中当前的所纳管资源的数据结构进行管理，例如新增了一种设备需要通过记录到CMDB，可以通过新建对应的模型实现。
+    </p>
 
-    <el-collapse v-model="expanded" v-loading="loading">
-      <el-collapse-item v-for="cls in filteredGroups" :key="cls.clsId" :name="cls.clsId">
-        <template #title>
-          <span class="cls-title">
-            {{ cls.clsName }} ( {{ cls.models.length }} )
-            <span class="cls-id">{{ cls.clsId }}</span>
+    <div class="model-body">
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Plus'" @click="openCreateModel">新建模型</el-button>
+        <el-button :icon="'Plus'" plain @click="clsDialog = true">新建分组</el-button>
+        <el-button :icon="'Upload'">导入</el-button>
+        <el-button :icon="'Download'">导出</el-button>
+        <div class="spacer" />
+        <el-radio-group v-model="statusFilter" size="small">
+          <el-radio-button value="all">全部</el-radio-button>
+          <el-radio-button value="on">启用中</el-radio-button>
+          <el-radio-button value="off">已停用</el-radio-button>
+        </el-radio-group>
+        <el-input v-model="keyword" placeholder="请输入关键字" clearable size="small" style="width: 220px" :prefix-icon="'Search'" />
+      </div>
+
+      <div class="group-list" v-loading="loading">
+        <div v-for="cls in filteredGroups" :key="cls.clsId" class="model-group">
+          <div class="group-header">
+            <span class="group-name">{{ cls.clsName }} ( {{ cls.models.length }} )</span>
             <el-button
               v-if="!cls.bk_ispre" link type="danger" size="small"
-              @click.stop="removeClassification(cls)"
-            >删除分类</el-button>
-          </span>
-        </template>
-        <el-table :data="cls.models" size="default">
-          <el-table-column prop="bk_obj_id" label="模型 ID" width="180" />
-          <el-table-column prop="bk_obj_name" label="模型名称" min-width="160" />
-          <el-table-column label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag v-if="row.bk_ispre" size="small" type="info">内置</el-tag>
-              <el-tag v-else size="small" type="success">自定义</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="300" fixed="right">
-            <template #default="{ row }">
-              <el-button link type="primary" @click="openAttrs(row)">字段管理</el-button>
-              <el-button link type="primary" @click="openUniques(row)">唯一校验</el-button>
-              <el-button v-if="!row.bk_ispre" link type="primary" @click="openEditModel(row)">编辑</el-button>
-              <el-button v-if="!row.bk_ispre" link type="danger" @click="removeModel(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-collapse-item>
-    </el-collapse>
+              @click="removeClassification(cls)"
+            >删除分组</el-button>
+          </div>
+          <div class="model-cards">
+            <div v-for="m in cls.models" :key="m.bk_obj_id" class="model-card" @click="goDetail(m)">
+              <div class="card-top">
+                <span class="model-icon"><el-icon><Grid /></el-icon></span>
+                <span class="model-name">{{ m.bk_obj_name }}</span>
+              </div>
+              <div class="card-id">{{ m.bk_obj_id }}</div>
+              <div class="card-actions" @click.stop>
+                <el-button link type="primary" size="small" @click="openEditModel(m)">编辑</el-button>
+                <el-button v-if="!m.bk_ispre" link type="danger" size="small" @click="removeModel(m)">删除</el-button>
+              </div>
+            </div>
+            <div v-if="cls.models.length === 0" class="empty-group">
+              该分组暂无模型，请
+              <el-button link type="primary" size="small" @click="openCreateModel">立即添加</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <!-- 新建/编辑模型 -->
     <el-dialog v-model="modelDialog" :title="editing ? '编辑模型' : '新建模型'" width="480px">
       <el-form :model="modelForm" label-width="90px">
         <el-form-item label="模型 ID" required>
@@ -56,7 +58,7 @@
         <el-form-item label="模型名称" required>
           <el-input v-model="modelForm.bk_obj_name" />
         </el-form-item>
-        <el-form-item label="所属分类" required>
+        <el-form-item label="所属分组" required>
           <el-select v-model="modelForm.bk_classification_id" style="width: 100%">
             <el-option v-for="c in classifications" :key="c.bk_classification_id"
               :label="c.bk_classification_name" :value="c.bk_classification_id" />
@@ -69,13 +71,12 @@
       </template>
     </el-dialog>
 
-    <!-- 新建分类 -->
-    <el-dialog v-model="clsDialog" title="新建分类" width="440px">
+    <el-dialog v-model="clsDialog" title="新建分组" width="440px">
       <el-form label-width="90px">
-        <el-form-item label="分类 ID" required>
+        <el-form-item label="分组 ID" required>
           <el-input v-model="clsForm.bk_classification_id" placeholder="英文唯一标识" />
         </el-form-item>
-        <el-form-item label="分类名称" required>
+        <el-form-item label="分组名称" required>
           <el-input v-model="clsForm.bk_classification_name" />
         </el-form-item>
       </el-form>
@@ -84,99 +85,26 @@
         <el-button type="primary" :loading="saving" @click="saveClassification">保存</el-button>
       </template>
     </el-dialog>
-
-    <!-- 字段管理 -->
-    <el-drawer v-model="attrDrawer" :title="`「${attrModel?.bk_obj_name}」字段管理`" size="50%">
-      <div class="table-toolbar">
-        <div class="spacer" />
-        <el-button :icon="'Plus'" type="primary" @click="attrFormVisible = true">新增字段</el-button>
-      </div>
-      <el-table :data="attrs" v-loading="attrLoading" size="default">
-        <el-table-column prop="bk_property_id" label="字段 ID" width="170" />
-        <el-table-column prop="bk_property_name" label="字段名称" min-width="140" />
-        <el-table-column prop="bk_property_type" label="类型" width="110" />
-        <el-table-column label="必填" width="70">
-          <template #default="{ row }">
-            <el-tag v-if="row.isrequired" size="small" type="danger">是</el-tag><span v-else>否</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="90">
-          <template #default="{ row }">
-            <el-button v-if="!row.ispre" link type="danger" @click="removeAttr(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-dialog v-model="attrFormVisible" title="新增字段" width="440px" append-to-body>
-        <el-form label-width="90px">
-          <el-form-item label="字段 ID" required>
-            <el-input v-model="attrForm.bk_property_id" placeholder="英文唯一标识" />
-          </el-form-item>
-          <el-form-item label="字段名称" required>
-            <el-input v-model="attrForm.bk_property_name" />
-          </el-form-item>
-          <el-form-item label="类型" required>
-            <el-select v-model="attrForm.bk_property_type" style="width: 100%">
-              <el-option label="短字符 singlechar" value="singlechar" />
-              <el-option label="长字符 longchar" value="longchar" />
-              <el-option label="数字 int" value="int" />
-              <el-option label="枚举 enum" value="enum" />
-              <el-option label="布尔 bool" value="bool" />
-              <el-option label="日期 date" value="date" />
-              <el-option label="时间 time" value="time" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="必填">
-            <el-switch v-model="attrForm.isrequired" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="attrFormVisible = false">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="saveAttr">保存</el-button>
-        </template>
-      </el-dialog>
-    </el-drawer>
-
-    <!-- 唯一校验 -->
-    <el-drawer v-model="uniqueDrawer" :title="`「${uniqueModel?.bk_obj_name}」唯一校验`" size="45%">
-      <el-table :data="uniques" v-loading="uniqueLoading" size="default">
-        <el-table-column label="ID" width="70">
-          <template #default="{ row }">{{ row.id }}</template>
-        </el-table-column>
-        <el-table-column label="校验字段" min-width="220">
-          <template #default="{ row }">
-            <el-tag v-for="k in row.keys" :key="k.key_id" size="small" style="margin-right: 6px">
-              {{ propName(attrModel?.bk_obj_id || uniqueModel?.bk_obj_id, k.key_id) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="预置" width="90">
-          <template #default="{ row }">
-            <el-tag v-if="row.ispre" size="small" type="info">内置</el-tag><span v-else>-</span>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-drawer>
   </div>
 </template>
 
 <script setup>
+// 模型管理列表页:对齐旧版(说明文案 + 工具栏 + 分类分组模型卡片)
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchClassificationWithObjects, searchClassifications, createClassification, deleteClassification,
-  createModel, updateModel, deleteModel,
-  searchModelAttributes, createModelAttribute, deleteModelAttribute,
-  http
+  createModel, updateModel, deleteModel
 } from '../../api/cmdb'
 
+const router = useRouter()
 const keyword = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
 const saving = ref(false)
 const groups = ref([])
 const classifications = ref([])
-const expanded = ref([])
 
 const modelDialog = ref(false)
 const editing = ref(null)
@@ -184,23 +112,26 @@ const modelForm = ref({ bk_obj_id: '', bk_obj_name: '', bk_classification_id: ''
 const clsDialog = ref(false)
 const clsForm = ref({ bk_classification_id: '', bk_classification_name: '' })
 
-const attrDrawer = ref(false)
-const attrModel = ref(null)
-const attrLoading = ref(false)
-const attrs = ref([])
-const attrFormVisible = ref(false)
-const attrForm = ref({ bk_property_id: '', bk_property_name: '', bk_property_type: 'singlechar', isrequired: false })
-
 const filteredGroups = computed(() => {
-  if (!keyword.value) return groups.value
-  const kw = keyword.value.toLowerCase()
-  return groups.value.map((g) => ({
-    ...g,
-    models: g.models.filter((m) =>
-      (m.bk_obj_id || '').toLowerCase().includes(kw) ||
-      (m.bk_obj_name || '').toLowerCase().includes(kw))
-  })).filter((g) => g.models.length > 0)
+  return groups.value
+    .map((g) => ({
+      ...g,
+      models: g.models.filter((m) => {
+        if (statusFilter.value === 'on' && m.bk_ispre) return false
+        if (statusFilter.value === 'off' && !m.bk_ispre) return false
+        if (!keyword.value) return true
+        const kw = keyword.value.toLowerCase()
+        return (
+          (m.bk_obj_id || '').toLowerCase().includes(kw) ||
+          (m.bk_obj_name || '').toLowerCase().includes(kw)
+        )
+      })
+    }))
 })
+
+function goDetail(m) {
+  router.push({ path: `/model/management/details/${m.bk_obj_id}` })
+}
 
 async function load() {
   loading.value = true
@@ -213,7 +144,6 @@ async function load() {
       bk_ispre: item.bk_ispre,
       models: item.objects || []
     }))
-    expanded.value = groups.value.map((g) => g.clsId)
   } finally {
     loading.value = false
   }
@@ -266,7 +196,7 @@ async function saveClassification() {
   saving.value = true
   try {
     await createClassification(clsForm.value)
-    ElMessage.success('分类已创建')
+    ElMessage.success('分组已创建')
     clsDialog.value = false
     clsForm.value = { bk_classification_id: '', bk_classification_name: '' }
     load()
@@ -276,83 +206,54 @@ async function saveClassification() {
 }
 
 async function removeClassification(cls) {
-  await ElMessageBox.confirm(`确定删除分类「${cls.clsName}」?`, '删除确认', { type: 'warning' })
+  await ElMessageBox.confirm(`确定删除分组「${cls.clsName}」?`, '删除确认', { type: 'warning' })
   await deleteClassification(cls.clsId)
   ElMessage.success('已删除')
   load()
-}
-
-async function openAttrs(row) {
-  attrModel.value = row
-  attrDrawer.value = true
-  loadAttrs()
-}
-
-async function loadAttrs() {
-  attrLoading.value = true
-  try {
-    const data = await searchModelAttributes(attrModel.value.bk_obj_id)
-    attrs.value = Array.isArray(data) ? data : []
-  } finally {
-    attrLoading.value = false
-  }
-}
-
-async function saveAttr() {
-  saving.value = true
-  try {
-    await createModelAttribute({ bk_obj_id: attrModel.value.bk_obj_id, ...attrForm.value })
-    ElMessage.success('字段已创建')
-    attrFormVisible.value = false
-    attrForm.value = { bk_property_id: '', bk_property_name: '', bk_property_type: 'singlechar', isrequired: false }
-    loadAttrs()
-  } finally {
-    saving.value = false
-  }
-}
-
-async function removeAttr(row) {
-  await ElMessageBox.confirm(`确定删除字段「${row.bk_property_name}」?`, '删除确认', { type: 'warning' })
-  await deleteModelAttribute(row.id)
-  ElMessage.success('已删除')
-  loadAttrs()
-}
-
-// ---------- 唯一校验 ----------
-const uniqueDrawer = ref(false)
-const uniqueModel = ref(null)
-const uniqueLoading = ref(false)
-const uniques = ref([])
-// 缓存各模型的属性 ID -> 名称映射
-const propNameCache = ref({})
-
-function propName(objId, keyId) {
-  const map = propNameCache.value[objId] || {}
-  return map[keyId] || `#${keyId}`
-}
-
-async function openUniques(row) {
-  uniqueModel.value = row
-  uniqueDrawer.value = true
-  uniqueLoading.value = true
-  try {
-    const [u, attrs] = await Promise.all([
-      http.post(`/find/objectunique/object/${row.bk_obj_id}`, {}),
-      searchModelAttributes(row.bk_obj_id)
-    ])
-    const map = {}
-    for (const a of attrs || []) map[a.id] = a.bk_property_name
-    propNameCache.value[row.bk_obj_id] = map
-    uniques.value = u || []
-  } finally {
-    uniqueLoading.value = false
-  }
 }
 
 onMounted(load)
 </script>
 
 <style scoped>
-.cls-title { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
-.cls-id { color: #979ba5; font-size: 12px; font-weight: 400; }
+.model-page { height: 100%; display: flex; flex-direction: column; background: #fff; overflow-y: auto; }
+.page-title {
+  font-size: 16px; color: #313238; font-weight: 400;
+  padding: 0 20px; height: 50px; line-height: 50px;
+  border-bottom: 1px solid #E7E9EF; margin: 0; flex: 0 0 50px;
+}
+.model-tips {
+  margin: 0; padding: 10px 20px;
+  font-size: 12px; color: #979BA5;
+  background: #F0F5FF;
+  border-bottom: 1px solid #E7E9EF;
+}
+.model-body { padding: 16px 20px; }
+.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+.toolbar .spacer { flex: 1; }
+.model-group { margin-bottom: 26px; }
+.group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 8px; border-bottom: 1px solid #E7E9EF; margin-bottom: 12px;
+}
+.group-name { font-size: 14px; font-weight: 600; color: #313238; }
+.model-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+.model-card {
+  width: 200px; padding: 12px;
+  border: 1px solid #DCDEE5; border-radius: 2px;
+  cursor: pointer; position: relative;
+  transition: box-shadow 0.2s;
+}
+.model-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border-color: #3A84FF; }
+.card-top { display: flex; align-items: center; gap: 8px; }
+.model-icon {
+  width: 30px; height: 30px; border-radius: 4px;
+  background: #E1ECFF; color: #3A84FF;
+  display: flex; align-items: center; justify-content: center;
+}
+.model-name { font-size: 14px; color: #313238; font-weight: 500; }
+.card-id { margin-top: 8px; font-size: 12px; color: #979BA5; }
+.card-actions { display: none; position: absolute; top: 8px; right: 8px; background: #fff; }
+.model-card:hover .card-actions { display: block; }
+.empty-group { color: #979BA5; font-size: 12px; padding: 8px 0; }
 </style>
