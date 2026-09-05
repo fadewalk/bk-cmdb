@@ -1,5 +1,6 @@
 <template>
   <div class="page-card">
+    <h1 class="page-title">运营统计</h1>
     <el-alert type="info" :closable="false" style="margin-bottom: 16px"
       title="运营统计数据由 operation_server 定时任务(默认每日)收集,新部署环境需等待统计周期后才有数据" />
 

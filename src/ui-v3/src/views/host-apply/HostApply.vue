@@ -1,5 +1,6 @@
 <template>
   <div class="page-card">
+    <h1 class="page-title">主机属性自动应用</h1>
     <div class="table-toolbar">
       <el-select v-model="moduleId" placeholder="选择模块" filterable style="width: 260px" :disabled="!bizId" @change="loadRules">
         <el-option v-for="m in modules" :key="m.id" :label="`${m.set} / ${m.name}`" :value="m.id" />

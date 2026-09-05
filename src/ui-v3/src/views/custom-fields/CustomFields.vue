@@ -1,5 +1,7 @@
 <template>
   <div class="page-card">
+    <h1 class="page-title">自定义字段</h1>
+    <p class="page-tips">自定义字段用于为主线模型(业务/集群/模块/主机/进程)扩展专属属性</p>
     <el-tabs v-model="tab">
       <el-tab-pane v-for="m in mainLine" :key="m" :label="modelName(m)" :name="m" />
     </el-tabs>

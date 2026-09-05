@@ -1,5 +1,6 @@
 <template>
   <div class="page-card">
+    <h1 class="page-title">云资源</h1>
     <el-alert type="warning" :closable="false" style="margin-bottom: 16px"
       title="云资源同步依赖云供应商对接插件;独立部署模式下未对接云厂商,此处仅有云区域(直连区域)可用" />
 

@@ -1,5 +1,6 @@
 <template>
   <div class="page-card">
+    <h1 class="page-title">操作审计</h1>
     <div class="table-toolbar">
       <el-select v-model="resourceType" placeholder="资源类型" clearable style="width: 180px">
         <el-option v-for="t in dict" :key="t.id" :label="t.name" :value="t.id" />

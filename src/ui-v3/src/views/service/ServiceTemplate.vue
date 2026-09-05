@@ -1,5 +1,7 @@
 <template>
   <div class="page-card">
+    <h1 class="page-title">服务模板</h1>
+    <p class="page-tips">服务模板可以预定义业务通用的服务，用于业务拓扑中批量部署和变更服务实例。</p>
     <div class="table-toolbar">
       <el-tabs v-model="tab" style="flex: 1">
         <el-tab-pane label="服务模板" name="template" />
@@ -15,16 +17,28 @@
         <el-button :icon="'Plus'" type="primary" size="small" @click="tplFormVisible = true">新建服务模板</el-button>
       </div>
       <el-table :data="templates" v-loading="tplLoading" stripe>
-        <el-table-column prop="id" label="模板 ID" width="110" />
+        <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="模板名称" min-width="180" />
-        <el-table-column prop="service_category_id" label="服务分类 ID" width="130" />
-        <el-table-column prop="creator" label="创建人" width="130">
-          <template #default="{ row }">{{ row.creator || '-' }}</template>
+        <el-table-column label="服务分类" width="150">
+          <template #default="{ row }">{{ row.service_category_id ? ('#' + row.service_category_id) : '--' }}</template>
+        </el-table-column>
+        <el-table-column label="进程数量" width="100">
+          <template #default="{ row }">{{ row.process_count ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column label="已应用模块数" width="110">
+          <template #default="{ row }">{{ row.module_count ?? 0 }}</template>
+        </el-table-column>
+        <el-table-column prop="modifier" label="修改人" width="110">
+          <template #default="{ row }">{{ row.modifier || row.creator || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="修改时间" width="160">
+          <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 16) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="showTplDetail(row)">查看进程</el-button>
-            <el-button link type="primary" @click="openAddProcTpl(row)">加进程模板</el-button>
+            <el-button link type="primary" @click="showTplDetail(row)">编辑</el-button>
+            <el-button link type="primary" @click="openAddProcTpl(row)">克隆</el-button>
+            <el-button link type="danger" @click="removeTpl(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -33,15 +47,22 @@
 
     <!-- 服务分类 -->
     <template v-if="tab === 'category' && bizId">
-      <el-table :data="categories" v-loading="catLoading" row-key="id" default-expand-all stripe>
-        <el-table-column prop="category.name" label="分类名称" min-width="220" />
-        <el-table-column prop="category.id" label="分类 ID" width="110" />
-        <el-table-column prop="usage_count" label="模板引用数" width="130" />
-      </el-table>
+      <div class="category-tree" v-loading="catLoading">
+        <div v-for="item in categories" :key="item.id" class="cate-node">
+          <div :class="['cate-row', { root: item.isRoot }]">
+            <span class="cate-name">{{ item.category.name }}</span>
+            <span class="cate-id">#{{ item.category.id }}</span>
+            <el-tag v-if="item.isRoot" size="small" type="info">内置</el-tag>
+          </div>
+        </div>
+      </div>
     </template>
 
     <!-- 集群模板 -->
     <template v-if="tab === 'settpl' && bizId">
+      <div class="table-toolbar">
+        <el-button size="small" type="primary" :icon="'Plus'">新建</el-button>
+      </div>
       <el-table :data="setTemplates" v-loading="setLoading" stripe>
         <el-table-column prop="id" label="模板 ID" width="110" />
         <el-table-column prop="name" label="模板名称" min-width="200" />
@@ -166,6 +187,13 @@ function tplRowToForm(row) {
     __bind_protocol: row.bindProtocol || '1',
     __bind_row_id: row.bindRowId
   }
+}
+
+async function removeTpl(row) {
+  await ElMessageBox.confirm(`确定删除服务模板「${row.name}」?`, '删除确认', { type: 'warning' })
+  await http.delete('/delete/proc/service_template', { bk_biz_id: bizId.value, service_template_ids: [row.id] })
+  ElMessage.success('已删除')
+  loadTemplates()
 }
 
 function openAddProcTpl(row) {
@@ -294,9 +322,9 @@ async function loadCategories() {
     // 分类接口返回树形(子分类含 sub_categories),展平为一层
     const flat = []
     for (const item of data?.info || []) {
-      flat.push({ id: item.category.id, category: item.category, usage_count: item.usage_count })
+      flat.push({ id: item.category.id, category: item.category, usage_count: item.usage_count, isRoot: true })
       for (const sub of item.sub_categories || []) {
-        flat.push({ id: sub.category.id, category: sub.category, usage_count: sub.usage_count })
+        flat.push({ id: sub.category.id, category: sub.category, usage_count: sub.usage_count, isRoot: false })
       }
     }
     categories.value = flat
