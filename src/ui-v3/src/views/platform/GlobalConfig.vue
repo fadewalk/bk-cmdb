@@ -5,6 +5,7 @@
       <el-tab-pane label="业务空闲机池" name="idle" />
       <el-tab-pane label="ID 生成器" name="id" />
       <el-tab-pane label="平台信息" name="platform" />
+      <el-tab-pane label="系统配置" name="system" />
     </el-tabs>
 
     <!-- 业务通用:主机的业务名称展示设置等(旧版由 user_config 承载) -->
@@ -62,12 +63,40 @@
         <el-descriptions-item label="国密加密">已禁用(disable_crypto)</el-descriptions-item>
       </el-descriptions>
     </template>
+
+    <!-- 系统配置(实时拉取 admin_server 的 platform_setting) -->
+    <template v-if="tab === 'system'">
+      <el-alert type="info" :closable="false" style="margin-bottom: 16px"
+        title="当前业务拓扑最大层级、快照业务、字段验证规则等平台级设置;通过 admin_server 的 system_config 接口维护" />
+      <el-card v-loading="sysLoading" shadow="never">
+        <template #header>
+          <div class="card-head">
+            <span>后端/拓扑</span>
+            <el-button :icon="'Refresh'" size="small" @click="loadSystemConfig">刷新</el-button>
+          </div>
+        </template>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="业务拓扑最大层级">{{ sysConfig.backend?.max_biz_topo_level ?? '--' }}</el-descriptions-item>
+          <el-descriptions-item label="快照业务 ID">{{ sysConfig.backend?.snapshot_biz_id ?? '--' }}</el-descriptions-item>
+          <el-descriptions-item label="快照业务名">{{ sysConfig.backend?.snapshot_biz_name || '--' }}</el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+      <el-card v-if="validationCount" shadow="never" style="margin-top: 12px">
+        <template #header>字段验证规则({{ validationCount }} 种)</template>
+        <el-table :data="validationRows" size="small" max-height="320">
+          <el-table-column prop="type" label="类型" width="120" />
+          <el-table-column prop="desc" label="说明" min-width="180" />
+          <el-table-column prop="zh" label="中文提示" min-width="180" />
+          <el-table-column prop="en" label="英文提示" min-width="180" />
+        </el-table>
+      </el-card>
+    </template>
   </div>
 </template>
 
 <script setup>
 // 全局配置:展示类信息 + 只读说明;写接口经 admin_server,不开放界面编辑
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { http } from '../../api/cmdb'
 
 const tab = ref('general')
@@ -82,6 +111,29 @@ const idleModules = ref([
 const idRules = ref([
   { name: '全部模型', desc: '实例自增 ID 默认从 1 开始,步长 1;重置需通过 cmdb_ctl 工具操作' }
 ])
+const sysConfig = ref({ backend: {} })
+const sysLoading = ref(false)
+const validationRows = ref([])
+const validationCount = computed(() => validationRows.value.length)
+
+async function loadSystemConfig() {
+  sysLoading.value = true
+  try {
+    const data = await http.get('/admin/find/system_config/platform_setting/current')
+    sysConfig.value = data?.data || { backend: {} }
+    const rules = sysConfig.value.validation_rules || {}
+    validationRows.value = Object.keys(rules).map((k) => ({
+      type: k,
+      desc: rules[k].description || k,
+      zh: rules[k].i18n?.cn || '',
+      en: rules[k].i18n?.en || ''
+    }))
+  } catch (e) {
+    validationRows.value = []
+  } finally {
+    sysLoading.value = false
+  }
+}
 
 onMounted(async () => {
   // 读取空闲机池真实模块名
@@ -95,5 +147,6 @@ onMounted(async () => {
       }
     }
   } catch (e) { /* 忽略:未选业务或接口异常时展示默认值 */ }
+  loadSystemConfig()
 })
 </script>
