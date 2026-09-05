@@ -36,8 +36,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="showTplDetail(row)">编辑</el-button>
-            <el-button link type="primary" @click="openAddProcTpl(row)">克隆</el-button>
+            <el-button link type="primary" @click="openEditTpl(row)">编辑</el-button>
+            <el-button link type="primary" @click="cloneTpl(row)">克隆</el-button>
+            <el-button link type="primary" @click="showTplDetail(row)">进程</el-button>
             <el-button link type="danger" @click="removeTpl(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -47,15 +48,33 @@
 
     <!-- 服务分类 -->
     <template v-if="tab === 'category' && bizId">
+      <div class="table-toolbar">
+        <el-button size="small" type="primary" :icon="'Plus'" @click="openCateDialog(0)">新建一级分类</el-button>
+      </div>
       <div class="category-tree" v-loading="catLoading">
         <div v-for="item in categories" :key="item.id" class="cate-node">
           <div :class="['cate-row', { root: item.isRoot }]">
             <span class="cate-name">{{ item.category.name }}</span>
             <span class="cate-id">#{{ item.category.id }}</span>
             <el-tag v-if="item.isRoot" size="small" type="info">内置</el-tag>
+            <span class="cate-ops">
+              <el-button v-if="item.isRoot" link type="primary" size="small" @click="openCateDialog(item.category.id)">+子分类</el-button>
+              <el-button v-if="!item.category.is_built_in" link type="danger" size="small" @click="removeCategory(item)">删除</el-button>
+            </span>
           </div>
         </div>
       </div>
+      <el-dialog v-model="cateDialog" title="新建分类" width="440px">
+        <el-form label-width="90px">
+          <el-form-item label="分类名称" required>
+            <el-input v-model="cateForm.name" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="cateDialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="saveCategory">保存</el-button>
+        </template>
+      </el-dialog>
     </template>
 
     <!-- 集群模板 -->
@@ -110,6 +129,24 @@
       @update:visible="procTplDialog = $event"
       @save="saveProcTpl"
     />
+
+    <!-- 编辑服务模板 -->
+    <el-dialog v-model="editDialog" title="编辑服务模板" width="440px">
+      <el-form label-width="90px">
+        <el-form-item label="模板名称" required>
+          <el-input v-model="editForm.name" />
+        </el-form-item>
+        <el-form-item label="服务分类">
+          <el-select v-model="editForm.service_category_id" style="width: 100%">
+            <el-option v-for="c in flatCategories" :key="c.category.id" :label="c.category.name" :value="c.category.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveEditTpl">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 新建服务模板 -->
     <el-dialog v-model="tplFormVisible" title="新建服务模板" width="440px">
@@ -187,6 +224,72 @@ function tplRowToForm(row) {
     __bind_protocol: row.bindProtocol || '1',
     __bind_row_id: row.bindRowId
   }
+}
+
+// 编辑 / 克隆服务模板
+const editDialog = ref(false)
+const editingTpl = ref(null)
+const editForm = ref({ name: '', service_category_id: null })
+
+function openEditTpl(row) {
+  editingTpl.value = row
+  editForm.value = { name: row.name, service_category_id: row.service_category_id || null }
+  editDialog.value = true
+}
+
+async function saveEditTpl() {
+  if (!editForm.value.name) { ElMessage.warning('请输入模板名称'); return }
+  saving.value = true
+  try {
+    await http.put('/update/proc/service_template', {
+      bk_biz_id: bizId.value,
+      id: editingTpl.value.id,
+      name: editForm.value.name,
+      service_category_id: editForm.value.service_category_id || 0
+    })
+    ElMessage.success('已更新')
+    editDialog.value = false
+    loadTemplates()
+  } finally { saving.value = false }
+}
+
+async function cloneTpl(row) {
+  saving.value = true
+  try {
+    await http.post('/create/proc/service_template', {
+      bk_biz_id: bizId.value,
+      name: `${row.name}-copy`,
+      service_category_id: row.service_category_id || 0
+    })
+    ElMessage.success('克隆成功')
+    loadTemplates()
+  } finally { saving.value = false }
+}
+
+// 服务分类新建/删除(一级分类 parent_id=0)
+const cateDialog = ref(false)
+const cateForm = ref({ name: '', parentId: 0 })
+
+async function saveCategory() {
+  if (!cateForm.value.name) { ElMessage.warning('请输入分类名称'); return }
+  saving.value = true
+  try {
+    await http.post('/create/proc/service_category', {
+      bk_biz_id: bizId.value,
+      name: cateForm.value.name,
+      parent_id: cateForm.value.parentId || 0
+    })
+    ElMessage.success('分类已创建')
+    cateDialog.value = false
+    loadCategories()
+  } finally { saving.value = false }
+}
+
+async function removeCategory(item) {
+  await ElMessageBox.confirm(`确定删除分类「${item.category.name}」?`, '删除确认', { type: 'warning' })
+  await http.delete('/delete/proc/service_category', { id: item.category.id })
+  ElMessage.success('已删除')
+  loadCategories()
 }
 
 async function removeTpl(row) {
