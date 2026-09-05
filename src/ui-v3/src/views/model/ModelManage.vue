@@ -1,17 +1,24 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
-      <el-input v-model="keyword" placeholder="按模型 ID / 名称过滤" clearable style="width: 240px" />
+      <el-button :icon="'Plus'" type="primary" @click="openCreateModel">新增</el-button>
+      <el-button :icon="'Upload'">导入</el-button>
+      <el-button :icon="'Download'">导出</el-button>
+      <el-radio-group v-model="statusFilter" size="small" style="margin-left: 8px">
+        <el-radio-button value="all">全部</el-radio-button>
+        <el-radio-button value="on">启用中</el-radio-button>
+        <el-radio-button value="off">已停用</el-radio-button>
+      </el-radio-group>
       <div class="spacer" />
-      <el-button :icon="'Plus'" type="primary" plain @click="clsDialog = true">新建分类</el-button>
-      <el-button :icon="'Plus'" type="primary" @click="openCreateModel">新建模型</el-button>
+      <el-button :icon="'Plus'" plain @click="clsDialog = true">新建分类</el-button>
+      <el-input v-model="keyword" placeholder="请输入关键字" clearable style="width: 220px" :prefix-icon="'Search'" />
     </div>
 
     <el-collapse v-model="expanded" v-loading="loading">
       <el-collapse-item v-for="cls in filteredGroups" :key="cls.clsId" :name="cls.clsId">
         <template #title>
           <span class="cls-title">
-            {{ cls.clsName }}
+            {{ cls.clsName }} ( {{ cls.models.length }} )
             <span class="cls-id">{{ cls.clsId }}</span>
             <el-button
               v-if="!cls.bk_ispre" link type="danger" size="small"
@@ -164,6 +171,7 @@ import {
 } from '../../api/cmdb'
 
 const keyword = ref('')
+const statusFilter = ref('all')
 const loading = ref(false)
 const saving = ref(false)
 const groups = ref([])

@@ -22,7 +22,8 @@ export const MENUS = [
     id: 'resource',
     name: '资源',
     children: [
-      { id: 'catalog', name: '资源目录', path: '/resource/catalog' },
+      { id: 'index', name: '资源目录', path: '/resource/index' },
+      { id: 'host', name: '主机', path: '/resource/host' },
       { id: 'cloud-area', name: '管控区域', path: '/resource/cloud-area' },
       { id: 'cloud-account', name: '云账户', path: '/resource/cloud-account' },
       { id: 'cloud-discover', name: '云资源发现', path: '/resource/cloud-discover' }
