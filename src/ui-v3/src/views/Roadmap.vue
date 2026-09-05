@@ -46,9 +46,11 @@ const items = [
   { module: '服务实例', desc: '服务实例创建/克隆、进程编辑', status: 'doing' },
 
   { module: '集群模板同步', desc: '集群模板变更同步(set-sync)', status: 'todo' },
-  { module: '主机自动应用', desc: '主机属性自动应用规则(host-apply)', status: 'todo' },
-  { module: '业务集', desc: '业务集管理、业务集拓扑', status: 'todo' },
-  { module: '云资源', desc: '云账户、云区域、云资源发现(依赖云供应商插件,独立模式无数据)', status: 'todo' },
+  { module: '主机自动应用', desc: '按模块查看/删除自动应用规则(规则创建需走 API 或后续批次)', status: 'done' },
+  { module: '业务集', desc: '业务集列表', status: 'done' },
+  { module: '归档业务', desc: '归档业务查看、恢复归档', status: 'done' },
+  { module: '云资源', desc: '云区域/云账户列表(独立模式无云供应商,显示为空)', status: 'done' },
+  { module: '模型拓扑图', desc: '模型关联关系可视化(当前以关联列表形式提供)', status: 'done' },
   { module: '容器管理', desc: 'K8s 集群纳管、Pod 详情(kube)', status: 'todo' },
   { module: '业务同步/归档', desc: '业务数据同步、归档业务', status: 'todo' },
   { module: '全局配置', desc: '平台配置管理', status: 'todo' }
