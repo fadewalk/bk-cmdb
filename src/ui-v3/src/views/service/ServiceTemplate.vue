@@ -67,8 +67,8 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import {
-  searchBusiness, searchServiceTemplates, getServiceTemplateDetail,
-  searchServiceCategories, searchSetTemplates
+  searchBusiness, searchServiceTemplates,
+  searchServiceCategories, searchSetTemplates, http
 } from '../../api/cmdb'
 
 const bizId = ref(null)
@@ -131,9 +131,20 @@ async function showTplDetail(row) {
   tplDrawer.value = true
   tplDetailLoading.value = true
   try {
-    const data = await getServiceTemplateDetail(row.id)
-    tplProcesses.value = data?.attribute?.processes?.map((p) => p.spec || p) || data?.processes || []
-    if (tplProcesses.value.length === 0 && data?.service_instance_count != null) tplProcesses.value = []
+    // 进程模板按服务模板维度查询
+    const data = await http.post('/findmany/proc/proc_template', {
+      bk_biz_id: bizId.value,
+      service_template_id: row.id,
+      page: { start: 0, limit: 100 }
+    })
+    tplProcesses.value = (data?.info || []).map((t) => ({
+      id: t.id,
+      bk_func_name: t.property?.bk_func_name || t.bk_process_name || '-',
+      bk_bind_ip: t.property?.bk_bind_ip || '-',
+      port: t.property?.port || '-',
+      user: t.property?.user || '-',
+      work_path: t.property?.work_path || '-'
+    }))
   } finally { tplDetailLoading.value = false }
 }
 

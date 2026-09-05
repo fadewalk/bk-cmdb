@@ -28,9 +28,10 @@
               <el-tag v-else size="small" type="success">自定义</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
+          <el-table-column label="操作" width="300" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openAttrs(row)">字段管理</el-button>
+              <el-button link type="primary" @click="openUniques(row)">唯一校验</el-button>
               <el-button v-if="!row.bk_ispre" link type="primary" @click="openEditModel(row)">编辑</el-button>
               <el-button v-if="!row.bk_ispre" link type="danger" @click="removeModel(row)">删除</el-button>
             </template>
@@ -128,6 +129,27 @@
         </template>
       </el-dialog>
     </el-drawer>
+
+    <!-- 唯一校验 -->
+    <el-drawer v-model="uniqueDrawer" :title="`「${uniqueModel?.bk_obj_name}」唯一校验`" size="45%">
+      <el-table :data="uniques" v-loading="uniqueLoading" size="default">
+        <el-table-column label="ID" width="70">
+          <template #default="{ row }">{{ row.id }}</template>
+        </el-table-column>
+        <el-table-column label="校验字段" min-width="220">
+          <template #default="{ row }">
+            <el-tag v-for="k in row.keys" :key="k.key_id" size="small" style="margin-right: 6px">
+              {{ propName(attrModel?.bk_obj_id || uniqueModel?.bk_obj_id, k.key_id) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="预置" width="90">
+          <template #default="{ row }">
+            <el-tag v-if="row.ispre" size="small" type="info">内置</el-tag><span v-else>-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
   </div>
 </template>
 
@@ -137,7 +159,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchClassificationWithObjects, searchClassifications, createClassification, deleteClassification,
   createModel, updateModel, deleteModel,
-  searchModelAttributes, createModelAttribute, deleteModelAttribute
+  searchModelAttributes, createModelAttribute, deleteModelAttribute,
+  http
 } from '../../api/cmdb'
 
 const keyword = ref('')
@@ -285,6 +308,37 @@ async function removeAttr(row) {
   await deleteModelAttribute(row.id)
   ElMessage.success('已删除')
   loadAttrs()
+}
+
+// ---------- 唯一校验 ----------
+const uniqueDrawer = ref(false)
+const uniqueModel = ref(null)
+const uniqueLoading = ref(false)
+const uniques = ref([])
+// 缓存各模型的属性 ID -> 名称映射
+const propNameCache = ref({})
+
+function propName(objId, keyId) {
+  const map = propNameCache.value[objId] || {}
+  return map[keyId] || `#${keyId}`
+}
+
+async function openUniques(row) {
+  uniqueModel.value = row
+  uniqueDrawer.value = true
+  uniqueLoading.value = true
+  try {
+    const [u, attrs] = await Promise.all([
+      http.post(`/find/objectunique/object/${row.bk_obj_id}`, {}),
+      searchModelAttributes(row.bk_obj_id)
+    ])
+    const map = {}
+    for (const a of attrs || []) map[a.id] = a.bk_property_name
+    propNameCache.value[row.bk_obj_id] = map
+    uniques.value = u || []
+  } finally {
+    uniqueLoading.value = false
+  }
 }
 
 onMounted(load)
