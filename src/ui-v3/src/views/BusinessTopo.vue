@@ -4,6 +4,7 @@
       <span class="page-title">业务拓扑 · {{ bizStore.currentBiz?.bk_biz_name || '未选择业务' }}</span>
       <div class="spacer" />
       <el-button :icon="'Plus'" type="primary" plain :disabled="!bizId" @click="openCreateSet">新建集群</el-button>
+      <el-button :disabled="!bizId" @click="$router.push({ path: '/business/service-instance' })">服务实例</el-button>
       <el-button :icon="'Refresh'" :disabled="!bizId" @click="load">刷新</el-button>
     </div>
 
