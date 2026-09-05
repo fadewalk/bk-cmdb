@@ -26,6 +26,11 @@
       <el-table-column prop="bk_cloud_id" label="云区域" width="110">
         <template #default="{ row }">{{ row.bk_cloud_id ?? '-' }}</template>
       </el-table-column>
+      <el-table-column label="操作" width="100" fixed="right">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="goDetail(row)">详情</el-button>
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-pagination
@@ -41,7 +46,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { listHostsWithoutApp } from '../api/cmdb'
+
+const router = useRouter()
 
 const keyword = ref('')
 const page = ref(1)
@@ -75,6 +83,10 @@ async function load() {
 function reload() {
   page.value = 1
   load()
+}
+
+function goDetail(row) {
+  router.push({ path: '/host-detail', query: { id: row.bk_host_id } })
 }
 
 onMounted(load)

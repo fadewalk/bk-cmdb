@@ -25,8 +25,29 @@
         <el-menu-item index="/hosts">
           <el-icon><Monitor /></el-icon><span>主机管理</span>
         </el-menu-item>
+
+        <div class="menu-group">资产与模型</div>
         <el-menu-item index="/models">
           <el-icon><Grid /></el-icon><span>模型管理</span>
+        </el-menu-item>
+        <el-menu-item index="/association-types">
+          <el-icon><Link /></el-icon><span>关联类型</span>
+        </el-menu-item>
+
+        <div class="menu-group">服务与运营</div>
+        <el-menu-item index="/service-template">
+          <el-icon><SetUp /></el-icon><span>服务模板</span>
+        </el-menu-item>
+        <el-menu-item index="/dynamic-group">
+          <el-icon><Collection /></el-icon><span>动态分组</span>
+        </el-menu-item>
+        <el-menu-item index="/operation">
+          <el-icon><TrendCharts /></el-icon><span>运营统计</span>
+        </el-menu-item>
+
+        <div class="menu-group">平台</div>
+        <el-menu-item index="/audit">
+          <el-icon><Document /></el-icon><span>操作审计</span>
         </el-menu-item>
         <el-menu-item index="/roadmap">
           <el-icon><MapLocation /></el-icon><span>功能路线</span>
@@ -71,7 +92,11 @@
   height: 52px; padding: 0 20px; color: #fff; font-size: 16px; font-weight: 600;
   cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.menu { border-right: none; flex: 1; }
+.menu { border-right: none; flex: 1; overflow-y: auto; }
+.menu-group {
+  padding: 14px 20px 4px; font-size: 12px; color: #6b7a99;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
 .header {
   display: flex; align-items: center; justify-content: space-between;
   background: #fff; border-bottom: 1px solid #e7e9ef;

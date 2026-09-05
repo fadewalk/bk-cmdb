@@ -13,7 +13,13 @@ const router = createRouter({
         { path: 'business', name: 'Business', component: () => import('../views/BusinessList.vue'), meta: { title: '业务管理' } },
         { path: 'topo', name: 'Topo', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑' } },
         { path: 'hosts', name: 'Hosts', component: () => import('../views/HostList.vue'), meta: { title: '主机管理' } },
-        { path: 'models', name: 'Models', component: () => import('../views/ModelList.vue'), meta: { title: '模型管理' } },
+        { path: 'host-detail', name: 'HostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情' } },
+        { path: 'models', name: 'Models', component: () => import('../views/model/ModelManage.vue'), meta: { title: '模型管理' } },
+        { path: 'association-types', name: 'AssociationTypes', component: () => import('../views/model/AssociationType.vue'), meta: { title: '关联类型' } },
+        { path: 'service-template', name: 'ServiceTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
+        { path: 'dynamic-group', name: 'DynamicGroup', component: () => import('../views/dynamic-group/DynamicGroup.vue'), meta: { title: '动态分组' } },
+        { path: 'audit', name: 'Audit', component: () => import('../views/audit/AuditList.vue'), meta: { title: '操作审计' } },
+        { path: 'operation', name: 'Operation', component: () => import('../views/operation/Operation.vue'), meta: { title: '运营统计' } },
         { path: 'roadmap', name: 'Roadmap', component: () => import('../views/Roadmap.vue'), meta: { title: '功能路线' } }
       ]
     },
