@@ -25,6 +25,20 @@ const PROXY_TARGET = svrConfig.apiTarget
 // ---------- Express 实例 ----------
 const app = express()
 
+
+// ---------- 0.5 客户端错误收集(诊断白屏用) ----------
+const clientErrors = []
+app.post('/__client_err', (req, res) => {
+  let body = ''
+  req.on('data', d => body += d)
+  req.on('end', () => {
+    clientErrors.push({ ts: new Date().toISOString(), body: body.slice(0, 1000) })
+    console.log('[CLIENT-ERR]', body.slice(0, 500))
+    res.json({ ok: true })
+  })
+})
+app.get('/__client_errs', (req, res) => res.json(clientErrors.slice(-50)))
+
 // ---------- 1. 静态资源 ----------
 const staticDir = buildConfig.build.assetsRoot
 const publicPath = '/static'
@@ -40,14 +54,23 @@ if (!fs.existsSync(indexPath)) {
 const template = fs.readFileSync(indexPath, 'utf8')
 
 // ---------- 3. 模板渲染 ----------
+
+function injectHooks(html) {
+  const hook = '<script>(function(){function post(o){try{var x=new XMLHttpRequest();x.open("POST","/__client_err",true);x.send(JSON.stringify(o))}catch(e){}}window.onerror=function(m,s,l,c,e){post({t:"onerror",m:String(m),s:String(s||"").split("/").pop(),l:l,stack:e&&e.stack?String(e.stack).slice(0,600):""});return false};window.addEventListener("unhandledrejection",function(ev){var r=ev.reason;post({t:"unhandledrejection",m:String((r&&r.message)||r),stack:r&&r.stack?String(r.stack).slice(0,600):""})});var _ce=console.error;console.error=function(){try{post({t:"console.error",m:[].slice.call(arguments).map(String).join(" ").slice(0,400)})}catch(e){}_ce.apply(console,arguments)};})();<\/script>'
+  return html.replace('<head>', '<head>' + hook)
+}
+
 function render(html, data) {
+  // 属性上下文(src/href)中 publicPath 需要裸路径;script 上下文需要 JS 表达式(带引号),
+  // 先特判属性上下文,再做通用替换(对齐 Go html/template 的上下文感知转义)
+  html = html.replace(/(src|href)="\{\{\.publicPath\}\}/g, '$1="/')
   return html.replace(/\{\{\.(\w+)\}\}/g, (_, key) => data[key] ?? '')
 }
 
 // ---------- 4. 根路由 & 模板注入 ----------
 app.get('/', (req, res) => {
   res.set('Content-Type', 'text/html')
-  res.send(render(template, svrConfig))
+  res.send(injectHooks(render(template, svrConfig)))
 })
 
 // ---------- 5. 其余全部代理 ----------
