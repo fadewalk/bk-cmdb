@@ -223,6 +223,8 @@ export const deleteCloudArea = (id) =>
   http.delete(`/delete/cloudarea/${id}`)
 export const searchCloudAccounts = (page) =>
   http.post('/findmany/cloud/account', { page })
+export const listCloudSyncTask = (data) =>
+  http.post('/findmany/cloud/sync/task', data)
 export const createCloudAccount = (params) =>
   http.post('/create/cloud/account', params)
 

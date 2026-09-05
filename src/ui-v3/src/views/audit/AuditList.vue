@@ -48,8 +48,33 @@
       @current-change="load"
     />
 
-    <el-drawer v-model="detailVisible" title="审计详情" size="45%">
-      <pre class="detail-pre">{{ detailJson }}</pre>
+    <el-drawer v-model="detailVisible" :title="`审计详情 #${detailRow?.id || ''}`" size="55%">
+      <template v-if="detailRow">
+        <el-descriptions :column="2" border size="default" class="audit-desc">
+          <el-descriptions-item label="操作人">{{ detailRow.user || detailRow.bk_user_name || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="资源类型">{{ detailRow.resource_type_name || typeName(detailRow.resource_type) }}</el-descriptions-item>
+          <el-descriptions-item label="操作动作">{{ detailRow.action_name || actionLabel(detailRow) }}</el-descriptions-item>
+          <el-descriptions-item label="资源 ID">{{ detailRow.resource_id || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="操作时间" :span="2">{{ (detailRow.operate_time || detailRow.create_time || '').replace('T', ' ').slice(0, 19) || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="操作结果" :span="2">
+            <el-tag v-if="detailRow.status === 'success' || !detailRow.status" type="success" size="small">成功</el-tag>
+            <el-tag v-else type="danger" size="small">{{ detailRow.status }}</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-divider>操作明细</el-divider>
+        <template v-if="parsedDetails.length">
+          <el-table :data="parsedDetails" size="default" border>
+            <el-table-column prop="field" label="字段" min-width="180" />
+            <el-table-column prop="before" label="变更前" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }"><span class="mono">{{ row.before }}</span></template>
+            </el-table-column>
+            <el-table-column prop="after" label="变更后" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }"><span class="mono">{{ row.after }}</span></template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <pre v-else class="detail-pre">{{ detailJson }}</pre>
+      </template>
     </el-drawer>
   </div>
 </template>
@@ -69,6 +94,15 @@ const rows = ref([])
 const loading = ref(false)
 const detailVisible = ref(false)
 const detailJson = ref('')
+const detailRow = ref(null)
+const parsedDetails = ref([])
+
+function actionLabel(row) {
+  if (row.action) return row.action
+  const t = dict.value.find((d) => d.id === row.resource_type)
+  const op = t?.operations?.find((o) => o.id === row.action_id)
+  return op ? op.name : row.action_id || '--'
+}
 
 const actionOptions = computed(() => {
   const t = dict.value.find((d) => d.id === resourceType.value)
@@ -122,9 +156,30 @@ function reload() {
 }
 
 async function showDetail(row) {
-  const { searchAuditDetail } = await import('../../api/cmdb')
-  const data = await searchAuditDetail(row.id)
-  detailJson.value = JSON.stringify(data, null, 2)
+  detailRow.value = row
+  detailVisible.value = true
+  detailJson.value = ''
+  parsedDetails.value = []
+  try {
+    const { searchAuditDetail } = await import('../../api/cmdb')
+    const data = await searchAuditDetail(row.id)
+    detailJson.value = JSON.stringify(data, null, 2)
+    // 解析 audit.cur_data / pre_data 提取字段差异
+    const cur = data?.cur_data || data?.audit_data?.cur_data
+    const pre = data?.pre_data || data?.audit_data?.pre_data
+    if (cur && pre && typeof cur === 'object' && typeof pre === 'object') {
+      const keys = new Set([...Object.keys(cur), ...Object.keys(pre)])
+      parsedDetails.value = [...keys].map((k) => ({
+        field: k,
+        before: JSON.stringify(pre[k] ?? ''),
+        after: JSON.stringify(cur[k] ?? '')
+      })).filter((r) => r.before !== r.after)
+    } else if (cur && typeof cur === 'object') {
+      parsedDetails.value = Object.keys(cur).map((k) => ({
+        field: k, before: '--', after: JSON.stringify(cur[k] ?? '')
+      }))
+    }
+  } catch (e) { /* 容忍:用 default 字段 */ }
   detailVisible.value = true
 }
 
@@ -140,5 +195,8 @@ onMounted(async () => {
 .detail-pre {
   background: #f5f7fa; padding: 12px; border-radius: 4px;
   font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  max-height: 60vh; overflow: auto;
 }
+.audit-desc { margin-bottom: 16px; }
+.mono { font-family: Menlo, Monaco, 'Courier New', monospace; font-size: 12px; }
 </style>
