@@ -21,7 +21,7 @@ module.exports = {
   cookieDomain: '',
   componentApiUrl: '',
   // 老版产物资源引用前缀(见 config/index.js build.assetsPublicPath)
-  publicPath: '/static/',
+  publicPath: '',
   enableNotification: 'false',
   bkSharedResUrl: '',
 
