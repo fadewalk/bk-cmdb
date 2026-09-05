@@ -2,27 +2,27 @@
 # bk-cmdb 独立部署镜像(无蓝鲸平台依赖)
 #
 # 三阶段构建:
-#   1. ui-builder   : 构建前端(Vue2 + webpack5),产物为纯静态文件
+#   1. ui-builder   : 构建全新前端(src/ui-v3: Vue3 + Element Plus + Vite),产物为纯静态文件
 #   2. go-builder   : 关闭国密(disable_crypto)、关闭 CGO,构建纯静态 Go 二进制
 #   3. runtime      : 仅包含二进制 + 前端产物 + 错误码/多语言资源
 #
 # 独立化说明:
+#   - 前端已替换为 Vue3 + Element Plus 实现(src/ui-v3),不再使用旧版 Vue2 + bk-magic-vue
 #   - 只构建核心链路服务,不含 synchronize/cloud/auth(权限中心)/transfer 等蓝鲸场景服务
 #   - 编译期禁用国密 SDK,无需铜锁(Tongsuo)环境
 #******************************************************************************
 
 # ---------- 1. 前端构建 ----------
-FROM node:18-bookworm AS ui-builder
+FROM node:22-bookworm-slim AS ui-builder
 
-WORKDIR /build/ui
+WORKDIR /build
 
-# 先装依赖,利用层缓存(--legacy-peer-deps:functional-dependency 依赖的 bkui-vue 声明了 vue3 peer,与项目 vue2 冲突)
-COPY src/ui/package.json ./
-RUN npm install --registry=https://registry.npmmirror.com --no-audit --no-fund --legacy-peer-deps
+# 先装依赖,利用层缓存
+COPY src/ui-v3/package.json ./
+RUN npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
 
-COPY src/ui/ ./
-# 产物输出到 /ui-dist/web
-RUN npm run build -- BUILD_OUTPUT=/ui-dist
+COPY src/ui-v3/ ./
+RUN npm run build
 
 
 # ---------- 2. 后端构建 ----------
@@ -80,8 +80,8 @@ COPY resources/language/  ${CMDB_HOME}/resources/language/
 # 前端版本日志(web_server 版本日志页)
 COPY docs/support-file/changelog_user/ ${CMDB_HOME}/changelog_user/
 
-# 前端静态产物
-COPY --from=ui-builder /ui-dist/web/ ${CMDB_HOME}/cmdb_webserver/web/
+# 前端静态产物(Vue3 + Element Plus,web_server 以 /static 托管 assets)
+COPY --from=ui-builder /build/dist/ ${CMDB_HOME}/cmdb_webserver/web/
 
 # 独立模式配置文件
 COPY deploy/standalone/configs/migrate.yaml   ${CMDB_HOME}/cmdb_adminserver/configures/migrate.yaml

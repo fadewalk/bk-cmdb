@@ -3,6 +3,16 @@
 本目录提供一套**完全独立运行**的 bk-cmdb 部署方案:不依赖任何腾讯蓝鲸平台组件
 (PaaS/ESB、权限中心 IAM、GSE、监控平台、日志平台),只用三个开源中间件即可跑起来。
 
+## 前端(Vue 3 + Element Plus)
+
+前端已替换为全新工程 `src/ui-v3`(Vue 3 + Element Plus + Vite + Pinia),
+不再使用旧版 Vue2 + bk-magic-vue(蓝鲸 MagicBox)实现:
+
+- 已落地:仪表盘(资源统计)、业务管理、业务拓扑、主机管理、模型管理
+- 迁移中:老前端 500+ 组件的其余功能按批次迁移,新前端「功能路线」页可查看进度
+- 本地开发:`cd src/ui-v3 && npm run dev`(代理到本地 8090)
+- 资产路径:`vite.config.js` 中 `base: '/static/'` 为 web_server 托管约定,不可修改
+
 ## 组成
 
 | 组件 | 说明 |
