@@ -118,8 +118,9 @@ export const getHostInstTopo = (hostId, data) =>
 export const searchHostInstAssoc = (data) =>
   http.post('/findmany/inst/association', data)
 // 主机收藏
-export const listHostFavorites = (data) => http.post('/hosts/favorites', data)
-export const createHostFavorite = (data) => http.post('/hosts/favorites/add', data)
+export const listHostFavorites = (data) => http.post('/hosts/favorites/search', data)
+export const createHostFavorite = (data) => http.post('/hosts/favorites', data)
+export const updateHostFavorite = (id, data) => http.put(`/hosts/favorites/${id}`, data)
 export const deleteHostFavorite = (id) => http.delete(`/hosts/favorites/${id}`)
 export const incrHostFavorite = (id) => http.put(`/hosts/favorites/${id}/incr`)
 
@@ -374,3 +375,21 @@ export const searchAuditDetail = (id) =>
 export const getOperationCharts = () => http.get('/findmany/operation/chart')
 export const getOperationChartData = (config) =>
   http.post('/find/operation/chart/data', config)
+export const createOperationChart = (data) =>
+  http.post('/create/operation/chart', data)
+export const updateOperationChart = (data) =>
+  http.post('/update/operation/chart', data)
+export const deleteOperationChart = (id) =>
+  http.delete(`/delete/operation/chart/${id}`)
+export const updateOperationChartPosition = (data) =>
+  http.post('/update/operation/chart/position', data)
+
+// ---------- 进程模板 CRUD ----------
+export const searchProcTemplates = (bizId, data) =>
+  http.post('/findmany/proc/proc_template', { bk_biz_id: bizId, ...(data || {}) })
+export const createProcTemplate = (bizId, data) =>
+  http.post(`/create/proc/proc_template/bk_biz_id/${bizId}`, data)
+export const updateProcTemplate = (bizId, id, data) =>
+  http.put(`/update/proc/proc_template/bk_biz_id/${bizId}/id/${id}`, data)
+export const deleteProcTemplate = (bizId, id) =>
+  http.delete(`/delete/proc/proc_template/bk_biz_id/${bizId}/id/${id}`)

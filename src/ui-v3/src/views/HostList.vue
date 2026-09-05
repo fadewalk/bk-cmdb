@@ -22,6 +22,7 @@
           :filter-node-method="filterDir"
           class="dir-tree"
           @node-click="onDirClick"
+          @node-contextmenu="onDirContext"
         >
           <template #default="{ data }">
             <span class="dir-row">
@@ -31,6 +32,11 @@
             </span>
           </template>
         </el-tree>
+        <div class="dir-actions">
+          <el-button size="small" :icon="'Plus'" link @click="openCreateDir()">新建目录</el-button>
+          <el-button size="small" :icon="'Edit'" link :disabled="currentDirId === 'default'" @click="onDirCmd('rename')">重命名</el-button>
+          <el-button size="small" :icon="'Delete'" link :disabled="currentDirId === 'default'" @click="onDirCmd('delete')">删除</el-button>
+        </div>
         <div class="group-list">
           <div
             v-for="g in groupList" :key="g.id"
@@ -46,8 +52,9 @@
 
       <!-- 右:列表 -->
       <div class="main-col">
-        <div class="toolbar">
-          <el-button size="small" type="primary" :icon="'Plus'" @click="importVisible = true">导入主机</el-button>
+    <div class="toolbar">
+      <el-button size="small" type="primary" :icon="'Plus'" @click="importVisible = true">导入主机</el-button>
+      <el-button size="small" :icon="'Star'" @click="openFavs">收藏({{ favorites.length }})</el-button>
           <el-button size="small" :disabled="!selectedHosts.length" @click="openTransferWizard">分配到 ({{ selectedHosts.length }})</el-button>
           <el-dropdown trigger="click" @command="onMore">
             <el-button size="small" :disabled="!selectedHosts.length">
@@ -227,6 +234,55 @@
       </template>
     </el-dialog>
 
+    <!-- 新建目录 -->
+    <el-dialog v-model="dirCreateVisible" title="新建资源目录" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="目录名" required>
+          <el-input v-model="dirCreateName" placeholder="如:分组A" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dirCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loading" @click="submitCreateDir">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 主机收藏快捷筛选 -->
+    <el-dialog v-model="favVisible" title="主机收藏快捷筛选" width="540px">
+      <div class="toolbar">
+        <el-button size="small" :icon="'Plus'" type="primary" @click="openFavDialog()">新建收藏</el-button>
+        <div class="spacer" />
+      </div>
+      <el-table :data="favorites" v-loading="favLoading" size="default">
+        <el-table-column prop="name" label="名称" min-width="160" />
+        <el-table-column label="使用次数" width="100">
+          <template #default="{ row }">{{ row.use_count || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="applyFav(row)">应用</el-button>
+            <el-button link type="danger" size="small" @click="removeFav(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!favLoading && favorites.length === 0" description="暂无收藏的筛选条件" :image-size="60" />
+    </el-dialog>
+
+    <el-dialog v-model="favFormVisible" title="新建主机收藏" width="540px">
+      <el-form label-width="100px" :model="favForm">
+        <el-form-item label="名称" required>
+          <el-input v-model="favForm.name" placeholder="如:线上生产机" />
+        </el-form-item>
+        <el-form-item label="搜索关键词">
+          <el-input v-model="favForm.keyword" placeholder="可粘贴 IP 列表或关键词" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="favFormVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loading" @click="submitFav">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 导入主机 -->
     <el-dialog v-model="importVisible" title="导入主机" width="720px" top="6vh">
       <el-alert type="info" :closable="false" style="margin-bottom: 12px"
@@ -264,6 +320,8 @@ import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
 import {
   http, listHostsWithoutApp, transferHostModule, transferHostToResource,
   transferHostsToDirectory, importHosts, listResourceDirectory,
+  updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
+  listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
   getBizTopoTree, getBizInternalTopo
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
@@ -350,6 +408,16 @@ const confirmConflicts = computed(() => {
 const dirDialogVisible = ref(false)
 const targetDir = ref(null)
 
+const dirCreateVisible = ref(false)
+const dirCreateName = ref('')
+
+// 主机收藏
+const favVisible = ref(false)
+const favFormVisible = ref(false)
+const favorites = ref([])
+const favLoading = ref(false)
+const favForm = ref({ name: '', keyword: '' })
+
 const cloudNames = { 0: 'Default Area' }
 function cloudName(id) {
   const n = cloudNames[id]
@@ -369,11 +437,97 @@ watch(dirKeyword, (v) => dirTreeRef.value?.filter(v))
 
 function onDirClick(node) {
   currentDirId.value = node.id
-  // 选中目录后:客户端筛选(因后端没有按目录 id 直接筛的接口;保留主列表的 keyword/filters)
   if (node.id !== 'default') {
-    // 当前 host 列表没有 bk_module_id 字段,改用 host_property_filter 需要扩展。先简化:
-    // 仅 UI 标记,实际搜索靠 keyword/filters
     ElMessage.info(`已选中目录:${node.name}(独立模式后端暂未支持按目录筛选)`)
+  }
+}
+
+function onDirContext(event, data) {
+  // 阻止默认右键
+  currentDirId.value = data.id
+}
+
+function openCreateDir() {
+  dirCreateName.value = ''
+  dirCreateVisible.value = true
+}
+
+async function submitCreateDir() {
+  if (!dirCreateName.value) { ElMessage.warning('请输入目录名'); return }
+  loading.value = true
+  try {
+    await createResourceDirectory({ bk_module_name: dirCreateName.value, bk_supplier_account: '0' })
+    ElMessage.success('已创建')
+    dirCreateVisible.value = false
+    await loadDirectoryTree()
+  } catch (e) { ElMessage.error('创建失败: ' + (e?.message || '后端异常')) }
+  finally { loading.value = false }
+}
+
+async function openFavs() {
+  favVisible.value = true
+  await loadFavs()
+}
+
+async function loadFavs() {
+  favLoading.value = true
+  try {
+    const data = await listHostFavorites({ page: { start: 0, limit: 200 } })
+    favorites.value = data?.info || []
+  } catch (e) { favorites.value = [] }
+  finally { favLoading.value = false }
+}
+
+function openFavDialog() {
+  favForm.value = { name: '', keyword: '' }
+  favFormVisible.value = true
+}
+
+function submitFav() {
+  if (!favForm.value.name) { ElMessage.warning('请输入收藏名'); return }
+  createHostFavorite({ name: favForm.value.name, params: { keyword: favForm.value.keyword } })
+    .then(() => {
+      ElMessage.success('已创建')
+      favFormVisible.value = false
+      return loadFavs()
+    })
+    .catch((e) => ElMessage.error('创建失败: ' + (e?.message || '后端异常')))
+}
+
+function applyFav(row) {
+  keyword.value = row.params?.keyword || row.name || ''
+  favVisible.value = false
+  reload()
+  incrHostFavorite(row.id).catch(() => {})
+}
+
+function removeFav(row) {
+  ElMessageBox.confirm(`确定删除收藏「${row.name}」?`, '删除', { type: 'warning' })
+    .then(() => deleteHostFavorite(row.id))
+    .then(() => loadFavs())
+    .catch(() => {})
+}
+
+async function onDirCmd(cmd) {
+  if (cmd === 'rename') {
+    if (currentDirId.value === 'default') { ElMessage.warning('默认目录不能重命名'); return }
+    const node = dirTreeData.value[0]?.children?.find?.((n) => n.id === currentDirId.value)
+    const name = await ElMessageBox.prompt('请输入新目录名', '重命名目录', { inputValue: node?.name || '' })
+    if (!name) return
+    try {
+      await updateResourceDirectory(currentDirId.value, { bk_module_name: name.value })
+      ElMessage.success('已重命名')
+      await loadDirectoryTree()
+    } catch (e) { ElMessage.error('重命名失败: ' + (e?.message || '后端异常')) }
+  } else if (cmd === 'delete') {
+    if (currentDirId.value === 'default') { ElMessage.warning('默认目录不能删除'); return }
+    await ElMessageBox.confirm(`确定删除目录(独立模式后端若不支持会报错)?`, '删除确认', { type: 'warning' })
+    try {
+      await deleteResourceDirectory(currentDirId.value)
+      ElMessage.success('已删除')
+      currentDirId.value = 'default'
+      await loadDirectoryTree()
+    } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
   }
 }
 
