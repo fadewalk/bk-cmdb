@@ -16,12 +16,15 @@
           :expand-on-click-node="false"
           v-loading="loading"
           @node-click="onNodeClick"
+          @node-contextmenu="onNodeContextmenu"
         >
           <template #default="{ data }">
             <span class="tree-node">
               <span class="node-badge" :class="data.type">{{ nodeBadge(data) }}</span>
               <span class="node-label">{{ data.label }}</span>
               <span class="node-count">{{ data.hostCount ?? data.instCount ?? '' }}</span>
+              <el-button v-if="canCreate(data)" link size="small" type="primary" class="node-add"
+                @click.stop="openCreateFromNode(data)">+</el-button>
             </span>
           </template>
         </el-tree>
@@ -37,22 +40,43 @@
 
         <!-- 工具栏 -->
         <div class="toolbar" v-if="rightTab !== 'node'">
-          <el-button size="small" type="primary" :disabled="!bizId" @click="openCreateSet" v-if="rightTab === 'host'">新增</el-button>
-          <el-button size="small" :disabled="!selectedHosts.length" @click="transferVisible = true">转移至</el-button>
-          <el-button size="small" :disabled="!selectedHosts.length" @click="appendVisible = true">追加至</el-button>
-          <el-button size="small" :disabled="!selectedHosts.length">复制</el-button>
-          <el-button size="small">更多</el-button>
+          <template v-if="rightTab === 'host'">
+            <el-button size="small" type="primary" :disabled="!bizId" @click="openCreateSet">新增</el-button>
+            <el-button size="small" :disabled="!selectedHosts.length" @click="transferVisible = true">转移至</el-button>
+            <el-button size="small" :disabled="!selectedHosts.length" @click="appendVisible = true">追加至</el-button>
+            <el-button size="small" :disabled="!selectedHosts.length">复制</el-button>
+            <el-dropdown trigger="click" @command="onHostMore">
+              <el-button size="small">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :disabled="!selectedHosts.length" command="resource">转移到资源池</el-dropdown-item>
+                  <el-dropdown-item :disabled="!selectedHosts.length" command="across">跨业务转移</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
+          <template v-else>
+            <el-button size="small" type="primary" :disabled="!currentModuleId" @click="openSvcInstWizard">新建服务实例</el-button>
+            <el-dropdown trigger="click" @command="onInstMore">
+              <el-button size="small">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :disabled="!selectedInstances.length" command="delete">批量删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
           <div class="spacer" />
           <el-button size="small" :icon="'Refresh'" @click="load">刷新</el-button>
           <span class="refresh-time">{{ refreshText }}</span>
           <el-input
             v-model="ipKeyword"
-            placeholder="请输入IP或固资编号"
+            :placeholder="rightTab === 'host' ? '请输入IP或固资编号' : '请输入实例名称'"
             size="small"
             clearable
             style="width: 220px; margin-left: 8px"
-            @keyup.enter="loadHosts"
-            @clear="loadHosts"
+            @keyup.enter="rightTab === 'host' ? loadHosts() : loadInstances()"
+            @clear="rightTab === 'host' ? loadHosts() : loadInstances()"
           />
         </div>
 
@@ -66,42 +90,90 @@
             @selection-change="onHostSelect"
           >
             <el-table-column type="selection" width="36" />
-            <el-table-column prop="bk_host_innerip" label="内网IPv4" min-width="130">
+            <el-table-column
+              v-for="col in activeHostColumns"
+              :key="col.bk_property_id"
+              :prop="col.bk_property_id"
+              :label="col.bk_property_name"
+              :min-width="col.minWidth || 120"
+              :sortable="col.sortable || false"
+              show-overflow-tooltip
+            >
               <template #default="{ row }">
-                <el-link type="primary" :underline="false" @click="goHostDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
+                <el-link v-if="col.bk_property_id === 'bk_host_innerip'" type="primary" :underline="false"
+                  @click="goHostDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
+                <span v-else>{{ hostCell(row, col.bk_property_id) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="内网IPv6" min-width="120">
-              <template #default="{ row }">{{ row.bk_host_innerip_v6 || '--' }}</template>
-            </el-table-column>
-            <el-table-column label="管控区域" min-width="120">
-              <template #default="{ row }">{{ cloudName(row.bk_cloud_id) }}</template>
-            </el-table-column>
-            <el-table-column label="模块名(模块)" min-width="140">
+            <el-table-column label="模块名" min-width="120">
               <template #default="{ row }">{{ row.__moduleName || '--' }}</template>
             </el-table-column>
-            <el-table-column label="集群名(集群)" min-width="140">
+            <el-table-column label="集群名" min-width="120">
               <template #default="{ row }">{{ row.__setName || '--' }}</template>
             </el-table-column>
           </el-table>
           <div class="table-footer">
             <span>共计{{ hostTotal }}条</span>
             <span class="selected-info">已选择{{ selectedHosts.length }}条</span>
+            <div class="spacer" />
+            <el-pagination
+              v-model:current-page="hostPage"
+              :page-size="hostPageSize"
+              :total="hostTotal"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="sizes, prev, pager, next"
+              small
+              @current-change="loadHosts"
+              @size-change="onHostPageSizeChange"
+            />
+            <el-popover placement="bottom-end" :width="220" trigger="click" v-model:visible="colPickerVisible">
+              <template #reference>
+                <el-button size="small" :icon="'Setting'" class="col-set">字段设置</el-button>
+              </template>
+              <div class="col-picker">
+                <div class="col-picker-title">已显示字段(可拖动排序)</div>
+                <el-checkbox-group v-model="pickedColumnIds">
+                  <div v-for="col in hostColumnPool" :key="col.bk_property_id" class="col-picker-row">
+                    <el-checkbox :value="col.bk_property_id">{{ col.bk_property_name }}</el-checkbox>
+                  </div>
+                </el-checkbox-group>
+                <div class="col-picker-actions">
+                  <el-button size="small" @click="resetColumns">恢复默认</el-button>
+                  <el-button size="small" type="primary" @click="colPickerVisible = false">关闭</el-button>
+                </div>
+              </div>
+            </el-popover>
           </div>
         </template>
 
         <!-- 服务实例 -->
         <template v-if="rightTab === 'instance'">
-          <el-table :data="svcInstances" v-loading="instLoading" size="small" class="bk-table">
-            <el-table-column prop="name" label="实例名称" min-width="200" show-overflow-tooltip />
+          <el-table :data="svcInstances" v-loading="instLoading" size="small" class="bk-table"
+            @selection-change="onInstanceSelect">
+            <el-table-column type="selection" width="36" />
+            <el-table-column label="实例名称" min-width="200" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-link type="primary" :underline="false" @click="openInstanceDrawer(row)">{{ row.name || `实例 ${row.id}` }}</el-link>
+              </template>
+            </el-table-column>
             <el-table-column label="主机" width="140">
-              <template #default="{ row }">{{ row.bk_host_innerip || '-' }}</template>
+              <template #default="{ row }">{{ row.bk_host_innerip || row.host?.bk_host_innerip || '-' }}</template>
             </el-table-column>
             <el-table-column label="进程数" width="90">
               <template #default="{ row }">{{ row.process_count ?? '-' }}</template>
             </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openInstanceDrawer(row)">查看/编辑进程</el-button>
+                <el-button link type="danger" @click="removeInstance(row)">删除</el-button>
+              </template>
+            </el-table-column>
           </el-table>
-          <el-empty v-if="!instLoading && svcInstances.length === 0" description="暂无服务实例" :image-size="60" />
+          <div class="table-footer">
+            <span>共计{{ svcInstances.length }}条</span>
+            <span class="selected-info">已选择{{ selectedInstances.length }}条</span>
+          </div>
+          <el-empty v-if="!instLoading && svcInstances.length === 0" description="暂无服务实例(选中模块后可点击「新建服务实例」)" :image-size="60" />
         </template>
 
         <!-- 节点信息 -->
@@ -118,6 +190,21 @@
         <el-empty v-if="!bizId" description="请先在左侧顶部选择业务" :image-size="70" />
       </div>
     </div>
+
+    <!-- 右键菜单:树节点 -->
+    <ul v-show="ctxMenu.visible" class="ctx-menu"
+      :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+      @mouseleave="ctxMenu.visible = false">
+      <li class="ctx-item" v-if="ctxMenu.node && canCreate(ctxMenu.node)" @click="ctxCreateSet">新建集群</li>
+      <li class="ctx-item" v-if="ctxMenu.node && ctxMenu.node.type === 'set' && !ctxMenu.node.isIdle"
+        @click="ctxCreateModule">新建模块</li>
+      <li class="ctx-item ctx-danger" v-if="ctxMenu.node && ctxMenu.node.type === 'set' && !ctxMenu.node.isIdle"
+        @click="ctxDeleteSet">删除集群</li>
+      <li class="ctx-item ctx-danger" v-if="ctxMenu.node && ctxMenu.node.type === 'module'"
+        @click="ctxDeleteModule">删除模块</li>
+      <li class="ctx-item" v-if="ctxMenu.node && ctxMenu.node.type === 'module'"
+        @click="ctxOpenSvcInstWizard">新建服务实例</li>
+    </ul>
 
     <!-- 新建集群 / 模块 -->
     <el-dialog v-model="nodeDialog" :title="nodeDialogType === 'set' ? '新建集群' : '新建模块'" width="420px">
@@ -174,19 +261,135 @@
         <el-button type="primary" :loading="transferring" @click="doAppend">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 服务实例向导:选主机 → 加进程 -->
+    <el-dialog v-model="wizardVisible" title="新建服务实例" width="720px" top="6vh">
+      <el-steps :active="wizardStep" finish-status="success" simple style="margin-bottom: 16px">
+        <el-step title="选择主机" />
+        <el-step title="配置进程" />
+        <el-step title="完成" />
+      </el-steps>
+
+      <template v-if="wizardStep === 0">
+        <el-alert type="info" :closable="false" style="margin-bottom: 8px"
+          :title="`所属模块:${currentNode?.label || '-'} (服务实例名称留空将自动按「{IP}_序号」生成)`" />
+        <el-table :data="candidateHosts" v-loading="candLoading" size="small" max-height="380"
+          @selection-change="onCandSelect">
+          <el-table-column type="selection" width="36" />
+          <el-table-column label="内网IP" min-width="140">
+            <template #default="{ row }">{{ row.bk_host_innerip || '--' }}</template>
+          </el-table-column>
+          <el-table-column label="主机名" min-width="140">
+            <template #default="{ row }">{{ row.bk_host_name || '--' }}</template>
+          </el-table-column>
+          <el-table-column label="操作系统" min-width="120">
+            <template #default="{ row }">{{ row.bk_os_name || '--' }}</template>
+          </el-table-column>
+        </el-table>
+        <div class="hint" v-if="currentModuleId && candidateHosts.length === 0 && !candLoading">
+          该模块下没有可绑定的主机(可在主机列表/资源池把主机转移到该模块)
+        </div>
+      </template>
+
+      <template v-else-if="wizardStep === 1">
+        <el-button :icon="'Plus'" size="small" @click="addWizardProcess">添加进程</el-button>
+        <el-button size="small" :disabled="wizardInstances.length === 0" @click="removeWizardInstance">移除主机</el-button>
+        <el-table :data="wizardInstances" size="small" max-height="380" style="margin-top: 8px">
+          <el-table-column label="主机" min-width="160">
+            <template #default="{ row }">
+              <div>{{ row.__host?.bk_host_innerip || `主机 ${row.bk_host_id}` }}</div>
+              <el-input v-model="row.service_instance_name" placeholder="实例名称(留空自动生成)" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="进程配置" min-width="360">
+            <template #default="{ row }">
+              <div v-for="(p, i) in row.processes" :key="i" class="proc-row">
+                <el-input v-model="p.process_info.bk_func_name" placeholder="进程名称(必填)" size="small" style="width: 140px" />
+                <el-input v-model="p.process_info.port" placeholder="端口" size="small" style="width: 80px" />
+                <el-input v-model="p.process_info.bk_bind_ip" placeholder="监听IP" size="small" style="width: 130px" />
+                <el-button link type="danger" size="small" @click="row.processes.splice(i, 1)">删除</el-button>
+              </div>
+              <el-button v-if="row.processes.length === 0" link type="primary" size="small"
+                @click="row.processes.push(emptyProc())">+ 添加进程</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+
+      <template v-else>
+        <el-result icon="success" title="已创建" :sub-title="`本次创建 ${wizardCreatedCount} 个服务实例`">
+          <template #extra>
+            <el-button type="primary" @click="closeWizard">完成</el-button>
+          </template>
+        </el-result>
+      </template>
+
+      <template #footer v-if="wizardStep < 2">
+        <el-button @click="wizardVisible = false">取消</el-button>
+        <el-button v-if="wizardStep === 0" type="primary" :disabled="wizardSelectedHosts.length === 0"
+          @click="goWizardStep(1)">下一步</el-button>
+        <template v-else>
+          <el-button @click="goWizardStep(0)">上一步</el-button>
+          <el-button type="primary" :loading="wizardSubmitting" @click="submitWizard">提交</el-button>
+        </template>
+      </template>
+    </el-dialog>
+
+    <!-- 服务实例进程抽屉(从实例列表 / 向导完成后跳入) -->
+    <el-drawer v-model="procDrawer" :title="`「${procInstName}」进程实例`" size="55%">
+      <div class="table-toolbar">
+        <div class="spacer" />
+        <el-button :icon="'Plus'" type="primary" size="small" @click="openAddProcess">新增进程</el-button>
+      </div>
+      <el-table :data="processes" v-loading="procLoading" size="default">
+        <el-table-column label="进程名称" min-width="130">
+          <template #default="{ row }">{{ row.property?.bk_func_name || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="监听 IP" width="130">
+          <template #default="{ row }">{{ row.property?.bk_bind_ip || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="端口" width="110">
+          <template #default="{ row }">{{ row.property?.port || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="启动用户" width="110">
+          <template #default="{ row }">{{ row.property?.user || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openEditProcess(row)">编辑</el-button>
+            <el-button link type="danger" @click="removeProcess(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!procLoading && processes.length === 0" description="该服务实例暂无进程,可点击右上角「新增进程」" :image-size="80" />
+    </el-drawer>
+
+    <ProcessFormDialog
+      :visible="procFormVisible"
+      :title="procEditing ? '编辑进程' : '新增进程'"
+      mode="instance"
+      :form="procForm"
+      :saving="procSaving"
+      @update:visible="procFormVisible = $event"
+      @save="saveProcess"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, createModule, deleteModule,
-  transferHostModule, searchServiceInstances
+  transferHostModule, transferHostToResource,
+  searchServiceInstances, deleteServiceInstances, searchProcessInstances,
+  listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
+  http
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
+import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -202,6 +405,7 @@ const loading = ref(false)
 const hostLoading = ref(false)
 const rightTab = ref('host')
 const svcInstances = ref([])
+const selectedInstances = ref([])
 const instLoading = ref(false)
 const refreshText = ref('')
 const currentNode = ref(null)
@@ -223,10 +427,64 @@ const moduleOptions = ref([])
 const ipKeyword = ref('')
 const treeRef = ref(null)
 
+// 主机分页
+const hostPage = ref(1)
+const hostPageSize = ref(20)
+
+// 字段显示设置:候选字段池(可勾选)
+const hostColumnPool = [
+  { bk_property_id: 'bk_host_innerip', bk_property_name: '内网IPv4', minWidth: 140 },
+  { bk_property_id: 'bk_host_outerip', bk_property_name: '外网IP', minWidth: 130 },
+  { bk_property_id: 'bk_host_innerip_v6', bk_property_name: '内网IPv6', minWidth: 130 },
+  { bk_property_id: 'bk_host_name', bk_property_name: '主机名', minWidth: 130 },
+  { bk_property_id: 'bk_os_name', bk_property_name: '操作系统', minWidth: 110 },
+  { bk_property_id: 'bk_cloud_id', bk_property_name: '管控区域', minWidth: 110 },
+  { bk_property_id: 'bk_cpu', bk_property_name: 'CPU', minWidth: 80 },
+  { bk_property_id: 'bk_mem', bk_property_name: '内存(GB)', minWidth: 90 },
+  { bk_property_id: 'bk_disk', bk_property_name: '磁盘(GB)', minWidth: 90 },
+  { bk_property_id: 'bk_isp_name', bk_property_name: '运营商', minWidth: 100 }
+]
+const DEFAULT_PICKED = ['bk_host_innerip', 'bk_host_innerip_v6', 'bk_cloud_id']
+const PICK_KEY = 'topo.hostColumns'
+const pickedColumnIds = ref([...DEFAULT_PICKED])
+const colPickerVisible = ref(false)
+const activeHostColumns = computed(() => {
+  const map = new Map(hostColumnPool.map((c) => [c.bk_property_id, c]))
+  return pickedColumnIds.value.map((id) => map.get(id)).filter(Boolean)
+})
+
+function hostCell(row, key) {
+  if (key === 'bk_cloud_id') return cloudName(row[key])
+  return row[key] ?? '--'
+}
+function loadPickedColumns() {
+  try {
+    const raw = localStorage.getItem(PICK_KEY)
+    if (raw) pickedColumnIds.value = JSON.parse(raw)
+  } catch (e) { /* ignore */ }
+}
+watch(pickedColumnIds, (v) => {
+  try { localStorage.setItem(PICK_KEY, JSON.stringify(v)) } catch (e) { /* ignore */ }
+}, { deep: true })
+function resetColumns() {
+  pickedColumnIds.value = [...DEFAULT_PICKED]
+}
+
+// 右键菜单
+const ctxMenu = ref({ visible: false, x: 0, y: 0, node: null })
+function onNodeContextmenu(event, data) {
+  event.preventDefault()
+  ctxMenu.value = { visible: true, x: event.clientX, y: event.clientY, node: data }
+}
+
 const names = { biz: '业务', set: '集群', module: '模块' }
 const nodeTypeName = (t) => names[t] || t
 function nodeBadge(data) {
   return { biz: '业', set: '集', module: '模' }[data.type] || '?'
+}
+function canCreate(data) {
+  // 业务根节点(biz)、模块、空闲集群节点不能新建
+  return data.type === 'biz' || data.type === 'set'
 }
 const cloudNames = { 0: 'Default Area' }
 function cloudName(id) {
@@ -297,20 +555,20 @@ async function load() {
   }
 }
 
-// 构建模块/集群名称映射,用于表格列展示
-const moduleNameMap = ref({})
-const setNameMap = ref({})
-
 async function loadHosts() {
   if (!bizId.value) return
   hostLoading.value = true
   try {
+    const allFields = activeHostColumns.value.map((c) => c.bk_property_id).filter((k) => k !== 'bk_host_innerip')
+    const fields = ['bk_host_id', 'bk_host_innerip', ...allFields]
     const filter = ipKeyword.value
       ? { condition: 'AND', rules: [{ field: 'bk_host_innerip', operator: 'contains', value: ipKeyword.value }] }
       : undefined
-    const body = { page: { start: 0, limit: 500, sort: 'bk_host_id' }, fields: ['bk_host_id', 'bk_host_innerip', 'bk_host_name', 'bk_cloud_id'] }
+    const body = {
+      page: { start: (hostPage.value - 1) * hostPageSize.value, limit: hostPageSize.value, sort: 'bk_host_id' },
+      fields: [...new Set(fields)]
+    }
     if (filter) body.host_property_filter = filter
-    const { default: http } = await import('../api/http')
     const data = await http.post(`/hosts/app/${bizId.value}/list_hosts`, body)
     const list = (data?.info || []).map((h) => {
       const host = h.host || h
@@ -328,11 +586,22 @@ async function loadHosts() {
   }
 }
 
+function onHostPageSizeChange(sz) {
+  hostPageSize.value = sz
+  hostPage.value = 1
+  loadHosts()
+}
+
 async function loadInstances() {
   instLoading.value = true
   try {
     const data = await searchServiceInstances(bizId.value, { start: 0, limit: 200 })
-    svcInstances.value = data?.info || []
+    let rows = data?.info || []
+    if (ipKeyword.value) {
+      const kw = ipKeyword.value.toLowerCase()
+      rows = rows.filter((r) => (r.name || '').toLowerCase().includes(kw) || (r.bk_host_innerip || '').toLowerCase().includes(kw))
+    }
+    svcInstances.value = rows
   } finally {
     instLoading.value = false
   }
@@ -342,10 +611,14 @@ function onNodeClick(node) {
   currentNode.value = node
   currentKey.value = node.id
   if (rightTab.value === 'host') loadHosts()
+  else if (rightTab.value === 'instance') loadInstances()
 }
 
 function onHostSelect(rows) {
   selectedHosts.value = rows
+}
+function onInstanceSelect(rows) {
+  selectedInstances.value = rows
 }
 
 function goHostDetail(row) {
@@ -386,6 +659,7 @@ async function doTransfer() {
     ElMessage.success('转移成功')
     transferVisible.value = false
     loadHosts()
+    load()
   } finally {
     transferring.value = false
   }
@@ -404,12 +678,76 @@ async function doAppend() {
   }
 }
 
-// ---- 新建集群 / 模块 ----
+async function onHostMore(cmd) {
+  if (!selectedHosts.value.length) return
+  if (cmd === 'resource') {
+    await ElMessageBox.confirm(`将所选 ${selectedHosts.value.length} 台主机转移到资源池?`, '转移确认', { type: 'warning' })
+    await transferHostToResource(bizId.value, selectedHosts.value.map((h) => h.bk_host_id))
+    ElMessage.success('已转移至资源池')
+    loadHosts()
+    load()
+  } else if (cmd === 'across') {
+    ElMessage.info('跨业务转移需要跨业务选择对话框,B3 简化版暂未支持,可用资源池中转')
+  }
+}
+
+async function onInstMore(cmd) {
+  if (cmd !== 'delete') return
+  if (!selectedInstances.value.length) return
+  await ElMessageBox.confirm(`确定删除选中的 ${selectedInstances.value.length} 个服务实例?`, '删除确认', { type: 'warning' })
+  await deleteServiceInstances(bizId.value, selectedInstances.value.map((r) => r.id))
+  ElMessage.success('已删除')
+  loadInstances()
+}
+
+// ---- 新建集群 / 模块(工具栏 + 右键) ----
 function openCreateSet() {
+  openCreateFromNode({ type: 'biz' })
+}
+function openCreateFromNode(data) {
+  if (data.type === 'biz' || data.type === 'set') {
+    nodeDialogType.value = data.type === 'biz' ? 'set' : 'module'
+    nodeParent.value = data.type === 'set' ? data : null
+    nodeName.value = ''
+    nodeDialog.value = true
+  }
+  ctxMenu.value.visible = false
+}
+function ctxCreateSet() {
+  const n = ctxMenu.value.node
+  ctxMenu.value.visible = false
+  if (!n) return
   nodeDialogType.value = 'set'
   nodeParent.value = null
   nodeName.value = ''
   nodeDialog.value = true
+}
+function ctxCreateModule() {
+  const n = ctxMenu.value.node
+  ctxMenu.value.visible = false
+  if (!n) return
+  nodeDialogType.value = 'module'
+  nodeParent.value = n
+  nodeName.value = ''
+  nodeDialog.value = true
+}
+async function ctxDeleteSet() {
+  const n = ctxMenu.value.node
+  ctxMenu.value.visible = false
+  if (!n?.setId) return
+  await ElMessageBox.confirm(`确定删除集群「${n.label}」?该集群下模块需先清空`, '删除确认', { type: 'warning' })
+  await deleteSet(bizId.value, n.setId)
+  ElMessage.success('集群已删除')
+  load()
+}
+async function ctxDeleteModule() {
+  const n = ctxMenu.value.node
+  ctxMenu.value.visible = false
+  if (!n?.moduleId) return
+  await ElMessageBox.confirm(`确定删除模块「${n.label}」?`, '删除确认', { type: 'warning' })
+  await deleteModule(bizId.value, n.setId, n.moduleId)
+  ElMessage.success('模块已删除')
+  load()
 }
 
 async function saveNode() {
@@ -429,16 +767,233 @@ async function saveNode() {
   }
 }
 
+// ---------- 服务实例向导 ----------
+const currentModuleId = computed(() => currentNode.value?.type === 'module' ? currentNode.value.moduleId : null)
+const wizardVisible = ref(false)
+const wizardStep = ref(0)
+const wizardSelectedHosts = ref([])
+const wizardInstances = ref([])
+const wizardSubmitting = ref(false)
+const wizardCreatedCount = ref(0)
+const candidateHosts = ref([])
+const candLoading = ref(false)
+
+function emptyProc() {
+  return {
+    process_info: {
+      bk_process_name: '',
+      bk_func_name: '',
+      bk_bind_ip: '127.0.0.1',
+      port: '',
+      user: 'root',
+      work_path: '/tmp',
+      start_cmd: '',
+      stop_cmd: '',
+      description: ''
+    }
+  }
+}
+function openSvcInstWizard() {
+  if (!currentModuleId.value) {
+    ElMessage.warning('请先在左侧选中一个模块节点')
+    return
+  }
+  wizardStep.value = 0
+  wizardSelectedHosts.value = []
+  wizardInstances.value = []
+  wizardCreatedCount.value = 0
+  wizardVisible.value = true
+  loadCandidateHosts()
+}
+function ctxOpenSvcInstWizard() {
+  ctxMenu.value.visible = false
+  openSvcInstWizard()
+}
+
+async function loadCandidateHosts() {
+  if (!currentModuleId.value) return
+  candLoading.value = true
+  try {
+    const data = await listHostsWithNoSvcInst(bizId.value, currentModuleId.value)
+    const ids = data?.bk_host_ids || []
+    if (ids.length === 0) {
+      candidateHosts.value = []
+      return
+    }
+    const hostData = await listBizHosts(bizId.value, { start: 0, limit: 500 })
+    const all = (hostData?.info || []).map((h) => h.host || h)
+    candidateHosts.value = all.filter((h) => ids.includes(h.bk_host_id))
+  } finally {
+    candLoading.value = false
+  }
+}
+function onCandSelect(rows) {
+  wizardSelectedHosts.value = rows
+}
+function goWizardStep(step) {
+  if (step === 1) {
+    wizardInstances.value = wizardSelectedHosts.value.map((h) => ({
+      bk_host_id: h.bk_host_id,
+      service_instance_name: '',
+      __host: h,
+      processes: [emptyProc()]
+    }))
+  }
+  wizardStep.value = step
+}
+function addWizardProcess() {
+  // 给当前所有 instance 各加一条进程
+  wizardInstances.value.forEach((row) => row.processes.push(emptyProc()))
+}
+function removeWizardInstance() {
+  // 移除最后一行
+  wizardInstances.value.pop()
+}
+
+async function submitWizard() {
+  // 校验所有主机至少一条合法进程
+  for (const row of wizardInstances.value) {
+    if (!row.processes.length) {
+      ElMessage.warning('每台主机至少需要一个进程')
+      return
+    }
+    for (const p of row.processes) {
+      if (!p.process_info.bk_func_name) {
+        ElMessage.warning('请填写所有进程的 bk_func_name')
+        return
+      }
+      p.process_info.bk_process_name = p.process_info.bk_func_name
+      if (p.process_info.port) p.process_info.port = String(p.process_info.port)
+    }
+  }
+  wizardSubmitting.value = true
+  try {
+    await createServiceInstance(bizId.value, currentModuleId.value, wizardInstances.value.map((row) => ({
+      bk_host_id: row.bk_host_id,
+      service_instance_name: row.service_instance_name || '',
+      processes: row.processes
+    })))
+    wizardCreatedCount.value = wizardInstances.value.length
+    wizardStep.value = 2
+    loadInstances()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    wizardSubmitting.value = false
+  }
+}
+function closeWizard() {
+  wizardVisible.value = false
+}
+
+// ---------- 服务实例进程抽屉 ----------
+const procDrawer = ref(false)
+const procInstName = ref('')
+const procInstId = ref(null)
+const procLoading = ref(false)
+const processes = ref([])
+const procFormVisible = ref(false)
+const procSaving = ref(false)
+const procEditing = ref(null)
+const procForm = ref({})
+
+async function openInstanceDrawer(row) {
+  procInstName.value = row.name || `实例 ${row.id}`
+  procInstId.value = row.id
+  procDrawer.value = true
+  await refreshProcesses()
+}
+async function refreshProcesses() {
+  procLoading.value = true
+  try {
+    const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
+    processes.value = data?.info || []
+  } finally {
+    procLoading.value = false
+  }
+}
+function openAddProcess() {
+  procEditing.value = null
+  procForm.value = { bk_func_name: '', bk_process_name: '', bk_bind_ip: '127.0.0.1', port: '', user: 'root', work_path: '/tmp', start_cmd: '', stop_cmd: '', description: '' }
+  procFormVisible.value = true
+}
+function openEditProcess(row) {
+  procEditing.value = row
+  procForm.value = {
+    bk_process_id: row.property?.bk_process_id,
+    bk_func_name: row.property?.bk_func_name || '',
+    bk_process_name: row.property?.bk_process_name || '',
+    bk_bind_ip: row.property?.bk_bind_ip || '127.0.0.1',
+    port: row.property?.port || '',
+    user: row.property?.user || 'root',
+    work_path: row.property?.work_path || '/tmp',
+    start_cmd: row.property?.start_cmd || '',
+    stop_cmd: row.property?.stop_cmd || '',
+    description: row.property?.description || ''
+  }
+  procFormVisible.value = true
+}
+async function saveProcess() {
+  if (!procForm.value.bk_func_name) { ElMessage.warning('请输入进程名称'); return }
+  procSaving.value = true
+  try {
+    const info = { ...procForm.value }
+    if (info.port) info.port = String(info.port)
+    if (procEditing.value) {
+      const pid = info.bk_process_id
+      delete info.bk_process_id
+      await http.post('/update/proc/process_instance/by_ids', {
+        bk_biz_id: bizId.value, process_ids: [pid], update_data: info
+      })
+      ElMessage.success('进程已更新')
+    } else {
+      delete info.bk_process_id
+      await createProcessInstance(bizId.value, procInstId.value, info)
+      ElMessage.success('进程已创建')
+    }
+    procFormVisible.value = false
+    await refreshProcesses()
+    if (rightTab.value === 'instance') loadInstances()
+  } finally {
+    procSaving.value = false
+  }
+}
+async function removeProcess(row) {
+  const pid = row.property?.bk_process_id
+  await ElMessageBox.confirm(`确定删除进程「${row.property?.bk_func_name || pid}」?`, '删除确认', { type: 'warning' })
+  await http.delete('/delete/proc/process_instance', {
+    bk_biz_id: bizId.value, process_instance_ids: [pid]
+  })
+  ElMessage.success('已删除')
+  await refreshProcesses()
+  if (rightTab.value === 'instance') loadInstances()
+}
+async function removeInstance(row) {
+  await ElMessageBox.confirm(`确定删除服务实例「${row.name || row.id}」?`, '删除确认', { type: 'warning' })
+  await deleteServiceInstances(bizId.value, [row.id])
+  ElMessage.success('已删除')
+  loadInstances()
+}
+
+function onGlobalClick() {
+  if (ctxMenu.value.visible) ctxMenu.value.visible = false
+}
 watch(bizId, () => { if (bizId.value) { load(); loadModuleOptions() } })
 
 onMounted(async () => {
+  document.addEventListener('click', onGlobalClick)
   await bizStore.ensureLoaded()
+  loadPickedColumns()
   if (bizId.value) {
     const fromQuery = Number(route.query.biz)
-    if (fromQuery && bizList.value.some((b) => b.bk_biz_id === fromQuery)) bizStore.select(fromQuery)
+    if (fromQuery && bizStore.bizList.some((b) => b.bk_biz_id === fromQuery)) bizStore.select(fromQuery)
     load()
     loadModuleOptions()
   }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onGlobalClick)
 })
 </script>
 
@@ -455,7 +1010,7 @@ onMounted(async () => {
   border-right: 1px solid #E7E9EF;
   padding: 12px; overflow: auto;
 }
-.tree-node { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.tree-node { display: flex; align-items: center; gap: 6px; font-size: 12px; flex: 1; }
 .node-badge {
   width: 16px; height: 16px; line-height: 16px; text-align: center;
   border-radius: 2px; font-size: 11px; color: #fff; background: #C4C6CC; flex: 0 0 16px;
@@ -465,13 +1020,36 @@ onMounted(async () => {
 .node-badge.module { background: #ff9c01; }
 .node-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node-count { color: #979BA5; font-size: 12px; }
+.node-add { padding: 0 4px; font-size: 16px; line-height: 1; }
 .main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 16px 12px; }
 .right-tabs { margin-bottom: 4px; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toolbar .spacer { flex: 1; }
 .refresh-time { color: #979BA5; font-size: 12px; margin: 0 4px; }
 .table-footer {
-  display: flex; align-items: center; gap: 16px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 10px 0 0; font-size: 12px; color: #63656E;
 }
+.table-footer .spacer { flex: 1 1 20px; min-width: 0; }
+.selected-info { color: #3A84FF; }
+.col-set { margin-left: 8px; }
+.col-picker-title { font-size: 12px; color: #63656E; margin-bottom: 8px; }
+.col-picker-row { padding: 4px 0; }
+.col-picker-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid #E7E9EF; padding-top: 8px; margin-top: 8px;
+}
+.ctx-menu {
+  position: fixed; z-index: 9999; min-width: 140px;
+  background: #fff; border: 1px solid #E7E9EF; border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1); padding: 4px 0;
+  list-style: none; margin: 0;
+}
+.ctx-item {
+  padding: 6px 14px; cursor: pointer; font-size: 12px; color: #313238;
+}
+.ctx-item:hover { background: #F0F5FF; color: #3A84FF; }
+.ctx-item.ctx-danger:hover { background: #FFEEEE; color: #EA3636; }
+.hint { font-size: 12px; color: #979BA5; padding: 8px 0; }
+.proc-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
 </style>
