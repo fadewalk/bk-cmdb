@@ -17,6 +17,28 @@ export const getBizTopoTree = (bizId) =>
 export const getBizInternalTopo = (bizId) =>
   http.get(`/topo/internal/0/${bizId}/with_statistics`)
 
+// 集群 / 模块 CRUD
+export const createSet = (bizId, name) =>
+  http.post(`/set/${bizId}`, { bk_set_name: name, bk_parent_id: bizId, bk_supplier_account: '0' })
+export const deleteSet = (bizId, setId) => http.delete(`/set/${bizId}/${setId}`)
+
+export const createModule = (bizId, setId, name) =>
+  http.post(`/module/${bizId}/${setId}`, {
+    bk_module_name: name, bk_parent_id: setId, bk_supplier_account: '0'
+  })
+export const deleteModule = (bizId, setId, moduleId) =>
+  http.delete(`/module/${bizId}/${setId}/${moduleId}`)
+
+// ---------- 服务实例与进程 ----------
+export const searchServiceInstances = (bizId, page) =>
+  http.post('/findmany/proc/service_instance', { bk_biz_id: bizId, page, with_name: true })
+export const deleteServiceInstances = (bizId, ids) =>
+  http.post('/deletemany/proc/service_instance', { bk_biz_id: bizId, service_instance_ids: ids })
+export const searchProcessInstances = (bizId, serviceInstanceId, page) =>
+  http.post('/findmany/proc/process_instance', {
+    bk_biz_id: bizId, service_instance_id: serviceInstanceId, page
+  })
+
 // ---------- 主机 ----------
 function buildHostBody(page, fields, filter) {
   const body = { page, fields }

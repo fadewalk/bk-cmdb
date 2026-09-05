@@ -5,6 +5,7 @@
         <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
       </el-select>
       <div class="spacer" />
+      <el-button :icon="'Plus'" type="primary" plain :disabled="!bizId" @click="openCreateSet">新建集群</el-button>
       <el-button :icon="'Refresh'" :disabled="!bizId" @click="load">刷新</el-button>
     </div>
 
@@ -29,6 +30,16 @@
                   {{ data.hostCount }} 台主机
                 </el-tag>
                 <el-tag v-if="data.isIdle" size="small" type="info" style="margin-left: 8px">空闲机池</el-tag>
+                <span class="node-actions" @click.stop>
+                  <el-button
+                    v-if="data.type === 'set' && !data.isIdle"
+                    link type="primary" size="small" @click="openCreateModule(data)"
+                  >+模块</el-button>
+                  <el-button
+                    v-if="(data.type === 'set' && !data.isIdle) || data.type === 'module'"
+                    link type="danger" size="small" @click="removeNode(data)"
+                  >删除</el-button>
+                </span>
               </span>
             </template>
           </el-tree>
@@ -52,13 +63,33 @@
       </el-col>
     </el-row>
     <el-empty v-else description="请先选择业务" />
+
+    <!-- 新建集群 / 模块 -->
+    <el-dialog v-model="nodeDialog" :title="nodeDialogType === 'set' ? '新建集群' : '新建模块'" width="420px">
+      <el-form label-width="90px" @submit.prevent>
+        <el-form-item :label="nodeDialogType === 'set' ? '集群名称' : '模块名称'" required>
+          <el-input v-model="nodeName" placeholder="输入名称" />
+        </el-form-item>
+        <el-form-item v-if="nodeDialogType === 'module'" label="所属集群">
+          <span>{{ nodeParent?.label }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="nodeDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveNode">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { searchBusiness, getBizTopoTree, getBizInternalTopo, listBizHosts } from '../api/cmdb'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  searchBusiness, getBizTopoTree, getBizInternalTopo, listBizHosts,
+  createSet, deleteSet, createModule, deleteModule
+} from '../api/cmdb'
 
 const route = useRoute()
 const bizId = ref(null)
@@ -68,6 +99,60 @@ const hosts = ref([])
 const currentNode = ref(null)
 const loading = ref(false)
 const hostLoading = ref(false)
+
+const nodeDialog = ref(false)
+const nodeDialogType = ref('set')
+const nodeName = ref('')
+const nodeParent = ref(null)
+const saving = ref(false)
+
+function openCreateSet() {
+  nodeDialogType.value = 'set'
+  nodeParent.value = null
+  nodeName.value = ''
+  nodeDialog.value = true
+}
+
+function openCreateModule(setNode) {
+  nodeDialogType.value = 'module'
+  nodeParent.value = setNode
+  nodeName.value = ''
+  nodeDialog.value = true
+}
+
+async function saveNode() {
+  if (!nodeName.value) {
+    ElMessage.warning('请输入名称')
+    return
+  }
+  saving.value = true
+  try {
+    if (nodeDialogType.value === 'set') {
+      await createSet(bizId.value, nodeName.value)
+    } else {
+      await createModule(bizId.value, nodeParent.value.setId, nodeName.value)
+    }
+    ElMessage.success('创建成功')
+    nodeDialog.value = false
+    load()
+  } finally {
+    saving.value = false
+  }
+}
+
+async function removeNode(node) {
+  const tip = node.type === 'set'
+    ? `确定删除集群「${node.label}」?其下模块与主机转移关系将被删除`
+    : `确定删除模块「${node.label}」?`
+  await ElMessageBox.confirm(tip, '删除确认', { type: 'warning' })
+  if (node.type === 'set') {
+    await deleteSet(bizId.value, node.setId)
+  } else {
+    await deleteModule(bizId.value, node.setId, node.moduleId)
+  }
+  ElMessage.success('已删除')
+  load()
+}
 
 async function loadBizList() {
   const data = await searchBusiness({ start: 0, limit: 200 })
@@ -83,12 +168,15 @@ async function loadBizList() {
 }
 
 // 把 find/topoinst 的通用主线节点(biz/set/自定义层/module)递归映射为树控件数据
-function mapTopoNode(node) {
+function mapTopoNode(node, parentSetId) {
+  const setId = node.bk_obj_id === 'set' ? node.bk_inst_id : parentSetId
   return {
     type: node.bk_obj_id,
     id: `${node.bk_obj_id}-${node.bk_inst_id}`,
+    setId,
+    moduleId: node.bk_obj_id === 'module' ? node.bk_inst_id : undefined,
     label: node.bk_inst_name,
-    children: (node.child || []).map(mapTopoNode)
+    children: (node.child || []).map((c) => mapTopoNode(c, setId))
   }
 }
 
@@ -106,7 +194,7 @@ async function load() {
     // 用户自建的集群/模块层级
     if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
       for (const bizNode of mainTree.value) {
-        nodes.push(...(bizNode.child || []).map(mapTopoNode))
+        nodes.push(...(bizNode.child || []).map((c) => mapTopoNode(c, undefined)))
       }
     }
     // 空闲机池(内部集群,不在主线拓扑接口里)
@@ -115,14 +203,16 @@ async function load() {
       nodes.push({
         type: 'set',
         id: `set-${s.bk_set_id}`,
+        setId: s.bk_set_id,
         label: s.bk_set_name,
         isIdle: true,
         children: (s.module || []).map((m) => ({
           type: 'module',
           id: `module-${m.bk_module_id}`,
+          moduleId: m.bk_module_id,
+          setId: s.bk_set_id,
           label: m.bk_module_name,
-          hostCount: m.host_count,
-          moduleId: m.bk_module_id
+          hostCount: m.host_count
         }))
       })
     }
@@ -152,6 +242,8 @@ async function onNodeClick(node) {
 onMounted(loadBizList)
 </script>
 
-<style scoped>
+    <style scoped>
 .tree-node { display: flex; align-items: center; gap: 6px; }
+.node-actions { visibility: hidden; margin-left: 8px; }
+:deep(.el-tree-node__content:hover) .node-actions { visibility: visible; }
 </style>

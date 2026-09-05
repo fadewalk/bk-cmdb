@@ -38,6 +38,9 @@
         <el-menu-item index="/service-template">
           <el-icon><SetUp /></el-icon><span>服务模板</span>
         </el-menu-item>
+        <el-menu-item index="/service-instance">
+          <el-icon><Cpu /></el-icon><span>服务实例</span>
+        </el-menu-item>
         <el-menu-item index="/dynamic-group">
           <el-icon><Collection /></el-icon><span>动态分组</span>
         </el-menu-item>
