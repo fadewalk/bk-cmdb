@@ -3,7 +3,7 @@ const path = require('path')
 const fs = require('fs')
 
 const e2eDir = path.resolve(__dirname)
-const scripts = ['run.cjs', 'run-b5.cjs', 'run-b6.cjs', 'run-b7.cjs', 'run-b8.cjs', 'run-b9.cjs', 'run-b10.cjs', 'run-b11.cjs']
+const scripts = ['run.cjs', 'run-b5.cjs', 'run-b6.cjs', 'run-b7.cjs', 'run-b8.cjs', 'run-b9.cjs', 'run-b10.cjs', 'run-b11.cjs', 'run-b13.cjs']
 
 ;(async () => {
   for (const s of scripts) {

@@ -395,3 +395,21 @@ export const updateProcTemplate = (bizId, id, data) =>
   http.put(`/update/proc/proc_template/bk_biz_id/${bizId}/id/${id}`, data)
 export const deleteProcTemplate = (bizId, id) =>
   http.delete(`/delete/proc/proc_template/bk_biz_id/${bizId}/id/${id}`)
+
+// ---------- 实例标签 ----------
+export const createInstanceLabels = (data) =>
+  http.post('/createmany/proc/service_instance/labels', data)
+export const updateInstanceLabels = (data) =>
+  http.post('/updatemany/proc/service_instance/labels', data)
+export const deleteInstanceLabels = (data) =>
+  http.delete('/deletemany/proc/service_instance/labels', { data })
+export const listInstanceLabels = (data) =>
+  http.post('/findmany/proc/service_instance/labels', data)
+export const getLabelHistory = (data) =>
+  http.post('/findmany/proc/service_instance/labels/aggregation', data)
+
+// ---------- 业务同步 ----------
+export const getServiceTemplateDiff = (bizId, data) =>
+  http.post(`/find/proc/service_template/general_difference/bk_biz_id/${bizId}`, data)
+export const syncServiceInstances = (bizId, data) =>
+  http.post(`/updatemany/proc/service_instance/sync/bk_biz_id/${bizId}`, data)

@@ -59,31 +59,52 @@
 
     <!-- 创建服务实例 -->
     <el-drawer v-model="procDrawer" :title="`「${procInstName}」进程实例`" size="55%">
-      <div class="table-toolbar">
-        <div class="spacer" />
-        <el-button :icon="'Plus'" type="primary" size="small" @click="openAddProcess">新增进程</el-button>
-      </div>
-      <el-table :data="processes" v-loading="procLoading" size="default">
-        <el-table-column label="进程名称" min-width="130">
-          <template #default="{ row }">{{ row.property?.bk_func_name || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="监听 IP" width="130">
-          <template #default="{ row }">{{ row.property?.bk_bind_ip || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="端口" width="110">
-          <template #default="{ row }">{{ row.property?.port || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="启动用户" width="110">
-          <template #default="{ row }">{{ row.property?.user || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEditProcess(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeProcess(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!procLoading && processes.length === 0" description="该服务实例暂无进程,可点击右上角「新增进程」" :image-size="80" />
+      <el-tabs v-model="procTab">
+        <el-tab-pane label="进程列表" name="proc">
+          <div class="table-toolbar">
+            <div class="spacer" />
+            <el-button :icon="'Plus'" type="primary" size="small" @click="openAddProcess">新增进程</el-button>
+          </div>
+          <el-table :data="processes" v-loading="procLoading" size="default">
+            <el-table-column label="进程名称" min-width="130">
+              <template #default="{ row }">{{ row.property?.bk_func_name || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="监听 IP" width="130">
+              <template #default="{ row }">{{ row.property?.bk_bind_ip || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="端口" width="110">
+              <template #default="{ row }">{{ row.property?.port || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="启动用户" width="110">
+              <template #default="{ row }">{{ row.property?.user || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="danger" size="small" @click="removeProcess(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!procLoading && processes.length === 0" description="该实例暂无进程" :image-size="60" />
+        </el-tab-pane>
+        <el-tab-pane :label="`标签 (${labels.length})`" name="label">
+          <div class="table-toolbar">
+            <div class="spacer" />
+            <el-button :icon="'Plus'" type="primary" size="small" @click="openAddLabel">新增标签</el-button>
+          </div>
+          <el-table :data="labels" v-loading="labelLoading" size="default">
+            <el-table-column prop="key" label="键" min-width="160" />
+            <el-table-column prop="value" label="值" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="creator" label="创建人" width="140" />
+            <el-table-column prop="create_time" label="创建时间" min-width="160" />
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="danger" size="small" @click="removeLabel(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!labelLoading && labels.length === 0" description="该实例暂无标签" :image-size="60" />
+        </el-tab-pane>
+      </el-tabs>
     </el-drawer>
 
     <!-- 进程实例新增/编辑(共享表单) -->
@@ -96,6 +117,18 @@
       @update:visible="procFormVisible = $event"
       @save="saveProcess"
     />
+
+    <!-- 新增标签 -->
+    <el-dialog v-model="labelFormVisible" title="新增标签" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="键" required><el-input v-model="labelForm.key" placeholder="如 env" /></el-form-item>
+        <el-form-item label="值" required><el-input v-model="labelForm.value" placeholder="如 prod" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="labelFormVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loading" @click="submitLabel">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 克隆服务实例 -->
     <el-dialog v-model="cloneDialog" title="克隆服务实例" width="560px">
@@ -133,6 +166,7 @@ import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, createProcessInstance,
+  listInstanceLabels, createInstanceLabels, deleteInstanceLabels,
   getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
@@ -148,13 +182,28 @@ const total = ref(0)
 const loading = ref(false)
 
 const procDrawer = ref(false)
+const procTab = ref('proc')
 const procInstName = ref('')
 const procInstId = ref(null)
 const procLoading = ref(false)
 const processes = ref([])
 
+// 实例标签
+const labels = ref([])
+const labelLoading = ref(false)
+const labelFormVisible = ref(false)
+const labelForm = ref({ key: '', value: '' })
+
 // ---------- 创建服务实例(已移至业务拓扑向导) ----------
 const moduleOptions = ref([])
+
+async function loadProcesses(id) {
+  procLoading.value = true
+  try {
+    const data = await searchProcessInstances(id, { start: 0, limit: 100 })
+    processes.value = data?.info || []
+  } finally { procLoading.value = false }
+}
 
 async function loadModuleOptions() {
   const id = bizStore.bizId || bizId.value
@@ -338,17 +387,62 @@ async function load() {
 }
 
 async function showProcesses(row) {
+  procTab.value = 'proc'
   procInstName.value = row.name || `实例 ${row.id}`
   procInstId.value = row.id
   procDrawer.value = true
-  procLoading.value = true
+  loadProcesses(row.id)
+  loadLabels(row.id)
+}
+
+async function loadLabels(id) {
+  labelLoading.value = true
   try {
-    const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
-    processes.value = data?.info || []
-  } finally {
-    procLoading.value = false
+    const data = await listInstanceLabels({ bk_biz_id: bizId.value, service_instance_id: id })
+    const list = (data?.info || data?.data || []).map((l) => ({
+      key: l.key, value: l.value, creator: l.creator, create_time: l.create_time, id: l.id
+    }))
+    labels.value = list
+  } catch (e) { labels.value = [] }
+  finally { labelLoading.value = false }
+}
+
+function openAddLabel() {
+  labelForm.value = { key: '', value: '' }
+  labelFormVisible.value = true
+}
+
+async function submitLabel() {
+  if (!labelForm.value.key || !labelForm.value.value) {
+    ElMessage.warning('请输入键和值')
+    return
+  }
+  try {
+    await createInstanceLabels({
+      bk_biz_id: bizId.value,
+      labels: [{ service_instance_id: procInstId.value, key: labelForm.value.key, value: labelForm.value.value }]
+    })
+    ElMessage.success('已新增')
+    labelFormVisible.value = false
+    loadLabels(procInstId.value)
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
   }
 }
+
+async function removeLabel(row) {
+  await ElMessageBox.confirm(`确定删除标签 ${row.key} = ${row.value}?`, '删除', { type: 'warning' })
+  try {
+    await deleteInstanceLabels({
+      bk_biz_id: bizId.value,
+      service_instance_ids: [procInstId.value],
+      keys: [row.key]
+    })
+    ElMessage.success('已删除')
+    loadLabels(procInstId.value)
+  } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
+}
+
 async function remove(row) {
   await ElMessageBox.confirm(`确定删除服务实例「${row.name || row.id}」?`, '删除确认', { type: 'warning' })
   await deleteServiceInstances(bizId.value, [row.id])

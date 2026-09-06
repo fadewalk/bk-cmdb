@@ -17,6 +17,7 @@ const router = createRouter({
         // 业务
         { path: 'business/topo', name: 'Topo', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑' } },
         { path: 'biz-set/topo', name: 'BizSetTopo', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
+        { path: 'business/sync', name: 'BusinessSync', component: () => import('../views/business-sync/BusinessSync.vue'), meta: { title: '业务同步' } },
         { path: 'business/service-template', name: 'ServiceTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
         { path: 'business/set-template', name: 'SetTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '集群模板', tab: 'settpl' } },
         { path: 'business/service-category', name: 'ServiceCategory', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务分类', tab: 'category' } },

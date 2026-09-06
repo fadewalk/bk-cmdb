@@ -260,7 +260,8 @@ import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http,
-  getSetTemplateDetail, searchSetTemplateStatus, syncSetTemplateToInstances, searchSetTemplateSyncHistory
+  getSetTemplateDetail, searchSetTemplateStatus, syncSetTemplateToInstances, searchSetTemplateSyncHistory,
+  createProcTemplate, updateProcTemplate, deleteProcTemplate
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
@@ -432,22 +433,22 @@ async function saveProcTpl() {
   try {
     const property = buildTemplateProperty(procTplForm.value)
     if (procTplEditing.value) {
-      await http.put('/update/proc/proc_template', {
+      await updateProcTemplate(bizId.value, procTplEditing.value.id, {
         bk_biz_id: bizId.value,
-        process_template_id: procTplEditing.value.id,
         process_property: property
       })
       ElMessage.success('进程模板已更新')
     } else {
-      await http.post('/createmany/proc/proc_template', {
-        bk_biz_id: bizId.value,
+      await createProcTemplate(bizId.value, {
         service_template_id: procTplTarget.value.id,
-        processes: [{ spec: property }]
+        spec: property
       })
       ElMessage.success('进程模板已创建')
     }
     procTplDialog.value = false
     showTplDetail(procTplTarget.value)
+  } catch (e) {
+    ElMessage.error('进程模板保存失败: ' + (e?.message || '后端异常'))
   } finally {
     saving.value = false
   }
@@ -455,13 +456,14 @@ async function saveProcTpl() {
 
 async function removeProcTpl(row) {
   await ElMessageBox.confirm(`确定删除进程模板「${row.bk_func_name}」?`, '删除确认', { type: 'warning' })
-  await http.delete('/deletemany/proc/proc_template', {
-    bk_biz_id: bizId.value,
-    process_templates: [row.id]
-  })
-  ElMessage.success('已删除')
-  const target = templates.value.find((t) => t.id === row.serviceTemplateId) || { id: row.serviceTemplateId, name: tplDetailName.value }
-  showTplDetail(target)
+  try {
+    await deleteProcTemplate(bizId.value, row.id)
+    ElMessage.success('已删除')
+    const target = templates.value.find((t) => t.id === row.serviceTemplateId) || { id: row.serviceTemplateId, name: tplDetailName.value }
+    showTplDetail(target)
+  } catch (e) {
+    ElMessage.error('删除失败: ' + (e?.message || '后端异常'))
+  }
 }
 
 // ---------- 新建服务模板 ----------
