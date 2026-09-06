@@ -21,3 +21,4 @@ pre-*-bkcodeai
 # ui-v3 build artifacts
 src/ui-v3/node_modules/
 src/ui-v3/dist/
+screenshots/

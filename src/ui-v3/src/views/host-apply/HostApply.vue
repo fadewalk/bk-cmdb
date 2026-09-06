@@ -1,73 +1,110 @@
 <template>
-  <div class="host-apply-page" v-loading="loading">
-    <h1 class="page-title">主机自动应用</h1>
-    <p class="page-tips">配置模块或服务模板的主机属性自动填充规则,新主机进入范围时会按规则自动设置字段值</p>
-
+  <div class="host-apply-page">
     <div class="ha-body">
-      <!-- 左:侧栏(模式切换 + 节点树 + 搜索 + 批量按钮) -->
-      <aside class="ha-sidebar">
-        <el-radio-group v-model="mode" size="default" class="mode-tabs">
-          <el-radio-button label="module" value="module">按业务拓扑</el-radio-button>
-          <el-radio-button label="template" value="template">按服务模板</el-radio-button>
-        </el-radio-group>
-        <el-input v-model="searchKw" placeholder="搜索节点" size="small" clearable style="margin: 10px 0 8px" :prefix-icon="'Search'" />
-        <div class="batch-row">
-          <el-dropdown size="small" :disabled="!selectedIds.length" trigger="click" @command="onBatch">
-            <el-button size="small" :disabled="!selectedIds.length">
-              批量操作 ({{ selectedIds.length }})<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="edit">批量编辑</el-dropdown-item>
-                <el-dropdown-item command="delete">批量删除</el-dropdown-item>
-              </el-dropdown-menu>
+      <!-- 左:侧栏(模式切换 + 节点树 + 搜索 + 批量按钮 + 折叠按钮) -->
+      <aside class="ha-sidebar" :class="{ 'is-collapse': sidebarCollapsed }">
+        <div v-if="!sidebarCollapsed" class="sidebar-inner">
+          <div class="mode-tabs">
+            <button
+              :class="['mode-btn', { active: mode === 'module' }]"
+              @click="switchMode('module')">按业务拓扑</button>
+            <button
+              :class="['mode-btn', { active: mode === 'template' }]"
+              @click="switchMode('template')">按服务模板</button>
+          </div>
+
+          <div class="searchbar">
+            <el-input
+              v-model="searchKw"
+              placeholder="输入关键字搜索"
+              clearable
+              size="default"
+              class="search-input"
+              :prefix-icon="'Search'"
+            />
+            <el-dropdown
+              size="default"
+              trigger="click"
+              :disabled="!selectedIds.length"
+              @command="onBatch"
+            >
+              <button class="batch-trigger" :disabled="!selectedIds.length">
+                <span>批量操作</span>
+                <em v-if="selectedIds.length" class="count">({{ selectedIds.length }})</em>
+                <i class="caret">▾</i>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">批量编辑</el-dropdown-item>
+                  <el-dropdown-item command="delete">批量删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+
+          <el-tree
+            ref="treeRef"
+            class="ha-tree"
+            :data="treeData"
+            :props="{ label: 'label', children: 'children' }"
+            node-key="id"
+            default-expand-all
+            highlight-current
+            :filter-node-method="filterNode"
+            :expand-on-click-node="false"
+            @node-click="onNodeClick"
+          >
+            <template #default="{ data }">
+              <span class="tree-row">
+                <i class="bk-cmdb-icon icon-cc-host node-icon" />
+                <span class="lbl">{{ data.label }}</span>
+                <el-tag v-if="data.__enabled" size="small" type="success" effect="plain">已启用</el-tag>
+              </span>
             </template>
-          </el-dropdown>
+          </el-tree>
+
+          <!-- 底部多选摘要(类似原版 checked-list panel 的简化版) -->
+          <div v-if="selectedIds.length" class="selected-summary">
+            <div class="ss-line">已选择 <em>{{ selectedIds.length }}</em> 个模块</div>
+            <div class="ss-actions">
+              <el-button link size="small" type="primary" @click="onBatch('edit')">去编辑</el-button>
+              <el-button link size="small" type="danger" @click="onBatch('delete')">去删除</el-button>
+              <el-button link size="small" @click="clearSelection">清空</el-button>
+            </div>
+          </div>
         </div>
-        <el-tree
-          ref="treeRef"
-          :data="treeData"
-          :props="{ label: 'label', children: 'children' }"
-          node-key="id"
-          default-expand-all
-          highlight-current
-          show-checkbox
-          :check-strictly="false"
-          :filter-node-method="filterNode"
-          class="ha-tree"
-          @check="onCheckChange"
-          @node-click="onNodeClick"
-        >
-          <template #default="{ data }">
-            <span class="tree-row">
-              <i class="bk-cmdb-icon icon-cc-host" />
-              <span class="lbl">{{ data.label }}</span>
-              <el-tag v-if="data.__enabled" size="small" type="success" effect="plain">已启用</el-tag>
-            </span>
-          </template>
-        </el-tree>
+
+        <button class="collapse-handle" @click="sidebarCollapsed = !sidebarCollapsed">
+          <i class="bk-icon icon-angle-left" :class="{ flipped: sidebarCollapsed }" />
+        </button>
       </aside>
 
-      <!-- 右:主内容区 -->
-      <main class="ha-main">
+      <!-- 右:详情面板 -->
+      <main class="ha-main" v-loading="loading">
         <div v-if="!currentNode" class="empty-tip">
           <el-empty description="请在左侧选择模块 / 服务模板" :image-size="120" />
         </div>
         <template v-else>
           <div class="ha-head">
             <h2 class="ha-title">{{ currentNode.label }}</h2>
+            <small v-if="lastEditTime" class="last-edit">( 上次编辑时间 {{ lastEditTime }} )</small>
             <div class="spacer" />
             <el-button type="primary" @click="openEdit()">编辑</el-button>
-            <el-button :disabled="!rules.length" @click="onShowUnapplied">未应用主机 {{ invalidCount || '' }}</el-button>
+            <el-tooltip :disabled="!conflictCount" content="无未应用需处理" placement="top">
+              <el-button :disabled="!conflictCount" @click="onShowUnapplied">
+                未应用主机 <em v-if="conflictCount" class="conflict-num">{{ conflictCount }}</em>
+              </el-button>
+            </el-tooltip>
             <el-button v-if="currentNode.__enabled" type="warning" @click="onToggle(false)">关闭自动应用</el-button>
             <el-button v-else type="success" @click="onToggle(true)">立即启用</el-button>
           </div>
+
           <el-table :data="rules" v-loading="loading" stripe>
             <el-table-column prop="id" label="ID" width="80" />
             <el-table-column label="属性" min-width="180">
               <template #default="{ row }">{{ propName(row.bk_attribute_id) }}</template>
             </el-table-column>
-            <el-table-column label="应用值" min-width="200">
+            <el-table-column label="应用值" min-width="220">
               <template #default="{ row }">{{ formatValue(row) }}</template>
             </el-table-column>
             <el-table-column label="更新时间" min-width="180">
@@ -92,7 +129,6 @@
         <el-step title="执行结果" />
       </el-steps>
 
-      <!-- 步骤 1:配置 -->
       <template v-if="wizardStep === 0">
         <el-alert type="info" :closable="false" style="margin-bottom: 8px"
           :title="`为 ${currentNode?.label} 配置自动应用字段(可多选)`" />
@@ -116,7 +152,6 @@
         </el-table>
       </template>
 
-      <!-- 步骤 2:预览 -->
       <template v-else-if="wizardStep === 1">
         <el-alert :type="previewData?.unresolved_conflict_count ? 'warning' : 'info'" :closable="false" style="margin-bottom: 8px"
           :title="`共影响 ${previewData?.count || 0} 台主机,其中冲突 ${previewData?.unresolved_conflict_count || 0} 台`" />
@@ -134,7 +169,6 @@
         </el-table>
       </template>
 
-      <!-- 步骤 3:执行 -->
       <template v-else>
         <el-result v-if="runResult" :icon="runStatus === 'finished' ? 'success' : (runStatus === 'failure' ? 'error' : 'info')" :title="runTitle" :sub-title="runSubtitle">
           <template #extra>
@@ -162,7 +196,7 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Search, Loading } from '@element-plus/icons-vue'
+import { Search, Loading } from '@element-plus/icons-vue'
 import { useBizStore } from '../../stores/biz'
 import {
   http,
@@ -177,7 +211,8 @@ import {
 } from '../../api/cmdb'
 
 const bizStore = useBizStore()
-const mode = ref('module') // module | template
+const mode = ref('module')
+const sidebarCollapsed = ref(false)
 const searchKw = ref('')
 const treeRef = ref()
 const propTableRef = ref()
@@ -193,7 +228,8 @@ const selectedAttrIds = ref([])
 const loading = ref(false)
 const loadingPreview = ref(false)
 const submitting = ref(false)
-const invalidCount = ref(0)
+const conflictCount = ref(0)
+const lastEditTime = ref('')
 
 const wizardVisible = ref(false)
 const wizardStep = ref(0)
@@ -269,16 +305,12 @@ async function loadTree() {
   }
 }
 
-function onCheckChange() {
-  const checked = treeRef.value?.getCheckedNodes() || []
-  selectedIds.value = checked.filter((n) => n.type === 'module' || n.type === 'template').map((n) => n.id)
-}
-
 async function onNodeClick(data) {
+  if (data.type === 'group') return
+  if (data.type !== 'module' && data.type !== 'template') return
   currentNode.value = data
-  if (data.type === 'module' || data.type === 'template') {
-    await loadRules()
-  }
+  selectedIds.value = [data.id]
+  await loadRules()
 }
 
 async function loadRules() {
@@ -294,13 +326,14 @@ async function loadRules() {
     const list = (res?.info || []).flatMap((entry) => entry.rules || []).filter((r) => !r.is_deleted)
     rules.value = list
     currentNode.value.__enabled = list.length > 0
+    lastEditTime.value = list.map((r) => r.last_time || r.bk_updated_at).filter(Boolean).sort().slice(-1)[0] || ''
     try {
       const url = isModule.value
         ? '/host/findmany/module/host_apply_plan/invalid_host_count'
         : '/host/findmany/service_template/host_apply_plan/invalid_host_count'
       const data = await http.post(url, { bk_biz_id: bizStore.bizId, id: isModule.value ? currentNode.value.moduleId : currentNode.value.templateId })
-      invalidCount.value = data?.count || data?.invalid_count || 0
-    } catch (e) { invalidCount.value = 0 }
+      conflictCount.value = data?.count || data?.invalid_count || 0
+    } catch (e) { conflictCount.value = 0 }
   } finally {
     loading.value = false
   }
@@ -349,7 +382,7 @@ async function onPreview() {
     previewData.value = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
     wizardStep.value = 1
   } catch (e) {
-    ElMessage.error('预览失败:后端暂未支持独立模式完整预览')
+    ElMessage.error('预览失败')
   } finally {
     loadingPreview.value = false
   }
@@ -436,9 +469,9 @@ function onShowUnapplied() {
 }
 
 async function onBatch(cmd) {
-  if (!selectedIds.value.length) { ElMessage.warning('请先在左侧勾选模块'); return }
+  if (!selectedIds.value.length) { ElMessage.warning('请先在左侧选择模块'); return }
   if (cmd === 'edit') {
-    ElMessage.info('已选择 ' + selectedIds.value.length + ' 个节点, 即将进入批量编辑向导(简化模式)')
+    ElMessage.info(`已选择 ${selectedIds.value.length} 个节点,即将进入批量编辑(简化模式)`)
   } else if (cmd === 'delete') {
     await ElMessageBox.confirm(`确定批量删除 ${selectedIds.value.length} 个节点的规则?`, '删除确认', { type: 'warning' })
     for (const id of selectedIds.value) {
@@ -451,8 +484,19 @@ async function onBatch(cmd) {
       }
     }
     ElMessage.success('批量删除完成')
-    await loadRules()
+    if (currentNode.value && selectedIds.value.includes(currentNode.value.id)) await loadRules()
   }
+}
+
+function clearSelection() {
+  selectedIds.value = []
+  currentNode.value = null
+  rules.value = []
+}
+
+function switchMode(m) {
+  if (m === mode.value) return
+  mode.value = m
 }
 
 function resetWizard() {
@@ -463,8 +507,8 @@ function resetWizard() {
   runStatus.value = ''
 }
 
-watch(() => bizStore.bizId, () => { currentNode.value = null; rules.value = []; loadTree() })
-watch(mode, () => { currentNode.value = null; rules.value = []; loadTree() })
+watch(() => bizStore.bizId, () => { clearSelection(); loadTree() })
+watch(mode, () => { clearSelection(); loadTree() })
 
 onMounted(async () => {
   await bizStore.ensureLoaded()
@@ -474,24 +518,79 @@ onMounted(async () => {
 
 <style scoped>
 .host-apply-page { height: 100%; display: flex; flex-direction: column; background: #fff; }
-.ha-body { flex: 1; display: flex; overflow: hidden; }
+.ha-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
 .ha-sidebar {
-  width: 320px; flex: 0 0 320px;
+  position: relative;
+  width: 310px; flex: 0 0 310px;
   border-right: 1px solid #DCDEE5;
-  padding: 12px; overflow-y: auto;
-  background: #fafbfc;
+  background: #fafbfd;
+  transition: width 0.18s, flex-basis 0.18s;
 }
-.mode-tabs { width: 100%; display: flex; }
-.mode-tabs :deep(.el-radio-button__inner) { width: 50%; }
-.batch-row { margin-bottom: 8px; }
-.ha-tree { background: transparent; }
-.tree-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.ha-sidebar.is-collapse { width: 0; flex-basis: 0; border-right: none; }
+.ha-sidebar.is-collapse .collapse-handle { left: 0; border-radius: 0 12px 12px 0; }
+.ha-sidebar.is-collapse .collapse-handle .icon-angle-left { transform: rotate(180deg); }
+.sidebar-inner { padding: 10px 10px 0; height: 100%; overflow-y: auto; display: flex; flex-direction: column; }
+
+.mode-tabs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  border: 1px solid #c4c6cc; border-radius: 2px; overflow: hidden;
+  margin-bottom: 12px;
+}
+.mode-btn {
+  background: #fff; border: none; padding: 6px 8px;
+  font-size: 13px; color: #63656e; cursor: pointer; line-height: 20px;
+  border-right: 1px solid #c4c6cc;
+}
+.mode-btn:last-child { border-right: none; }
+.mode-btn:hover { color: #3a84ff; }
+.mode-btn.active { background: #3a84ff; color: #fff; }
+
+.searchbar { display: flex; gap: 8px; margin-bottom: 8px; }
+.searchbar .search-input { flex: 1; }
+.batch-trigger {
+  border: 1px solid #c4c6cc; border-radius: 2px; background: #fff;
+  padding: 0 8px; height: 32px; line-height: 30px; cursor: pointer; font-size: 13px; color: #63656e;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.batch-trigger:hover { border-color: #979ba5; color: #63656e; }
+.batch-trigger:disabled { background: #fafbfd; color: #c4c6cc; cursor: not-allowed; }
+.batch-trigger .count { color: #2dcb56; font-weight: bold; font-style: normal; }
+.batch-trigger .caret { font-style: normal; font-size: 16px; }
+
+.ha-tree {
+  background: transparent; flex: 1; min-height: 200px;
+}
+:deep(.ha-tree .el-tree-node__content) { height: 32px; }
+.tree-row { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; width: 100%; }
+.node-icon { font-size: 14px; color: #3a84ff; }
 .tree-row .lbl { flex: 1; }
-.ha-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 16px 12px; }
-.ha-head { display: flex; align-items: center; gap: 8px; padding: 12px 0; }
-.ha-title { margin: 0; font-size: 15px; color: #313238; }
+
+.selected-summary {
+  border-top: 1px solid #DCDEE5; padding: 8px 4px;
+  background: #fafbfd; font-size: 12px; color: #63656e;
+}
+.selected-summary em { font-style: normal; font-weight: bold; color: #2dcb56; padding: 0 4px; }
+.selected-summary .ss-actions { display: flex; gap: 4px; margin-top: 4px; }
+
+.collapse-handle {
+  position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 100px; line-height: 100px; text-align: center;
+  background: #DCDEE5; border: none; cursor: pointer; padding: 0;
+  border-radius: 0 12px 12px 0; color: #fff; font-size: 20px;
+}
+.collapse-handle:hover { background: #699DF4; }
+.collapse-handle .icon-angle-left { display: inline-block; transition: transform 0.18s; }
+.collapse-handle .flipped { transform: rotate(180deg); }
+
+.ha-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 20px 12px; min-width: 0; }
+.ha-head { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid #F0F1F5; margin-bottom: 8px; }
+.ha-title { margin: 0; font-size: 16px; color: #313238; font-weight: 500; }
+.ha-head .last-edit { color: #979BA5; font-size: 12px; }
 .ha-head .spacer { flex: 1; }
-.empty-tip { padding: 60px 0; text-align: center; }
+.conflict-num { font-style: normal; color: #ea3636; font-weight: bold; padding-left: 4px; }
+.empty-tip { padding: 80px 0; text-align: center; }
+
 .wizard-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .run-loading {
   text-align: center; padding: 32px 0;

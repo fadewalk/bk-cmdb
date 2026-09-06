@@ -273,12 +273,24 @@ export const updateAttributeSort = (objId, propId, data) =>
   http.post(`/update/objectattr/index/${objId}/${propId}`, data)
 
 // ---------- 字段分组 ----------
+export const searchObjectAttributeGroups = (objId) =>
+  http.post('/find/objectattributeparent', { bk_obj_id: objId, bk_supplier_account: '0' })
+export const createObjectAttributeGroup = (objId, data) =>
+  http.post('/create/objectattributeparent', { bk_obj_id: objId, bk_supplier_account: '0', ...data })
+export const updateObjectAttributeGroup = (objId, id, data) =>
+  http.put(`/update/objectattributeparent/${id}`, { bk_obj_id: objId, bk_supplier_account: '0', ...data })
+export const deleteObjectAttributeGroup = (objId, id) =>
+  http.delete(`/delete/objectattributeparent/${id}`)
 export const searchFieldGroups = (objId, data) =>
   http.post(`/find/objectattgroup/object/${objId}`, data || {})
 export const createFieldGroup = (data) =>
   http.post('/create/objectattgroup', data)
-export const updateFieldGroup = (data) =>
-  http.put('/update/objectattgroup', data)
+export const updateFieldGroup = (objId, id, name) =>
+  http.put('/update/objectattgroup', {
+    bk_obj_id: objId,
+    condition: { id },
+    data: { bk_group_name: name }
+  })
 export const deleteFieldGroup = (id) =>
   http.delete(`/delete/objectattgroup/${id}`)
 // 交换分组顺序
