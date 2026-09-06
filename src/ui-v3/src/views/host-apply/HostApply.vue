@@ -56,7 +56,7 @@
           >
             <template #default="{ data }">
               <span class="tree-row">
-                <i class="bk-cmdb-icon icon-cc-host node-icon" />
+                <i :class="['bk-cmdb-icon node-icon', nodeIconClass(data)]" />
                 <span class="lbl">{{ data.label }}</span>
                 <el-tag v-if="data.__enabled" size="small" type="success" effect="plain">已启用</el-tag>
               </span>
@@ -252,6 +252,27 @@ function filterNode(value, data) {
   return (data.label || '').toLowerCase().includes(value.toLowerCase())
 }
 watch(searchKw, (v) => treeRef.value?.filter(v))
+
+// 与原版 topology-tree 内部节点图标一致:空闲机池/故障机/待回收
+const INTERNAL_NODE_CLASSES = {
+  '1': 'icon-cc-host-free-pool',
+  '2': 'icon-cc-host-breakdown',
+  'default': 'icon-cc-host-free-pool'
+}
+const MODEL_ICON_CLASS = {
+  set: 'icon-cc-nav-set-topo',
+  module: 'icon-cc-module',
+  biz: 'icon-cc-business',
+  host: 'icon-cc-host',
+  template: 'icon-cc-nav-service-topo'
+}
+function nodeIconClass(data) {
+  if (data.type === 'set') return MODEL_ICON_CLASS.set
+  if (data.type === 'module') return MODEL_ICON_CLASS.module
+  if (data.type === 'template') return MODEL_ICON_CLASS.template
+  // 内部空闲模块(原版 default !== 0 时的 internal node)
+  return INTERNAL_NODE_CLASSES[data.bk_obj_id] || INTERNAL_NODE_CLASSES.default
+}
 
 function propName(attrId) {
   const a = attrList.value.find((x) => x.id === attrId)
@@ -563,7 +584,7 @@ onMounted(async () => {
 }
 :deep(.ha-tree .el-tree-node__content) { height: 32px; }
 .tree-row { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; width: 100%; }
-.node-icon { font-size: 14px; color: #3a84ff; }
+.node-icon { font-size: 14px; color: #3a84ff; width: 16px; text-align: center; }
 .tree-row .lbl { flex: 1; }
 
 .selected-summary {

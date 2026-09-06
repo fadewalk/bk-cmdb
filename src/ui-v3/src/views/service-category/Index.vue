@@ -48,21 +48,24 @@
               </div>
             </div>
             <div v-if="!main.is_built_in" class="menu-operational">
-              <el-button class="menu-btn" link :icon="'Plus'" @click="handleShowAddChild(main.id)" />
+              <el-button class="menu-btn" link @click="handleShowAddChild(main.id)">
+                <i class="bk-cmdb-icon icon-cc-plus-circle" />
+              </el-button>
               <el-tooltip
                 v-if="!main.child_category_list || main.child_category_list.length"
                 content="请先清空二级分类"
                 placement="right"
               >
-                <span class="menu-btn no-allow-btn"><el-icon><Delete /></el-icon></span>
+                <span class="menu-btn no-allow-btn"><i class="bk-cmdb-icon icon-cc-del" /></span>
               </el-tooltip>
               <el-button
                 v-else
                 class="menu-btn"
                 link
-                :icon="'Delete'"
                 @click="handleDeleteCategory(main.id, 'main')"
-              />
+              >
+                <i class="bk-cmdb-icon icon-cc-del" />
+              </el-button>
             </div>
           </template>
         </div>
@@ -87,16 +90,19 @@
                 <span :title="child.name">{{ child.name }}</span>
                 <span class="child-id" :title="child.id">#{{ child.id }}</span>
                 <div v-if="!child.is_built_in" class="child-edit">
-                  <el-button class="child-edit-btn" link :icon="'Edit'" @click.stop="handleEditChild(child.id, child.name)" />
+                  <el-button class="child-edit-btn" link @click.stop="handleEditChild(child.id, child.name)">
+                    <i class="icon-cc-edit-shape" />
+                  </el-button>
                   <el-button
                     v-if="!child.usage_amount"
                     class="child-edit-btn"
                     link
-                    :icon="'Close'"
                     @click.stop="handleDeleteCategory(main.id, 'child', child.id)"
-                  />
+                  >
+                    <i class="icon-cc-tips-close" />
+                  </el-button>
                   <el-tooltip v-else content="二级分类已被使用，无法删除" placement="top">
-                    <el-icon class="child-edit-btn disabled-icon"><Close /></el-icon>
+                    <span class="child-edit-btn disabled-icon"><i class="icon-cc-tips-close" /></span>
                   </el-tooltip>
                 </div>
               </div>
@@ -107,7 +113,7 @@
           <div v-if="!main.is_built_in && !isAddingChild(main.id) && !editMainStatus" class="child-item is-add">
             <div class="child-title">
               <el-button class="add-btn" link @click="handleShowAddChild(main.id)">
-                <el-icon class="btn-icon"><Plus /></el-icon>
+                <i class="bk-cmdb-icon icon-cc-plus btn-icon" />
                 <span>添加</span>
               </el-button>
             </div>

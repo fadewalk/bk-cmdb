@@ -11,11 +11,43 @@
 
     <!-- 服务模板 -->
     <template v-if="tab === 'template' && bizId">
-      <div class="table-toolbar">
+      <div class="table-toolbar filter-bar">
+        <el-select
+          v-model="filterMainCate"
+          placeholder="所有一级分类"
+          clearable
+          filterable
+          size="small"
+          style="width: 180px"
+          @change="applyTemplateFilter"
+        >
+          <el-option v-for="c in mainCategories" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+        <el-select
+          v-model="filterSubCate"
+          placeholder="所有二级分类"
+          clearable
+          filterable
+          size="small"
+          style="width: 180px"
+          @change="applyTemplateFilter"
+        >
+          <el-option v-for="c in subCategories" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+        <el-input
+          v-model="filterName"
+          placeholder="请输入模板名称"
+          clearable
+          size="small"
+          style="width: 220px"
+          :prefix-icon="'Search'"
+          @input="applyTemplateFilter"
+          @clear="applyTemplateFilter"
+        />
         <div class="spacer" />
-        <el-button :icon="'Plus'" type="primary" size="small" @click="tplFormVisible = true">新建服务模板</el-button>
+        <el-button :icon="'Plus'" type="primary" size="small" @click="tplFormVisible = true">新建</el-button>
       </div>
-      <el-table :data="templates" v-loading="tplLoading" stripe>
+      <el-table :data="filteredTemplates" v-loading="tplLoading" stripe>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="模板名称" min-width="180" />
         <el-table-column label="服务分类" width="150">
@@ -49,11 +81,43 @@
     <template v-if="tab === 'settpl' && bizId">
       <el-alert type="info" :closable="false" style="margin-bottom: 12px"
         title="集群模板需绑定至少一个服务模板;删除集群模板不影响已创建的集群" />
-      <div class="table-toolbar">
-        <el-button size="small" type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
+      <div class="table-toolbar filter-bar">
+        <el-select
+          v-model="filterMainCate"
+          placeholder="所有一级分类"
+          clearable
+          filterable
+          size="small"
+          style="width: 180px"
+          @change="applyTemplateFilter"
+        >
+          <el-option v-for="c in mainCategories" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+        <el-select
+          v-model="filterSubCate"
+          placeholder="所有二级分类"
+          clearable
+          filterable
+          size="small"
+          style="width: 180px"
+          @change="applyTemplateFilter"
+        >
+          <el-option v-for="c in subCategories" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+        <el-input
+          v-model="filterName"
+          placeholder="请输入模板名称"
+          clearable
+          size="small"
+          style="width: 220px"
+          :prefix-icon="'Search'"
+          @input="applyTemplateFilter"
+          @clear="applyTemplateFilter"
+        />
         <div class="spacer" />
+        <el-button size="small" type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
       </div>
-      <el-table :data="setTemplates" v-loading="setLoading" stripe>
+      <el-table :data="filteredSetTemplates" v-loading="setLoading" stripe>
         <el-table-column prop="id" label="模板 ID" width="110" />
         <el-table-column prop="name" label="模板名称" min-width="200" />
         <el-table-column label="绑定的服务模板" min-width="200">
@@ -420,6 +484,35 @@ const flatCategories = computed(() => {
   }
   return flat
 })
+
+// 过滤:一级分类 / 二级分类 / 名称
+const filterMainCate = ref(null)
+const filterSubCate = ref(null)
+const filterName = ref('')
+const mainCategories = computed(() => categories.value.filter((c) => c.isRoot))
+const subCategories = computed(() => {
+  if (!filterMainCate.value) return categories.value.filter((c) => !c.isRoot)
+  return categories.value.filter((c) => !c.isRoot && c.category?.bk_parent_id === filterMainCate.value)
+})
+const filteredTemplates = computed(() => {
+  let arr = templates.value
+  if (filterMainCate.value) arr = arr.filter((t) => t.service_category_id === filterMainCate.value)
+  if (filterSubCate.value) arr = arr.filter((t) => t.service_category_id === filterSubCate.value)
+  if (filterName.value.trim()) {
+    const k = filterName.value.trim().toLowerCase()
+    arr = arr.filter((t) => (t.name || '').toLowerCase().includes(k))
+  }
+  return arr
+})
+const filteredSetTemplates = computed(() => {
+  let arr = setTemplates.value
+  if (filterName.value.trim()) {
+    const k = filterName.value.trim().toLowerCase()
+    arr = arr.filter((t) => (t.name || '').toLowerCase().includes(k))
+  }
+  return arr
+})
+function applyTemplateFilter() { /* computed 自动 */ }
 
 async function saveTpl() {
   if (!tplForm.value.name) {
