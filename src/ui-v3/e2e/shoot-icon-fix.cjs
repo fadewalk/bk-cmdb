@@ -1,0 +1,13 @@
+const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const path = require('path')
+;(async () => {
+  const browser = await chromium.launch()
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const page = await ctx.newPage()
+  await page.route('**/*', (r) => { const h = { ...r.request().headers() }; delete h['if-none-match']; h['cache-control'] = 'no-cache'; r.continue({ headers: h }) })
+  await page.goto('http://localhost:8090/#/resource/host', { waitUntil: 'networkidle', timeout: 30000 })
+  await page.waitForTimeout(3500)
+  await page.screenshot({ path: path.join(__dirname, '../screenshots/icon-fix.png'), fullPage: false })
+  await browser.close()
+  console.log('done')
+})().catch((e) => { console.error(e); process.exit(1) })

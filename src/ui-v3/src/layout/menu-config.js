@@ -26,7 +26,7 @@ export const MENUS = [
     name: '资源',
     icon: 'icon-cc-nav-resource',
     children: [
-      { id: 'index', name: '资源目录', icon: 'icon-cc-square', path: '/resource/index' },
+      { id: 'index', name: '资源目录', icon: 'icon-cc-resources', path: '/resource/index' },
       { id: 'host', name: '主机', icon: 'icon-cc-host', path: '/resource/host' },
       { id: 'cloud-area', name: '管控区域', icon: 'icon-cc-network-segment', path: '/resource/cloud-area' },
       { id: 'cloud-account', name: '云账户', icon: 'icon-cc-cloud-account', path: '/resource/cloud-account' },
