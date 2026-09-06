@@ -1,9 +1,10 @@
 <template>
   <div class="host-page">
-    <h1 class="page-title">主机</h1>
+    <h1 class="page-title sr-only">主机</h1>
     <div class="host-body">
       <!-- 左:资源目录树 + 资源池 scope 切换 -->
       <div class="group-col">
+        <div class="parent-label">资源目录</div>
         <div class="group-tabs">
           <span
             v-for="t in groupTabs" :key="t.key"
@@ -787,6 +788,12 @@ onMounted(() => {
   border-right: 1px solid #E7E9EF;
   padding: 12px; overflow: auto;
   background: #fafbfc;
+}
+.parent-label {
+  padding: 4px 4px 8px;
+  font-size: 12px; color: #979BA5;
+  border-bottom: 1px solid #F0F1F5;
+  margin-bottom: 8px;
 }
 .group-tabs { display: flex; border-bottom: 1px solid #E7E9EF; }
 .group-tab {

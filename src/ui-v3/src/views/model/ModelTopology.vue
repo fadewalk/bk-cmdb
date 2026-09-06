@@ -8,10 +8,16 @@
 
     <div class="graph-wrap" ref="wrap">
       <svg :width="width" :height="height">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,8 L8,4 z" fill="#C4C6CC" />
+          </marker>
+        </defs>
         <g>
           <g v-for="e in edges" :key="e.key">
-            <line :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2" stroke="#C4C6CC" stroke-width="1" />
-            <text :x="(e.x1 + e.x2) / 2" :y="(e.y1 + e.y2) / 2 - 4" class="edge-label">{{ e.label }}</text>
+            <line :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2" stroke="#C4C6CC" stroke-width="1.5" marker-end="url(#arrow)" />
+            <rect :x="(e.x1 + e.x2) / 2 - e.label.length * 4.5" :y="(e.y1 + e.y2) / 2 - 18" :width="e.label.length * 9 + 8" :height="16" fill="#fff" rx="2" stroke="#DCDEE5" />
+            <text :x="(e.x1 + e.x2) / 2" :y="(e.y1 + e.y2) / 2 - 6" class="edge-label">{{ e.label }}</text>
           </g>
         </g>
         <g
@@ -27,8 +33,8 @@
       </svg>
     </div>
     <div class="legend">
-      <span class="legend-item"><i class="dot main" />主线模型</span>
-      <span class="legend-item"><i class="dot other" />自定义模型</span>
+      <span class="legend-item"><span class="swatch main" />主线模型</span>
+      <span class="legend-item"><span class="swatch other" />自定义模型</span>
       <span class="legend-item">连线为模型关联关系(来源:操作审计之外的真实关联配置)</span>
     </div>
   </div>
@@ -131,10 +137,11 @@ onBeforeUnmount(stopDrag)
 .graph-wrap { background: #FAFBFD; border: 1px solid #E7E9EF; border-radius: 4px; overflow: auto; }
 .node-g { cursor: move; }
 .node-text { font-size: 12px; fill: #313238; }
-.edge-label { font-size: 10px; fill: #979BA5; }
-.legend { margin-top: 12px; color: #979BA5; font-size: 12px; display: flex; gap: 20px; align-items: center; }
+.edge-label { font-size: 12px; fill: #63656E; }
+.legend { margin-top: 12px; color: #63656E; font-size: 12px; display: flex; gap: 20px; align-items: center; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
-.dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid #3A84FF; }
-.dot.main { background: #E1ECFF; }
-.dot.other { background: #fff; }
+.legend-item .swatch { width: 14px; height: 14px; border-radius: 2px; display: inline-block; border: 1px solid #3A84FF; }
+.legend-item .swatch.main { background: #E1ECFF; }
+.legend-item .swatch.other { background: #fff; }
+.dot { display: none; }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">{{ modelName }} - 资源目录</h1>
+    <h1 class="page-title sr-only">{{ modelName }} - 资源目录</h1>
     <p class="page-tips">
       已选中分类 <strong>{{ objId }}</strong>。独立部署模式默认未启用通用实例查询接口;此处展示模型的实例总数与属性元数据,作为路由跳转目标。
     </p>

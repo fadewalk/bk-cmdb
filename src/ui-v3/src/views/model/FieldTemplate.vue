@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">字段组合模板</h1>
+    <h1 class="page-title sr-only">字段组合模板</h1>
     <p class="page-tips">将一组字段配置复用到多个模型,避免每个模型重复定义相同字段</p>
 
     <div class="table-toolbar">

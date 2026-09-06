@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">业务集</h1>
+    <h1 class="page-title sr-only">业务集</h1>
     <el-tabs v-model="tab">
       <el-tab-pane label="业务集" name="bizset" />
       <el-tab-pane label="归档业务" name="archived" />

@@ -1,7 +1,7 @@
 <template>
   <div class="res-index">
-    <h1 class="page-title">资源目录</h1>
-    <h1 class="page-title">资源目录</h1>
+    <h1 class="page-title sr-only">资源目录</h1>
+    <h1 class="page-title sr-only">资源目录</h1>
     <div class="res-body">
       <!-- 左:资源分类树(对齐旧版:分组 + 计数) -->
       <div class="tree-col">

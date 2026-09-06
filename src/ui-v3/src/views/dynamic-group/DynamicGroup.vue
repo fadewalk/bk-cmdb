@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">动态分组</h1>
+    <h1 class="page-title sr-only">动态分组</h1>
     <p class="page-tips">动态分组主要用于定义常用的条件查询，在其他SaaS中可以根据动态分组快速检索目标主机</p>
     <div class="table-toolbar">
       <div class="spacer" />

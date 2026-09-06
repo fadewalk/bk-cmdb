@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">业务同步</h1>
+    <h1 class="page-title sr-only">业务同步</h1>
     <p class="page-tips">查看服务实例与所属服务模板之间的差异;支持手动触发同步,保障业务属性与服务模板配置一致</p>
 
     <div class="toolbar">

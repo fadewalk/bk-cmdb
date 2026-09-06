@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">运营统计</h1>
+    <h1 class="page-title sr-only">运营统计</h1>
     <el-alert type="info" :closable="false" style="margin-bottom: 16px"
       title="运营统计数据由 operation_server 定时任务(默认每日)收集,新部署环境需等待统计周期后才有数据" />
 
@@ -11,7 +11,9 @@
           <div class="nc-num">{{ c.value }}</div>
           <div class="nc-label">{{ c.label }}</div>
         </div>
-        <i :class="['bk-cmdb-icon', 'nc-icon', c.icon]" />
+        <span class="nc-icon-wrap" :style="{ background: c.bg }">
+          <i :class="['bk-cmdb-icon', 'nc-icon', c.icon]" />
+        </span>
       </div>
     </div>
 
@@ -112,10 +114,10 @@ const chartInstances = ref({})
 
 // NAVTYPE 顶部卡
 const navCards = ref([
-  { key: 'biz', label: '业务总数', value: 0, icon: 'icon-cc-business', to: '/resource/catalog/biz' },
-  { key: 'host', label: '主机总数', value: 0, icon: 'icon-cc-host', to: '/resource/host' },
-  { key: 'model', label: '模型总数', value: 0, icon: 'icon-cc-nav-model-02', to: '/model/management' },
-  { key: 'inst', label: '实例总数', value: 0, icon: 'icon-cc-customization', to: '/resource/index' }
+  { key: 'biz', label: '业务总数', value: 0, icon: 'icon-cc-business', bg: 'linear-gradient(135deg, #3A84FF, #2E6AD6)', to: '/resource/catalog/biz' },
+  { key: 'host', label: '主机总数', value: 0, icon: 'icon-cc-host', bg: 'linear-gradient(135deg, #2DCB56, #1FA948)', to: '/resource/host' },
+  { key: 'model', label: '模型总数', value: 0, icon: 'icon-cc-nav-model-02', bg: 'linear-gradient(135deg, #FFB400, #FF8800)', to: '/model/management' },
+  { key: 'inst', label: '实例总数', value: 0, icon: 'icon-cc-customization', bg: 'linear-gradient(135deg, #853CFF, #5E1FCC)', to: '/resource/index' }
 ])
 
 // 图表表单
@@ -329,7 +331,12 @@ onBeforeUnmount(() => {
 .nc-left { display: flex; flex-direction: column; gap: 4px; }
 .nc-num { font-size: 22px; color: #313238; font-weight: 700; }
 .nc-label { font-size: 12px; color: #979BA5; }
-.nc-icon { font-size: 32px; color: #3A84FF; }
+.nc-icon-wrap {
+  width: 48px; height: 48px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+.nc-icon { font-size: 22px; color: #fff; }
 .op-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .op-toolbar .spacer { flex: 1; }
 .card-head { display: flex; align-items: center; gap: 10px; }

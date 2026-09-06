@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">操作审计</h1>
+    <h1 class="page-title sr-only">操作审计</h1>
     <div class="table-toolbar">
       <el-select v-model="resourceType" placeholder="资源类型" clearable style="width: 180px" @change="onTypeChange">
         <el-option v-for="t in dict" :key="t.id" :label="t.name" :value="t.id" />
@@ -20,7 +20,7 @@
       <div class="spacer" />
     </div>
 
-    <el-table :data="rows" v-loading="loading" stripe>
+    <el-table :data="rows" v-loading="loading" stripe :default-sort="{ prop: 'operation_time', order: 'descending' }">
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="user" label="操作人" width="140" />
       <el-table-column prop="resource_type" label="资源类型" width="130">

@@ -1,6 +1,6 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">{{ tab === 'relations' ? '模型关联关系' : '关联类型' }}</h1>
+    <h1 class="page-title sr-only">{{ tab === 'relations' ? '模型关联关系' : '关联类型' }}</h1>
     <div class="table-toolbar">
       <el-tabs v-model="tab" style="flex: 1">
         <el-tab-pane label="关联类型" name="types" />

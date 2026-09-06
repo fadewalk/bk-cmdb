@@ -1,6 +1,6 @@
 <template>
   <div class="model-page">
-    <h1 class="page-title">模型管理</h1>
+    <h1 class="page-title sr-only">模型管理</h1>
     <div class="model-tips" v-if="tipsVisible">
       <el-icon class="tips-icon"><InfoFilled /></el-icon>
       <span class="tips-text">
@@ -48,8 +48,8 @@
           <div class="model-cards">
             <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" class="model-card" @click="goDetail(m)">
               <div class="card-top">
-                <span class="model-icon" :style="{ background: iconBg(mi), color: iconFg(mi) }">
-                  <el-icon><component :is="iconName(mi)" /></el-icon>
+                <span class="model-icon" :style="{ background: iconBg(m), color: iconfg(m) }">
+                  <el-icon><component :is="iconName(m)" /></el-icon>
                 </span>
                 <div class="card-text">
                   <div class="model-name">{{ m.bk_obj_name }}</div>
@@ -164,9 +164,14 @@ const PALETTE = [
   { bg: '#E1F7F7', fg: '#14A5A5', icon: 'Connection' },
   { bg: '#FDECF0', fg: '#EA3636', icon: 'Warning' }
 ]
-function iconBg(i) { return PALETTE[i % PALETTE.length].bg }
-function iconFg(i) { return PALETTE[i % PALETTE.length].fg }
-function iconName(i) { return PALETTE[i % PALETTE.length].icon }
+function iconBg(m) { return PALETTE[hashIconKey(m.bk_obj_id)].bg }
+function iconfg(m) { return PALETTE[hashIconKey(m.bk_obj_id)].fg }
+function iconName(m) { return PALETTE[hashIconKey(m.bk_obj_id)].icon }
+function hashIconKey(key) {
+  let h = 0
+  for (let i = 0; i < (key || '').length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
+  return Math.abs(h) % PALETTE.length
+}
 
 function goDetail(m) {
   router.push({ path: `/model/management/details/${m.bk_obj_id}` })

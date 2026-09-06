@@ -1,6 +1,6 @@
 <template>
   <div class="topo-page">
-    <h1 class="page-title">业务拓扑</h1>
+    <h1 class="page-title sr-only">业务拓扑</h1>
     <div class="topo-body">
       <!-- 左:拓扑树(对齐旧版:无卡片边框,顶部关键词过滤) -->
       <div class="tree-col">
@@ -20,9 +20,9 @@
         >
           <template #default="{ data }">
             <span class="tree-node">
-              <span class="node-badge" :class="data.type">{{ nodeBadge(data) }}</span>
+              <i :class="['bk-cmdb-icon', 'node-icon', nodeIconClass(data)]" />
               <span class="node-label">{{ data.label }}</span>
-              <span class="node-count">{{ data.hostCount ?? data.instCount ?? '' }}</span>
+              <span v-if="data.hostCount ?? data.instCount" class="node-count">{{ data.hostCount ?? data.instCount }}</span>
               <el-button v-if="canCreate(data)" link size="small" type="primary" class="node-add"
                 @click.stop="openCreateFromNode(data)">+</el-button>
             </span>
@@ -481,6 +481,9 @@ const names = { biz: '业务', set: '集群', module: '模块' }
 const nodeTypeName = (t) => names[t] || t
 function nodeBadge(data) {
   return { biz: '业', set: '集', module: '模' }[data.type] || '?'
+}
+function nodeIconClass(data) {
+  return { biz: 'icon-cc-business', set: 'icon-cc-nav-set-topo', module: 'icon-cc-module' }[data.type] || 'icon-cc-host'
 }
 function canCreate(data) {
   // 业务根节点(biz)、模块、空闲集群节点不能新建
