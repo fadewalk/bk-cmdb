@@ -1,8 +1,8 @@
 <template>
-  <div class="page-card topo-wrapper" :class="{ 'is-fullscreen': isFullscreen }">
+  <div class="page-card topo-wrapper" :class="{ 'is-fullscreen': isFullscreen, 'is-editing': isEdit }">
     <!-- 顶部工具栏 -->
     <div class="topo-toolbar">
-      <el-button v-if="!isEdit" type="primary" size="small" @click="enterEdit" :disabled="!canEdit">
+      <el-button v-if="!isEdit" type="primary" size="small" @click="enterEdit">
         编辑拓扑
       </el-button>
       <template v-else>
@@ -112,30 +112,9 @@
               @mouseleave="onEdgeLeave"
               @click="onEdgeClick(e)"
             />
-            <rect
-              :x="(e.x1 + e.x2) / 2 - e.label.length * 4.5"
-              :y="(e.y1 + e.y2) / 2 - 18"
-              :width="e.label.length * 9 + 8"
-              :height="16"
-              fill="#fff" rx="2"
-              :stroke="edgeStroke(e)"
-              class="edge-label-bg"
-              @mouseenter="onEdgeEnter(e.key)"
-              @mouseleave="onEdgeLeave"
-              @click="onEdgeClick(e)"
-            />
-            <text
-              :x="(e.x1 + e.x2) / 2"
-              :y="(e.y1 + e.y2) / 2 - 6"
-              text-anchor="middle"
-              :class="['edge-label', { active: e.hover || selectedEdge === e.key }]"
-              @mouseenter="onEdgeEnter(e.key)"
-              @mouseleave="onEdgeLeave"
-              @click="onEdgeClick(e)"
-            >{{ e.label }}</text>
           </g>
 
-          <!-- 节点 -->
+          <!-- 节点(画在边之后,节点椭圆覆盖边端点) -->
           <g
             v-for="n in visibleNodes"
             :key="n.objId"
@@ -173,6 +152,32 @@
             </text>
             <text :y="16" text-anchor="middle" class="node-sub">{{ n.objId }}</text>
           </g>
+
+          <!-- 关联 label(最后画,在所有节点之上,避免被节点覆盖) -->
+          <g v-for="e in visibleEdges" :key="`l-${e.key}`" class="edge-label-layer">
+            <rect
+              :x="edgeLabelX(e) - edgeLabelW(e) / 2"
+              :y="(e.y1 + e.y2) / 2 - 11"
+              :width="edgeLabelW(e)"
+              :height="20"
+              fill="#fff" rx="3"
+              :stroke="edgeStroke(e)"
+              stroke-width="1"
+              class="edge-label-bg"
+              @mouseenter="onEdgeEnter(e.key)"
+              @mouseleave="onEdgeLeave"
+              @click="onEdgeClick(e)"
+            />
+            <text
+              :x="edgeLabelX(e)"
+              :y="(e.y1 + e.y2) / 2 + 4"
+              text-anchor="middle"
+              :class="['edge-label', { active: e.hover || selectedEdge === e.key }]"
+              @mouseenter="onEdgeEnter(e.key)"
+              @mouseleave="onEdgeLeave"
+              @click="onEdgeClick(e)"
+            >{{ e.label }}</text>
+          </g>
         </svg>
 
         <!-- 悬浮 tooltip(节点详情 popover) -->
@@ -191,7 +196,7 @@
             <span class="tt-label">分类</span>
             <span class="tt-val">{{ hoverTip.classificationName }}</span>
           </div>
-          <div class="tt-tip">单击查看详情,双击编辑,拖动调整位置</div>
+          <div class="tt-tip">{{ isEdit ? '拖动调整位置,位置自动保存' : '单击查看详情,双击打开模型管理;「编辑拓扑」后可拖动布局' }}</div>
         </div>
 
         <!-- 右下角 legend -->
@@ -204,7 +209,9 @@
             <i class="dot custom" />
             <span>自定义模型</span>
           </p>
-          <p class="legend-hint">提示: 拖动节点调整位置 · 滚轮缩放 · 空白处拖动平移 · 双击节点跳转详情</p>
+          <p class="legend-hint">{{ isEdit
+            ? '编辑中: 拖动节点调整位置(自动保存) · 滚轮缩放 · 空白处拖动平移'
+            : '提示: 滚轮缩放 · 空白处拖动平移 · 单击查看详情 · 双击打开模型 · 「编辑拓扑」后可拖动布局' }}</p>
         </div>
       </div>
 
@@ -257,7 +264,6 @@ const hoveredNode = ref(null)
 
 const isEdit = ref(false)
 const isFullscreen = ref(false)
-const canEdit = false
 
 const MAIN_LINE = ['biz', 'set', 'module', 'host', 'process']
 const NAMES = { biz: '业务', set: '集群', module: '模块', host: '主机', process: '进程' }
@@ -318,6 +324,14 @@ function edgeStroke(e) {
 function edgeMarker(e) {
   if (selectedEdge.value === e.key || e.hover) return 'url(#arrow-hover)'
   return e.builtIn ? 'url(#arrow-builtin)' : 'url(#arrow)'
+}
+// label 居中放在边中点(z-order 在节点之上,不会被节点覆盖)
+function edgeLabelX(e) {
+  return (e.x1 + e.x2) / 2
+}
+function edgeLabelW(e) {
+  // label 框宽 = 字数 × 8.5 + 14 padding,最小 60
+  return Math.max(60, (e.label?.length || 0) * 8.5 + 14)
 }
 function toggleCollapse(g) {
   g._collapsed = !g._collapsed
@@ -469,6 +483,8 @@ function svgPointFromEvent(evt) {
 
 function onNodeMouseDown(node, evt) {
   if (evt.button !== 0) return
+  // 对齐老版 autolock 行为:查看模式节点锁定,仅编辑模式可拖动
+  if (!isEdit.value) return
   evt.preventDefault()
   const start = svgPointFromEvent(evt)
   draggingNode.value = {
@@ -583,8 +599,14 @@ function fitView() {
 }
 
 function toggleFullscreen() { isFullscreen.value = !isFullscreen.value }
-function enterEdit() { ElMessage.info('独立模式暂不支持拓扑编辑,需系统管理员权限') }
-function exitEdit() { isEdit.value = false }
+function enterEdit() {
+  isEdit.value = true
+  ElMessage.info('已进入编辑模式:拖动节点调整布局,位置自动保存')
+}
+function exitEdit() {
+  isEdit.value = false
+  ElMessage.success('已退出编辑模式')
+}
 
 function onEdgeEnter(key) {
   const e = edges.value.find((x) => x.key === key)
@@ -728,10 +750,11 @@ onBeforeUnmount(() => {
 .graph-svg { display: block; }
 
 .node-g {
-  cursor: grab;
+  cursor: pointer;
   transition: opacity 0.25s;
 }
-.node-g:active { cursor: grabbing; }
+.topo-wrapper.is-editing .node-g { cursor: grab; }
+.topo-wrapper.is-editing .node-g:active { cursor: grabbing; }
 .node-g.dim { opacity: 0.18; }
 .node-g.hover .node-shape { filter: brightness(1.05); }
 
