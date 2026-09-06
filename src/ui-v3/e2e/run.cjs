@@ -1,5 +1,5 @@
 // E2E: B3 + B4 验证(业务拓扑右键菜单/分页/字段设置/服务实例向导 + 资源目录联动 + 主机导入 + 云区域新建)
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 

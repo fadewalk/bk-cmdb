@@ -1,5 +1,5 @@
 // Minimal verification: confirm Playwright + cmdb_webserver can load the SPA
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 ;(async () => {
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()

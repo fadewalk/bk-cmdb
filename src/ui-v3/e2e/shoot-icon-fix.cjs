@@ -1,4 +1,4 @@
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 ;(async () => {
   const browser = await chromium.launch()

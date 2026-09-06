@@ -1,5 +1,5 @@
 // E2E B5: 运营统计 ECharts + 模型详情字段编辑 + 关联类型 CRUD
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 const SHOTS = '/tmp/ui-v3-shots'

@@ -1,5 +1,5 @@
 // batch 3 全页面截图
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 const OUT = path.join(__dirname, '../screenshots/batch3-verify')

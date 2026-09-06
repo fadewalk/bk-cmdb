@@ -1,5 +1,5 @@
 // B7: HostDetail 4 大区 + HostList 资源目录/筛选器/转移向导
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const SHOTS = '/tmp/ui-v3-shots'

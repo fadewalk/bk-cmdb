@@ -1,5 +1,5 @@
 // B9: Operation CRUD + NAVTYPE + ResourceDirectory CRUD + HostFavorites
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const SHOTS = '/tmp/ui-v3-shots'

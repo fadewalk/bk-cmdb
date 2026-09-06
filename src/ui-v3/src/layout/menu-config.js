@@ -27,6 +27,9 @@ export const MENUS = [
     icon: 'icon-cc-nav-resource',
     children: [
       { id: 'index', name: '资源目录', icon: 'icon-cc-resources', path: '/resource/index' },
+      { id: 'project', name: '项目', icon: 'icon-cc-project', path: '/resource/project' },
+      { id: 'biz-set', name: '业务集', icon: 'icon-cc-business-set', path: '/resource/biz-set' },
+      { id: 'business', name: '业务', icon: 'icon-cc-business', path: '/resource/business' },
       { id: 'host', name: '主机', icon: 'icon-cc-host', path: '/resource/host' },
       { id: 'cloud-area', name: '管控区域', icon: 'icon-cc-network-segment', path: '/resource/cloud-area' },
       { id: 'cloud-account', name: '云账户', icon: 'icon-cc-cloud-account', path: '/resource/cloud-account' },

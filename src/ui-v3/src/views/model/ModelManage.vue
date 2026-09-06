@@ -14,8 +14,8 @@
       <div class="toolbar">
         <el-button type="primary" :icon="'Plus'" @click="openCreateModel">新建模型</el-button>
         <el-button :icon="'Plus'" plain @click="clsDialog = true">新建分组</el-button>
-        <el-button :icon="'Upload'">导入</el-button>
-        <el-button :icon="'Download'">导出</el-button>
+        <el-button :icon="'Upload'" @click="importDialog = true">导入</el-button>
+        <el-button :icon="'Download'" :disabled="!checkedModels.length" @click="exportModels">导出{{ checkedModels.length ? `(${checkedModels.length})` : '' }}</el-button>
         <div class="spacer" />
         <el-button :type="statusFilter === 'all' ? 'primary' : 'default'" size="small" @click="statusFilter = 'all'">全部</el-button>
         <el-button :type="statusFilter === 'on' ? 'primary' : 'default'" size="small" @click="statusFilter = 'on'">启用中</el-button>
@@ -46,7 +46,10 @@
             </el-dropdown>
           </div>
           <div class="model-cards">
-            <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" class="model-card" @click="goDetail(m)">
+            <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" :class="['model-card', { checked: checkedModels.includes(m.id) }]" @click="goDetail(m)">
+              <label class="card-check" @click.stop>
+                <el-checkbox :model-value="checkedModels.includes(m.id)" @change="(v) => toggleCheck(m, v)" />
+              </label>
               <div class="card-top">
                 <span class="model-icon" :style="{ background: iconBg(m), color: iconfg(m) }">
                   <el-icon><component :is="iconName(m)" /></el-icon>
@@ -106,6 +109,54 @@
         <el-button type="primary" :loading="saving" @click="saveClassification">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 模型导入(对齐老版: 上传 .zip/.yaml 包 → 解析预览 → 导入) -->
+    <el-dialog v-model="importDialog" title="导入模型" width="560px" :close-on-click-modal="false">
+      <el-alert v-if="importResult" :type="importResult.success ? 'success' : 'error'" :closable="false" style="margin-bottom: 12px"
+        :title="importResult.message" />
+      <el-upload
+        drag
+        action=""
+        accept=".zip"
+        :auto-upload="false"
+        :limit="1"
+        :on-change="onImportFileChange"
+        :file-list="importFileList"
+      >
+        <el-icon style="font-size: 40px; color: #C4C6CC"><UploadFilled /></el-icon>
+        <div class="el-upload__text">将模型包文件拖到此处,或<em>点击上传</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持 .zip 格式的模型导出包</div>
+        </template>
+      </el-upload>
+      <template #footer>
+        <el-button @click="importDialog = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importFile" @click="doImport">开始导入</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 模型导出(选择密码/有效期) -->
+    <el-dialog v-model="exportDialog" title="导出模型" width="480px" :close-on-click-modal="false">
+      <el-form label-width="100px">
+        <el-form-item label="已选模型">
+          <span>{{ checkedModels.length }} 个</span>
+        </el-form-item>
+        <el-form-item label="导出文件名">
+          <el-input v-model="exportForm.fileName" placeholder="models" />
+        </el-form-item>
+        <el-form-item label="文件密码">
+          <el-input v-model="exportForm.password" placeholder="可选,用于加密导出包" />
+        </el-form-item>
+        <el-form-item label="密码有效期">
+          <el-input-number v-model="exportForm.expiration" :min="0" :max="30" style="width: 160px" />
+          <span style="margin-left: 8px; color: #979BA5">天,0 为无限期</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="exportDialog = false">取消</el-button>
+        <el-button type="primary" :loading="exporting" @click="doExport">导出</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -114,12 +165,104 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Search } from '@element-plus/icons-vue'
+import { MoreFilled, Search, UploadFilled } from '@element-plus/icons-vue'
+import { http } from '../../api/cmdb'
 import {
   searchClassificationWithObjects, searchClassifications, createClassification, deleteClassification,
   updateClassification,
   createModel, updateModel, deleteModel
 } from '../../api/cmdb'
+
+// ---------- 模型导入/导出(对齐老版 service/model/import-export.js) ----------
+const importDialog = ref(false)
+const importFile = ref(null)
+const importFileList = ref([])
+const importing = ref(false)
+const importResult = ref(null)
+const exportDialog = ref(false)
+const exporting = ref(false)
+const checkedModels = ref([]) // 勾选的模型 id(数字 id,导出接口要的是 id 不是 bk_obj_id)
+const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
+
+function toggleCheck(m, v) {
+  if (v) {
+    if (!checkedModels.value.includes(m.id)) checkedModels.value.push(m.id)
+  } else {
+    checkedModels.value = checkedModels.value.filter((x) => x !== m.id)
+  }
+}
+
+function onImportFileChange(file, fileList) {
+  importFile.value = file.raw
+  importFileList.value = fileList
+  importResult.value = null
+}
+
+async function doImport() {
+  if (!importFile.value) return
+  importing.value = true
+  importResult.value = null
+  try {
+    // 1. 解析文件(web_server /object/importmany/analysis)
+    const analysisForm = new FormData()
+    analysisForm.append('file', importFile.value)
+    const analysisResp = await http.post('/object/importmany/analysis', analysisForm, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    const analysis = analysisResp?.data || analysisResp
+    const objects = analysis?.import_object || analysis?.object || {}
+    const assts = analysis?.import_asst || analysis?.asst || {}
+    if (!Object.keys(objects).length) {
+      importResult.value = { success: false, message: '解析结果为空,请确认文件格式' }
+      return
+    }
+    // 2. 确认导入(web_server /object/importmany)
+    await http.post('/object/importmany', { import_object: objects, import_asst: assts })
+    importResult.value = { success: true, message: `导入成功,共导入 ${Object.keys(objects).length} 个模型` }
+    ElMessage.success('导入成功')
+    await load()
+  } catch (e) {
+    importResult.value = { success: false, message: '导入失败: ' + (e?.message || '后端异常') }
+  } finally { importing.value = false }
+}
+
+async function exportModels() {
+  if (!checkedModels.value.length) return
+  exportDialog.value = true
+}
+
+async function doExport() {
+  exporting.value = true
+  try {
+    // web_server /object/exportmany 是 POST 下载
+    const resp = await fetch('/api/v3/object/exportmany', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Bkcmdb-User': 'admin',
+        'X-Bkcmdb-Supplier-Account': '0'
+      },
+      body: JSON.stringify({
+        object_id: checkedModels.value,
+        excluded_asst_id: [],
+        password: exportForm.value.password || '',
+        expiration: exportForm.value.expiration || 0,
+        file_name: exportForm.value.fileName || 'models'
+      })
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const blob = await resp.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${exportForm.value.fileName || 'models'}.zip`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success('导出成功')
+    exportDialog.value = false
+  } catch (e) {
+    ElMessage.error('导出失败: ' + (e?.message || '后端异常'))
+  } finally { exporting.value = false }
+}
 
 const router = useRouter()
 const keyword = ref('')
@@ -319,6 +462,11 @@ onMounted(load)
 }
 .model-card:hover { border-color: #3A84FF; }
 .card-top { display: flex; align-items: center; gap: 10px; }
+.card-check {
+  position: absolute; left: 10px; top: 10px;
+  display: inline-flex; align-items: center;
+}
+.model-card.checked { border-color: #3A84FF; background: #F0F5FF; }
 .model-icon {
   width: 32px; height: 32px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;

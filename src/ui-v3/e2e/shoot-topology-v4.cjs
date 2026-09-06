@@ -1,5 +1,5 @@
 // 验证: ①header 干净 ②查看模式节点不可拖 ③编辑模式可拖 + 自动保存
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const OUT = path.join(__dirname, '../screenshots/topology-v4')

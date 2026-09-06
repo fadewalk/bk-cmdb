@@ -1,5 +1,5 @@
 // ModelTopology 详细交互测试
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const OUT = path.join(__dirname, '../screenshots/topology-v2')

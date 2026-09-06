@@ -1,5 +1,5 @@
 // 截图 /business/host-apply
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 

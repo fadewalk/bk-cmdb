@@ -1,5 +1,5 @@
 // global-config 三个 tab 验证
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const OUT = path.join(__dirname, '../screenshots/global-config')
@@ -17,17 +17,17 @@ fs.mkdirSync(OUT, { recursive: true })
   await page.screenshot({ path: path.join(OUT, '01-general.png') })
   console.log('01 业务通用')
 
-  await page.locator('.el-tabs__item').filter({ hasText: '业务空闲机池' }).click()
+  await page.locator('.box-tab').filter({ hasText: '业务空闲机池' }).click()
   await page.waitForTimeout(2500)
   await page.screenshot({ path: path.join(OUT, '02-idle.png') })
   console.log('02 业务空闲机池')
 
-  await page.locator('.el-tabs__item').filter({ hasText: 'ID 生成器' }).click()
+  await page.locator('.box-tab').filter({ hasText: 'ID生成器' }).click()
   await page.waitForTimeout(2500)
   await page.screenshot({ path: path.join(OUT, '03-id.png') })
   console.log('03 ID生成器')
 
-  // ID 生成器点编辑
+  // ID生成器点编辑
   const editBtn = page.locator('button').filter({ hasText: /^编辑$/ }).first()
   if (await editBtn.count()) {
     await editBtn.click()
@@ -37,7 +37,7 @@ fs.mkdirSync(OUT, { recursive: true })
   }
 
   // 测试业务通用:改层级 3→4 再保存
-  await page.locator('.el-tabs__item').filter({ hasText: '业务通用' }).click()
+  await page.locator('.box-tab').filter({ hasText: '业务通用' }).click()
   await page.waitForTimeout(1500)
   const numInput = page.locator('.el-input-number input').first()
   if (await numInput.count()) {

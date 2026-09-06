@@ -1,5 +1,5 @@
 // B13: 业务同步页面 + B16: 实例标签(在 ServiceInstance 进程抽屉中)
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const SHOTS = '/tmp/ui-v3-shots'

@@ -1,5 +1,5 @@
 // 截图验证: top-nav / model-management / host-apply / custom-fields
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 const OUT = path.join(__dirname, '../screenshots/batch2-verify')

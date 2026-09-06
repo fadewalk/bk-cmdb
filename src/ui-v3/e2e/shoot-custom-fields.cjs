@@ -1,5 +1,5 @@
 // 截图 /business/custom-fields
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 const OUT = path.join(__dirname, '../screenshots/custom-fields')

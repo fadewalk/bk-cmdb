@@ -1,5 +1,5 @@
 // 老 UI 走 8091 时,先到首页选业务,再访问菜单
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 const OUT = path.join(__dirname, '../screenshots/audit-compare')

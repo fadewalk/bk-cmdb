@@ -1,38 +1,86 @@
 <template>
   <div class="page-card">
     <h1 class="page-title sr-only">操作审计</h1>
-    <div class="table-toolbar">
-      <el-select v-model="resourceType" placeholder="资源类型" clearable style="width: 180px" @change="onTypeChange">
-        <el-option v-for="t in dict" :key="t.id" :label="t.name" :value="t.id" />
-      </el-select>
-      <el-select v-model="actionId" placeholder="动作" clearable style="width: 160px">
-        <el-option v-for="a in actionOptions" :key="a.id" :label="a.name" :value="a.id" />
-      </el-select>
-      <el-date-picker
-        v-model="timeRange"
-        type="datetimerange"
-        start-placeholder="开始时间"
-        end-placeholder="结束时间"
-        value-format="YYYY-MM-DD HH:mm:ss"
-        style="width: 380px"
-      />
-      <el-button type="primary" :icon="'Search'" @click="reload">查询</el-button>
-      <div class="spacer" />
-    </div>
+
+    <!-- 对象分类 tab(对齐老版: 主机/业务/资源/其他) -->
+    <el-tabs v-model="activeTab" @tab-change="onTypeChange">
+      <el-tab-pane label="主机" name="host" />
+      <el-tab-pane label="业务" name="business" />
+      <el-tab-pane label="资源" name="resource" />
+      <el-tab-pane label="其他" name="other" />
+    </el-tabs>
+
+    <!-- 双行筛选(对齐老版 audit-host-options) -->
+    <table class="audit-options">
+      <tr>
+        <td class="lbl">业务</td>
+        <td>
+          <el-select v-model="bizId" placeholder="请选择业务" clearable filterable style="width: 100%">
+            <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="`[${b.bk_biz_id}] ${b.bk_biz_name}`" :value="b.bk_biz_id" />
+          </el-select>
+        </td>
+        <td class="lbl">动作</td>
+        <td>
+          <el-select v-model="actionId" placeholder="请选择动作" clearable style="width: 100%">
+            <el-option v-for="a in actionOptions" :key="a.id" :label="a.name" :value="a.id" />
+          </el-select>
+        </td>
+        <td class="lbl">时间</td>
+        <td>
+          <el-date-picker
+            v-model="timeRange"
+            type="datetimerange"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+          />
+        </td>
+      </tr>
+      <tr>
+        <td class="lbl">账号</td>
+        <td>
+          <el-select v-model="userFilter" placeholder="包含" clearable allow-create filterable style="width: 100%">
+            <el-option v-for="u in knownUsers" :key="u" :label="u" :value="u" />
+          </el-select>
+        </td>
+        <td class="lbl">主机</td>
+        <td>
+          <div class="ip-filter">
+            <el-select v-model="ipScope" style="width: 96px" :disabled="activeTab !== 'host'">
+              <el-option label="IP" value="ip" />
+            </el-select>
+            <el-input v-model="ipKeyword" placeholder="请输入IP" :disabled="activeTab !== 'host'" style="flex: 1" />
+          </div>
+        </td>
+        <td colspan="2" class="btn-cell">
+          <el-button type="primary" :icon="'Search'" @click="reload">查询</el-button>
+          <el-button @click="clearFilter">清空</el-button>
+        </td>
+      </tr>
+    </table>
 
     <el-table :data="rows" v-loading="loading" stripe :default-sort="{ prop: 'operation_time', order: 'descending' }">
-      <el-table-column prop="id" label="ID" width="90" />
-      <el-table-column prop="user" label="操作人" width="140" />
-      <el-table-column prop="resource_type" label="资源类型" width="130">
+      <el-table-column prop="resource_type" label="操作对象" width="140">
         <template #default="{ row }">{{ typeName(row.resource_type) }}</template>
       </el-table-column>
-      <el-table-column prop="action" label="操作" width="110" />
-      <el-table-column prop="resource_name" label="资源名称" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="bk_biz_id" label="业务 ID" width="100">
-        <template #default="{ row }">{{ row.bk_biz_id || '-' }}</template>
+      <el-table-column prop="action" label="动作" width="120">
+        <template #default="{ row }">{{ actionLabel(row) }}</template>
       </el-table-column>
-      <el-table-column prop="operation_time" label="操作时间" width="180" sortable />
-      <el-table-column label="操作" width="90" fixed="right">
+      <el-table-column v-if="['host', 'business'].includes(activeTab)" prop="bk_biz_id" label="所属业务" width="140">
+        <template #default="{ row }">{{ bizName(row.bk_biz_id) }}</template>
+      </el-table-column>
+      <el-table-column prop="resource_name" label="实例" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.resource_name || row.bk_resource_name || '--' }}</template>
+      </el-table-column>
+      <el-table-column label="操作描述" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ actionLabel(row) }}{{ typeName(row.resource_type) }}</template>
+      </el-table-column>
+      <el-table-column prop="operation_time" label="时间" width="170" sortable>
+        <template #default="{ row }">{{ (row.operation_time || row.operate_time || '').replace('T', ' ').slice(0, 19) }}</template>
+      </el-table-column>
+      <el-table-column prop="user" label="操作账号" width="120" />
+      <el-table-column label="" width="70" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="showDetail(row)">详情</el-button>
         </template>
@@ -84,8 +132,15 @@ import { ref, computed, onMounted } from 'vue'
 import { getAuditDict, searchAuditList } from '../../api/cmdb'
 
 const dict = ref([])
+const activeTab = ref('host')
 const resourceType = ref('')
 const actionId = ref('')
+const bizId = ref(null)
+const userFilter = ref('')
+const ipScope = ref('ip')
+const ipKeyword = ref('')
+const bizList = ref([])
+const knownUsers = ref(['admin'])
 const timeRange = ref([])
 const page = ref(1)
 const pageSize = 20
@@ -124,17 +179,36 @@ function defaultTimeRange() {
   return [fmt(start), fmt(end)]
 }
 
+function bizName(id) {
+  const b = bizList.value.find((x) => x.bk_biz_id === id)
+  return b ? b.bk_biz_name : (id || '-')
+}
+
 function buildCondition() {
   const [start, end] = timeRange.value || defaultTimeRange()
-  return {
+  // 操作对象按 tab 归类(对齐老版四个 options 组件的 resource_type 过滤域)
+  const tabTypes = {
+    host: ['host'],
+    business: ['biz', 'business', 'biz_set'],
+    other: ['model', 'instance', 'association', 'service_instance', 'service_template', 'set_template', 'service_category', 'plat']
+  }
+  const cond = {
     condition: [],
-    user: '',
+    user: userFilter.value || '',
     resource_name: '',
     resource_type_id: resourceType.value || '',
     action_id: actionId.value || '',
-    bk_biz_id: null,
+    bk_biz_id: bizId.value || null,
     operation_time: { start, end }
   }
+  // 资源 tab: 也可以从资源类型下拉指定;其他 tab 未指定类型时用归类集合(后端支持数组时传数组)
+  if (!cond.resource_type_id && activeTab.value !== 'resource' && tabTypes[activeTab.value]?.length) {
+    cond.resource_type_id = tabTypes[activeTab.value]
+  }
+  if (ipKeyword.value.trim() && activeTab.value === 'host') {
+    cond.condition.push({ field: 'bk_host_innerip', operator: '$in', value: ipKeyword.value.split(',').map((s) => s.trim()).filter(Boolean) })
+  }
+  return cond
 }
 
 async function load() {
@@ -153,6 +227,15 @@ async function load() {
 function reload() {
   page.value = 1
   load()
+}
+
+function clearFilter() {
+  bizId.value = null
+  actionId.value = ''
+  userFilter.value = ''
+  ipKeyword.value = ''
+  timeRange.value = []
+  reload()
 }
 
 async function showDetail(row) {
@@ -188,10 +271,28 @@ onMounted(async () => {
   const d = await getAuditDict()
   dict.value = d || []
   load()
+  try {
+    const { searchBusiness } = await import('../../api/cmdb')
+    const res = await searchBusiness({ start: 0, limit: 200 })
+    bizList.value = res?.info || []
+  } catch { bizList.value = [] }
 })
 </script>
 
 <style scoped>
+/* 双行筛选表(对齐老版 audit-host-options) */
+.audit-options {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 14px;
+}
+.audit-options td { padding: 6px 8px; }
+.audit-options td.lbl { text-align: right; color: #63656E; font-size: 14px; width: 64px; }
+.audit-options td.btn-cell { text-align: left; }
+.ip-filter { display: flex; gap: 0; }
+.ip-filter .el-select :deep(.el-select__wrapper) { border-radius: 2px 0 0 2px; }
+.ip-filter .el-input :deep(.el-input__wrapper) { border-radius: 0 2px 2px 0; }
+
 .detail-pre {
   background: #f5f7fa; padding: 12px; border-radius: 4px;
   font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;

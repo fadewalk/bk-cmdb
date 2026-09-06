@@ -393,6 +393,7 @@ export const searchAuditDetail = (id) =>
 // ---------- 运营统计 ----------
 export const getOperationCharts = () => http.get('/findmany/operation/chart')
 export const getOperationChartData = (config) =>
+  // 注意: 后端 SearchChartData 接收单个对象(不是数组),传数组会反序列化失败
   http.post('/find/operation/chart/data', config)
 export const createOperationChart = (data) =>
   http.post('/create/operation/chart', data)

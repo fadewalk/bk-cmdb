@@ -1,5 +1,5 @@
 // 对比截图: 新 UI (8090) vs 老 UI (8091) 服务分类页
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const fs = require('fs')
 const path = require('path')
 

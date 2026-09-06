@@ -1,5 +1,5 @@
 // B10: GlobalConfig 系统配置 tab + 已有的编辑/详情/同步等按钮
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const SHOTS = '/tmp/ui-v3-shots'

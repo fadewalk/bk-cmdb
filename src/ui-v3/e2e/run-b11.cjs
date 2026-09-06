@@ -1,5 +1,5 @@
 // B11: 审计详情结构化 + CloudDiscover 任务表
-const { chromium } = require('/tmp/e2e/node_modules/playwright')
+const { chromium } = require('./browser.cjs')
 const path = require('path')
 const fs = require('fs')
 const SHOTS = '/tmp/ui-v3-shots'

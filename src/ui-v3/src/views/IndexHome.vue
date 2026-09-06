@@ -35,10 +35,9 @@
     <div class="map-wrap">
       <img :src="mapUrl" alt="" class="map-img" :style="mapStyle">
     </div>
-
     <div class="the-footer">
-      <p class="contact">独立部署版 · 无蓝鲸平台依赖</p>
-      <p class="copyright">BlueKing CMDB · Vue 3 + Element Plus 重构版</p>
+      <p class="footer-links"><a href="javascript:;">技术支持</a><span>|</span><a href="javascript:;">社区论坛</a><span>|</span><a href="javascript:;">产品官网</a></p>
+      <p class="copyright">Copyright © 2012 Tencent BlueKing. All Rights Reserved. community-v3.14</p>
     </div>
 
     <el-dialog v-model="fullTipVisible" title="未开启全文检索功能" width="480px">
@@ -71,7 +70,8 @@ const placeholder = '请输入主机IP,多个以逗号分隔'
 const paddingTop = computed(() => Math.max(40, Math.floor((window.innerHeight - 58) / 3)))
 const mapStyle = computed(() => ({
   width: `${mapWidth.value}px`,
-  height: `${Math.floor(mapWidth.value * 404 / 857)}px`
+  height: `${Math.floor(mapWidth.value * 404 / 857)}px`,
+  left: `${Math.floor(window.innerWidth * 0.17)}px`
 }))
 
 function resize() {
@@ -175,11 +175,21 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize))
 }
 
 .map-wrap {
-  display: flex;
-  justify-content: center;
-  margin-top: 24px;
+  /* 对齐老版: fixed 全屏背景层,搜索框叠在地图上方
+     z-index 0 + 内容层 z-index 1,因为父容器有背景色会盖住 -1 */
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
 }
-.map-img { user-select: none; }
+.map-img {
+  position: absolute;
+  top: 181px;
+  opacity: 0.5745;
+  user-select: none;
+}
+.search-layout, .the-footer { position: relative; z-index: 1; }
 
 .the-footer {
   position: absolute;
@@ -195,4 +205,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize))
   background-color: #F5F6FA;
 }
 .the-footer p { margin: 2px 0; }
+.footer-links a { color: #3A84FF; text-decoration: none; margin: 0 4px; font-size: 12px; }
+.footer-links span { color: #C4C6CC; margin: 0 2px; }
+.copyright { color: #979BA5; }
 </style>

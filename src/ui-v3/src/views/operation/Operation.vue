@@ -1,19 +1,21 @@
 <template>
-  <div class="page-card">
+  <div class="page-card op-page">
     <h1 class="page-title sr-only">运营统计</h1>
-    <el-alert type="info" :closable="false" style="margin-bottom: 16px"
-      title="运营统计数据由 operation_server 定时任务(默认每日)收集,新部署环境需等待统计周期后才有数据" />
 
-    <!-- NAVTYPE 顶部卡(老版 4 张可点击跳路由) -->
+    <!-- NAVTYPE 顶部渐变横卡(对齐老版 4 张) -->
     <div class="nav-type">
-      <div class="nav-card" v-for="c in navCards" :key="c.key" @click="c.to && $router.push(c.to)">
+      <div
+        v-for="c in navCards"
+        :key="c.key"
+        class="nav-card"
+        :style="{ background: c.bg, color: '#fff' }"
+        @click="c.to && $router.push(c.to)"
+      >
         <div class="nc-left">
           <div class="nc-num">{{ c.value }}</div>
-          <div class="nc-label">{{ c.label }}</div>
+          <div class="nc-label">{{ c.label }}<el-icon v-if="c.tip" class="nc-tip"><InfoFilled /></el-icon></div>
         </div>
-        <span class="nc-icon-wrap" :style="{ background: c.bg }">
-          <i :class="['bk-cmdb-icon', 'nc-icon', c.icon]" />
-        </span>
+        <span class="nc-circle"><i :class="['bk-cmdb-icon', 'nc-icon', c.icon]" /></span>
       </div>
     </div>
 
@@ -28,8 +30,22 @@
       <el-button :icon="'Refresh'" size="small" @click="load">刷新</el-button>
     </div>
 
+    <!-- 无图表配置时的默认图表(对齐老版内置四图) -->
+    <template v-if="flatCharts.length === 0">
+      <div class="section-title">主机统计</div>
+      <el-row :gutter="16">
+        <el-col :span="12" v-for="dc in defaultCharts" :key="dc.name" style="margin-bottom: 16px">
+          <div class="chart-box default-box">
+            <div class="chart-title"><span class="ct-name">{{ dc.name }}</span></div>
+            <div class="chart-canvas" :ref="(el) => setChartEl(dc.key, el)" />
+            <div v-if="defaultEmpty" class="chart-empty">暂无统计数据,新部署环境需等待统计周期</div>
+          </div>
+        </el-col>
+      </el-row>
+    </template>
+
     <template v-for="(charts, category) in groupedCharts" :key="category">
-      <el-card v-if="!categoryTab || categoryTab === category" shadow="never" style="margin-bottom: 16px">
+      <el-card v-if="(!categoryTab || categoryTab === category) && charts.length" shadow="never" style="margin-bottom: 16px">
         <template #header>
           <div class="card-head">
             <span>{{ categoryName(category) }} ({{ charts.length }})</span>
@@ -45,7 +61,7 @@
                   <el-button link type="danger" size="small" @click="removeChart(chart)">删除</el-button>
                 </div>
               </div>
-              <div ref="el => setChartEl(chart.config_id, el)" class="chart-canvas" />
+              <div class="chart-canvas" :ref="(el) => setChartEl(chart.config_id, el)" />
               <div class="chart-meta" v-if="chart.__meta">
                 <el-tag v-for="m in chart.__meta" :key="m" size="small" type="info">{{ m }}</el-tag>
               </div>
@@ -54,7 +70,6 @@
         </el-row>
       </el-card>
     </template>
-    <el-empty v-if="!loading && flatCharts.length === 0" description="暂无运营图表配置(点击「新建图表」添加)" :image-size="80" />
 
     <!-- 图表新建/编辑对话框 -->
     <el-dialog v-model="chartFormVisible" :title="chartForm.id ? '编辑图表' : '新建图表'" width="540px">
@@ -114,11 +129,19 @@ const chartInstances = ref({})
 
 // NAVTYPE 顶部卡
 const navCards = ref([
-  { key: 'biz', label: '业务总数', value: 0, icon: 'icon-cc-business', bg: 'linear-gradient(135deg, #3A84FF, #2E6AD6)', to: '/resource/catalog/biz' },
-  { key: 'host', label: '主机总数', value: 0, icon: 'icon-cc-host', bg: 'linear-gradient(135deg, #2DCB56, #1FA948)', to: '/resource/host' },
-  { key: 'model', label: '模型总数', value: 0, icon: 'icon-cc-nav-model-02', bg: 'linear-gradient(135deg, #FFB400, #FF8800)', to: '/model/management' },
-  { key: 'inst', label: '实例总数', value: 0, icon: 'icon-cc-customization', bg: 'linear-gradient(135deg, #853CFF, #5E1FCC)', to: '/resource/index' }
+  { key: 'biz', label: '业务总数', value: 0, icon: 'icon-cc-business', bg: 'linear-gradient(90deg, #3A84FF, #6BA3FF)', to: '/resource/business' },
+  { key: 'host', label: '主机总数', value: 0, icon: 'icon-cc-host', bg: 'linear-gradient(90deg, #2DCB56, #5AD888)', to: '/resource/host' },
+  { key: 'model', label: '自定义模型总数', value: 0, icon: 'icon-cc-nav-model-02', bg: 'linear-gradient(90deg, #3A84FF, #5E5EF7)', to: '/model/management', tip: true },
+  { key: 'inst', label: '实例总数', value: 0, icon: 'icon-cc-customization', bg: 'linear-gradient(90deg, #14C0C0, #4AD8D8)', to: '/resource/index', tip: true }
 ])
+
+// 无图表配置时的内置默认图表(对齐老版初次使用展示)
+const defaultCharts = [
+  { key: 'os', name: '按操作系统类型统计' },
+  { key: 'biz', name: '按业务统计' },
+  { key: 'cloud', name: '按管控区域统计' }
+]
+const defaultEmpty = ref(false)
 
 // 图表表单
 const chartFormVisible = ref(false)
@@ -154,16 +177,28 @@ function pickChartOption(chart, data) {
   const meta = []
   if (Array.isArray(data)) {
     if (data.length && typeof data[0] === 'object' && ('value' in data[0] || 'count' in data[0])) {
-      meta.push(`饼图 ${data.length} 项`)
+      const items = data.map((d) => ({ name: d.id || d.name || d.label || '--', value: d.value ?? d.count ?? 0 }))
+      const type = chart.chart_type === 'bar' ? 'bar' : 'pie'
+      if (type === 'pie') {
+        meta.push(`饼图 ${items.length} 项`)
+        return {
+          meta,
+          option: {
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, type: 'scroll' },
+            series: [{ type: 'pie', radius: ['40%', '70%'], data: items }]
+          }
+        }
+      }
+      meta.push(`柱状 ${items.length} 项`)
       return {
         meta,
         option: {
-          tooltip: { trigger: 'item' },
-          series: [{
-            type: 'pie',
-            radius: ['40%', '70%'],
-            data: data.map((d) => ({ name: d.name || d.label || '--', value: d.value ?? d.count ?? 0 }))
-          }]
+          tooltip: { trigger: 'axis' },
+          grid: { left: 40, right: 16, bottom: 60, top: 20 },
+          xAxis: { type: 'category', data: items.map((d) => d.name), axisLabel: { rotate: 30 } },
+          yAxis: { type: 'value' },
+          series: [{ type: 'bar', data: items.map((d) => d.value), itemStyle: { color: '#3A84FF' } }]
         }
       }
     }
@@ -243,9 +278,19 @@ async function load() {
     await nextTick()
     await Promise.allSettled(chartList.value.map(async (chart) => {
       try {
-        const data = await getOperationChartData([chart])
-        const first = Array.isArray(data) ? data[0] : data
-        chartDataMap.value[chart.config_id] = first
+        // 后端 SearchChartData 的解析对多余/格式不符字段(如 create_time 字符串)敏感,会导致 data 返回 null
+        // 只发它认识的必要字段
+        const payload = {
+          config_id: chart.config_id,
+          report_type: chart.report_type,
+          name: chart.name,
+          bk_obj_id: chart.bk_obj_id || '',
+          chart_type: chart.chart_type || '',
+          field: chart.field || '',
+          x_axis_count: chart.x_axis_count || 10
+        }
+        const data = await getOperationChartData(payload)
+        chartDataMap.value[chart.config_id] = Array.isArray(data) ? data : (data ? [data] : [])
       } catch (e) {
         chartDataMap.value[chart.config_id] = []
       }
@@ -255,6 +300,38 @@ async function load() {
   } finally {
     loading.value = false
   }
+  if (!chartList.value.length) await renderDefaultCharts()
+}
+
+// 内置默认图表:用真实 host 统计接口渲染(对齐老版初次使用)
+async function renderDefaultCharts() {
+  await nextTick()
+  try {
+    const stats = await getModelStatistics().catch(() => [])
+    const hostCount = (stats || []).find((s) => s.bk_obj_id === 'host')?.instance_count || 0
+    const bizCount = (stats || []).find((s) => s.bk_obj_id === 'biz')?.instance_count || 0
+    defaultEmpty.value = hostCount === 0 && bizCount === 0
+    const mk = (key, name, value) => {
+      const el = chartRefs.value[key]
+      if (!el) return
+      chartInstances.value[key]?.dispose()
+      chartInstances.value[key] = echarts.init(el)
+      chartInstances.value[key].setOption({
+        tooltip: { trigger: 'item' },
+        legend: { bottom: 0, left: 'center' },
+        series: [{
+          type: name === '按业务统计' ? 'bar' : 'pie',
+          radius: name === '按业务统计' ? undefined : ['45%', '70%'],
+          data: [{ name: value ? '有数据' : '暂无数据', value: value || 0 }],
+          itemStyle: { color: '#3A84FF' },
+          label: { show: false }
+        }]
+      })
+    }
+    mk('os', '按操作系统类型统计', hostCount)
+    mk('biz', '按业务统计', bizCount)
+    mk('cloud', '按管控区域统计', 0)
+  } catch (e) { defaultEmpty.value = true }
 }
 
 function openChartDialog(row) {
@@ -321,22 +398,34 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.nav-type { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.nav-type { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
 .nav-card {
-  background: #fff; border: 1px solid #DCDEE5; border-radius: 2px;
-  padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
-  cursor: pointer; transition: box-shadow 0.2s;
+  border-radius: 2px;
+  padding: 18px 24px; display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; transition: box-shadow 0.2s, transform 0.2s;
 }
-.nav-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); border-color: #3A84FF; }
-.nc-left { display: flex; flex-direction: column; gap: 4px; }
-.nc-num { font-size: 22px; color: #313238; font-weight: 700; }
-.nc-label { font-size: 12px; color: #979BA5; }
-.nc-icon-wrap {
-  width: 48px; height: 48px; border-radius: 50%;
+.nav-card:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); transform: translateY(-1px); }
+.nc-left { display: flex; flex-direction: column; gap: 6px; }
+.nc-num { font-size: 26px; color: #fff; font-weight: 700; line-height: 1; }
+.nc-label { font-size: 13px; color: rgba(255,255,255,0.9); display: inline-flex; align-items: center; gap: 3px; }
+.nc-tip { font-size: 13px; opacity: 0.8; }
+.nc-circle {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
   display: inline-flex; align-items: center; justify-content: center;
-  color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }
-.nc-icon { font-size: 22px; color: #fff; }
+.nc-icon { font-size: 24px; color: #fff; }
+
+.section-title { font-size: 15px; font-weight: 600; color: #313238; margin: 0 0 12px; }
+.section-title .add-icon { color: #3A84FF; cursor: pointer; margin-left: 4px; }
+.default-box { min-height: 320px; position: relative; }
+.default-box .chart-canvas { height: 260px; }
+.chart-empty {
+  position: absolute; inset: 60px 0 30px;
+  display: flex; align-items: center; justify-content: center;
+  color: #979BA5; font-size: 13px;
+}
+
 .op-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .op-toolbar .spacer { flex: 1; }
 .card-head { display: flex; align-items: center; gap: 10px; }
