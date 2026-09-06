@@ -3,7 +3,7 @@
     <el-tabs v-model="tab" @tab-change="onTabChange">
       <el-tab-pane label="业务通用" name="general" />
       <el-tab-pane label="业务空闲机池" name="idle" />
-      <el-tab-pane label="ID 生成器" name="id" />
+      <el-tab-pane label="ID生成器" name="id" />
     </el-tabs>
 
     <!-- 业务通用 -->
@@ -12,15 +12,19 @@
         <el-form label-width="150px" class="config-form">
           <el-form-item required label="业务快照名称">
             <el-select v-model="generalForm.snapshotBizId" filterable style="width: 100%" placeholder="请选择业务">
-              <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
+              <el-option
+                v-for="b in bizList"
+                :key="b.bk_biz_id"
+                :label="`[${b.bk_biz_id}] ${b.bk_biz_name}`"
+                :value="b.bk_biz_id"
+              />
             </el-select>
-            <div v-if="generalForm.snapshotBizId !== originSnapshotBizId" class="field-tip danger">
+            <div v-if="generalForm.snapshotBizId !== origin.snapshotBizId" class="field-tip danger">
               业务快照名称切换后,主机快照将采集新选业务下的主机数据
             </div>
-            <div class="field-tip">配置业务快照名后,数据采集器会按此业务上报主机快照数据</div>
           </el-form-item>
           <el-form-item required label="拓扑最大可建层级">
-            <el-input-number v-model="generalForm.maxBizTopoLevel" :min="3" :max="10" :step="1" step-strictly controls-position="right" style="width: 200px" />
+            <el-input-number v-model="generalForm.maxBizTopoLevel" :min="3" :max="10" :step="1" step-strictly controls-position="right" style="width: 260px" />
             <span class="append-text">层</span>
           </el-form-item>
           <el-form-item>
@@ -34,51 +38,56 @@
     <!-- 业务空闲机池 -->
     <template v-if="tab === 'idle'">
       <div class="config-container">
-        <el-form label-width="150px" class="config-form">
+        <el-form label-width="150px" class="config-form" v-loading="idleSaving">
+          <!-- 集群 -->
           <el-form-item required label="集群">
             <div class="module-row">
-              <span class="module-icon set-icon">集</span>
-              <el-input v-model="idleForm.setName" style="width: 360px" placeholder="请输入集群名称" />
-              <template v-if="idleEditing.set">
-                <el-button type="primary" size="small" @click="confirmIdleSet">确定</el-button>
-                <el-button size="small" @click="cancelEdit('set')">取消</el-button>
+              <el-input v-model="idleForm.setKey" disabled class="key-input" />
+              <el-input v-model="idleForm.setName" class="name-input" placeholder="请输入集群名称" />
+              <template v-if="rowEditing.set">
+                <el-button link type="primary" size="small" @click="confirmIdleSet"><el-icon><Check /></el-icon></el-button>
+                <el-button link size="small" @click="cancelRow('set')"><el-icon><Close /></el-icon></el-button>
               </template>
-              <el-button v-else size="small" @click="idleEditing.set = true">编辑</el-button>
+              <el-button v-else link size="small" class="edit-icon" @click="rowEditing.set = true">
+                <el-icon><Edit /></el-icon>
+              </el-button>
             </div>
           </el-form-item>
 
+          <!-- 内置模块 idle/fault/recycle -->
           <el-form-item
-            v-for="(mod, key, idx) in idleForm.buildInModules"
-            :key="key"
+            v-for="(m, idx) in builtinList"
+            :key="m.key"
             required
             :label="idx === 0 ? '模块' : ''"
           >
             <div class="module-row indent">
               <span class="indent-line" />
-              <span class="module-icon">模</span>
-              <span class="module-key">{{ idleModuleLabel(key) }}</span>
-              <el-input v-model="idleForm.buildInModules[key]" style="width: 300px" placeholder="请输入模块名称" />
-              <template v-if="idleEditing[key]">
-                <el-button type="primary" size="small" @click="confirmBuiltinModule(key)">确定</el-button>
-                <el-button size="small" @click="cancelEdit(key)">取消</el-button>
+              <el-input v-model="m.key" disabled class="key-input" />
+              <el-input v-model="idleForm.builtin[m.key]" class="name-input" placeholder="请输入模块名称" />
+              <template v-if="rowEditing[m.key]">
+                <el-button link type="primary" size="small" @click="confirmBuiltinModule(m.key)"><el-icon><Check /></el-icon></el-button>
+                <el-button link size="small" @click="cancelRow(m.key)"><el-icon><Close /></el-icon></el-button>
               </template>
-              <el-button v-else size="small" @click="idleEditing[key] = true">编辑</el-button>
+              <el-button v-else link size="small" class="edit-icon" @click="rowEditing[m.key] = true">
+                <el-icon><Edit /></el-icon>
+              </el-button>
             </div>
           </el-form-item>
 
-          <el-form-item v-for="um in idleForm.userModules" :key="um.moduleKey" :label="''">
+          <!-- 用户自定义模块 -->
+          <el-form-item v-for="um in idleForm.userModules" :key="um.uid" :label="''">
             <div class="module-row indent">
               <span class="indent-line" />
-              <span class="module-icon">模</span>
-              <el-input v-model="um.editKey" style="width: 160px" placeholder="模块 ID(英文/数字)" :disabled="!um.isNew" />
-              <el-input v-model="um.editName" style="width: 240px" placeholder="请输入模块名称" />
+              <el-input v-model="um.editKey" class="key-input" placeholder="模块 ID(英文/数字)" :disabled="!um.isNew" />
+              <el-input v-model="um.editName" class="name-input" placeholder="请输入模块名称" />
               <template v-if="um.editing">
-                <el-button type="primary" size="small" @click="confirmUserModule(um)">确定</el-button>
-                <el-button size="small" @click="cancelUserModule(um)">取消</el-button>
+                <el-button link type="primary" size="small" @click="confirmUserModule(um)"><el-icon><Check /></el-icon></el-button>
+                <el-button link size="small" @click="cancelUserModule(um)"><el-icon><Close /></el-icon></el-button>
               </template>
               <template v-else>
-                <el-button size="small" @click="um.editing = true">编辑</el-button>
-                <el-button size="small" type="danger" plain @click="removeUserModule(um)">删除</el-button>
+                <el-button link size="small" class="edit-icon" @click="um.editing = true"><el-icon><Edit /></el-icon></el-button>
+                <el-button link size="small" type="danger" class="edit-icon" @click="removeUserModule(um)"><el-icon><Delete /></el-icon></el-button>
               </template>
             </div>
           </el-form-item>
@@ -90,18 +99,26 @@
       </div>
     </template>
 
-    <!-- ID 生成器 -->
+    <!-- ID生成器 -->
     <template v-if="tab === 'id'">
       <div class="config-container id-gen">
-        <el-alert type="info" :closable="false" style="margin-bottom: 16px; max-width: 800px"
-          title="开启数据同步后,业务拓扑数据将同步至消息队列;ID 步长与起始 ID 影响新实例的自增 ID 分配,起始 ID 只能调大不可调小" />
+        <!-- 顶部蓝色提示条(对齐老版 ID生成器提示语) -->
+        <div class="idgen-tips">
+          <el-icon class="tips-icon"><InfoFilled /></el-icon>
+          <div class="tips-body">
+            <p>ID生成器功能，用于将不同的CMDB数据，同步集中到同一个CMDB。ID增长规则如下所示：</p>
+            <p>1.修改模型的起始ID后，起始ID将改变为新ID，下一个ID为起始ID+ID自增步长</p>
+            <p>2.ID自增步长需要大于CMDB的个数，如果ID自增步长小于CMDB个数，则数据的ID会冲突</p>
+            <p>注意：当前页面展示的是现网生效配置，修改配置后需要重启coreservice服务才会真实生效</p>
+          </div>
+        </div>
 
         <el-collapse v-model="idOpenCollapse" class="idgen-collapse">
           <el-collapse-item name="sync">
             <template #title><span class="collapse-title">同步设置</span></template>
             <el-form label-width="150px">
               <el-form-item required label="允许数据同步">
-                <div v-if="!idEditing">{{ idForm.enabled ? '是否允许同步: 允许同步' : '是否允许同步: 不允许同步' }}</div>
+                <div v-if="!idEditing" class="view-value">当前设置{{ idForm.enabled ? '允许同步' : '不允许同步' }}</div>
                 <el-radio-group v-else v-model="idForm.enabled">
                   <el-radio :value="false">不允许同步</el-radio>
                   <el-radio :value="true">允许同步</el-radio>
@@ -110,31 +127,39 @@
             </el-form>
           </el-collapse-item>
           <el-collapse-item name="step">
-            <template #title><span class="collapse-title">ID 步长配置</span></template>
+            <template #title><span class="collapse-title">ID步长配置</span></template>
             <el-form label-width="150px">
-              <el-form-item required label="ID 自增步长">
-                <div v-if="!idEditing">{{ idForm.step }}</div>
-                <el-input-number v-else v-model="idForm.step" :min="1" :max="20" :step="1" step-strictly controls-position="right" style="width: 200px" />
-                <div class="field-tip">相邻两次分配 ID 之间的间隔数,建议 1-20</div>
+              <el-form-item required label="ID自增步长">
+                <div v-if="!idEditing" class="view-value">{{ idForm.step }}</div>
+                <el-input-number v-else v-model="idForm.step" :min="1" :max="20" :step="1" step-strictly controls-position="right" style="width: 260px" />
               </el-form-item>
             </el-form>
           </el-collapse-item>
           <el-collapse-item name="init">
-            <template #title><span class="collapse-title">起始 ID 配置</span></template>
-            <el-form label-width="150px">
-              <el-form-item v-for="p in Object.keys(idForm.initId)" :key="p" required :label="modelLabel(p)">
-                <div v-if="!idEditing">{{ idForm.currentId[p] }}</div>
-                <template v-else>
-                  <el-input-number v-model="idForm.initId[p]" :min="idForm.currentId[p]" :max="idForm.currentId[p] + 10000" controls-position="right" style="width: 220px" />
-                  <div class="field-tip">当前设置值: {{ idForm.currentId[p] }}</div>
-                </template>
-              </el-form-item>
-            </el-form>
+            <template #title><span class="collapse-title">起始ID配置</span></template>
+            <div class="init-grid">
+              <div v-for="p in Object.keys(idForm.currentId)" :key="p" class="init-item">
+                <span class="init-label"><i class="req">*</i>{{ modelLabel(p) }}</span>
+                <div class="init-field">
+                  <div v-if="!idEditing" class="view-value">{{ idForm.currentId[p] }}</div>
+                  <template v-else>
+                    <el-input-number
+                      v-model="idForm.initId[p]"
+                      :min="idForm.currentId[p]"
+                      :max="idForm.currentId[p] + 10000"
+                      controls-position="right"
+                      style="width: 100%"
+                    />
+                    <div class="field-tip">当前ID已使用到{{ idForm.currentId[p] }}</div>
+                  </template>
+                </div>
+              </div>
+            </div>
           </el-collapse-item>
         </el-collapse>
 
         <div class="footer">
-          <el-button v-if="!idEditing" type="primary" @click="idEditing = true">编辑</el-button>
+          <el-button v-if="!idEditing" type="primary" @click="startIdEdit">编辑</el-button>
           <template v-else>
             <el-button type="primary" :disabled="!idChanged" :loading="saving" @click="submitId">提交</el-button>
             <el-button @click="cancelIdEdit">取消</el-button>
@@ -146,115 +171,113 @@
 </template>
 
 <script setup>
-// 全局配置:与老版 global-config 三个 tab 对齐,接口全部走真实后端
+// 全局配置:与老版 global-config 三 tab 对齐,接口走真实后端(字段为 snake_case)
 // - GET  /admin/find/system_config/platform_setting/current   拉取配置
-// - PUT  /admin/update/system_config/platform_setting          更新 backend / idGenerator
+// - PUT  /admin/update/system_config/platform_setting          更新(backend/id_generator)
 // - POST /topo/update/biz/idle_set                             空闲机池集群/模块 更新与创建
 // - POST /topo/delete/biz/extra_moudle                         删除用户自定义空闲机模块
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Check, Close, Edit, Delete, InfoFilled } from '@element-plus/icons-vue'
 import { http, searchBusiness } from '../../api/cmdb'
 
 const tab = ref('general')
 const loading = ref(false)
 const saving = ref(false)
+const idleSaving = ref(false)
 const bizList = ref([])
 
-const BUILTIN_KEYS = { idle: '空闲机', fault: '故障机', recycle: '待回收', restart: '待重启' }
-function idleModuleLabel(key) { return BUILTIN_KEYS[key] || key }
-const MODEL_NAMES = { biz: '业务', set: '集群', module: '模块', host: '主机', process: '进程', plat: '管控区域' }
+const MODEL_NAMES = {
+  biz: '业务', host: '主机', inst_asst: '实例关联', module: '模块',
+  object_instance: '模型实例', process: '进程', service_instance: '服务实例', set: '集群'
+}
 function modelLabel(p) { return MODEL_NAMES[p] || p }
 
 // ---------- 业务通用 ----------
-const generalForm = reactive({ snapshotBizId: '', maxBizTopoLevel: 3 })
-const originGeneral = reactive({ snapshotBizId: '', maxBizTopoLevel: 3 })
-const originSnapshotBizId = ref('')
+const generalForm = reactive({ snapshotBizId: null, maxBizTopoLevel: 7 })
+const origin = reactive({ snapshotBizId: null, maxBizTopoLevel: 7 })
 
 // ---------- 空闲机池 ----------
+const BUILTIN = ['idle', 'fault', 'recycle']
+const BUILTIN_NAMES = { idle: '空闲机', fault: '故障机', recycle: '待回收' }
+const builtinList = BUILTIN.map((k) => ({ key: k }))
 const idleForm = reactive({
+  setKey: 'set',
   setName: '',
-  buildInModules: { idle: '', fault: '', recycle: '', restart: '' },
-  userModules: [] // { moduleKey, moduleName, isNew, editing, editKey, editName }
+  builtin: { idle: '', fault: '', recycle: '' },
+  userModules: [] // { uid, moduleKey, moduleName, isNew, editing, editKey, editName }
 })
-const idleEditing = reactive({ set: false })
-function cancelEdit(key) {
-  idleEditing[key] = false
-  loadConfig()
-}
+const rowEditing = reactive({ set: false })
+let uidSeq = 1
 
 // ---------- ID 生成器 ----------
 const idEditing = ref(false)
 const idOpenCollapse = ref(['sync', 'step', 'init'])
 const idForm = reactive({ enabled: false, step: 1, initId: {}, currentId: {} })
-const idOrigin = ref({})
-const idChanged = computed(() => JSON.stringify(idForm) !== idOrigin.value)
+const idOrigin = ref('')
+const idChanged = computed(() => JSON.stringify({
+  enabled: idForm.enabled, step: idForm.step, initId: idForm.initId, currentId: idForm.currentId
+}) !== idOrigin.value)
 
-function snapshotGeneral(config) {
-  generalForm.snapshotBizId = config.backend?.snapshotBizId ?? ''
-  generalForm.maxBizTopoLevel = config.backend?.maxBizTopoLevel || 3
-  originGeneral.snapshotBizId = generalForm.snapshotBizId
-  originGeneral.maxBizTopoLevel = generalForm.maxBizTopoLevel
-  originSnapshotBizId.value = generalForm.snapshotBizId
-}
-function snapshotIdle(config) {
-  idleForm.setName = config.set || config.idlePool?.set || '空闲机池'
-  const pool = config.idlePool || {}
-  for (const k of Object.keys(BUILTIN_KEYS)) {
-    idleForm.buildInModules[k] = pool[k] || BUILTIN_KEYS[k]
-  }
-  idleForm.userModules = (pool.userModules || []).map((m) => ({
-    moduleKey: m.moduleKey || m.ruleKey,
-    moduleName: m.moduleName,
+function snapshotConfig(config) {
+  // backend(snake_case)
+  generalForm.snapshotBizId = config.backend?.snapshot_biz_id ?? null
+  generalForm.maxBizTopoLevel = config.backend?.max_biz_topo_level || 7
+  origin.snapshotBizId = generalForm.snapshotBizId
+  origin.maxBizTopoLevel = generalForm.maxBizTopoLevel
+
+  // set + idle_pool
+  idleForm.setKey = 'set'
+  idleForm.setName = config.set || '空闲机池'
+  const pool = config.idle_pool || {}
+  for (const k of BUILTIN) idleForm.builtin[k] = pool[k] || BUILTIN_NAMES[k]
+  const userModules = pool.user_modules || []
+  idleForm.userModules = (Array.isArray(userModules) ? userModules : Object.values(userModules)).map((m) => ({
+    uid: uidSeq++,
+    moduleKey: m.module_key || m.moduleKey,
+    moduleName: m.module_name || m.moduleName,
     isNew: false,
     editing: false,
-    editKey: m.moduleKey || m.ruleKey,
-    editName: m.moduleName
+    editKey: m.module_key || m.moduleKey,
+    editName: m.module_name || m.moduleName
   }))
-}
-function snapshotId(config) {
-  const gen = config.idGenerator || {}
+
+  // id_generator(只有 current_id,init_id 编辑时以 current_id 为基准)
+  const gen = config.id_generator || {}
   idForm.enabled = !!gen.enabled
   idForm.step = gen.step || 1
-  const initId = {}, currentId = {}
+  const currentId = {}, initId = {}
+  for (const [k, v] of Object.entries(gen.current_id || {})) { currentId[k] = v; initId[k] = v }
   for (const [k, v] of Object.entries(gen.init_id || {})) initId[k] = v
-  for (const [k, v] of Object.entries(gen.current_id || {})) currentId[k] = v
-  // init_id 缺失的键用 current_id 补
-  for (const [k, v] of Object.entries(currentId)) {
-    if (initId[k] === undefined) initId[k] = v
-  }
-  idForm.initId = initId
   idForm.currentId = currentId
-  idOrigin.value = JSON.stringify(idForm)
+  idForm.initId = initId
+  syncIdOrigin()
+}
+function syncIdOrigin() {
+  idOrigin.value = JSON.stringify({
+    enabled: idForm.enabled, step: idForm.step, initId: idForm.initId, currentId: idForm.currentId
+  })
 }
 
 async function loadConfig() {
   loading.value = true
   try {
     const res = await http.get('/admin/find/system_config/platform_setting/current')
-    const config = res?.data || res || {}
-    snapshotGeneral(config)
-    snapshotIdle(config)
-    snapshotId(config)
-  } catch (e) {
-    // 独立模式部分字段可能为空,保留默认
-  } finally {
+    snapshotConfig(res?.data || res || {})
+  } catch (e) { /* 独立模式异常时保留默认 */ } finally {
     loading.value = false
   }
 }
 
 async function saveGeneral() {
-  if (!generalForm.snapshotBizId && generalForm.snapshotBizId !== 0) {
-    ElMessage.warning('请选择业务'); return
-  }
-  if (!generalForm.maxBizTopoLevel) {
-    ElMessage.warning('请输入拓扑最大可建层级'); return
-  }
+  if (generalForm.snapshotBizId == null) { ElMessage.warning('请选择业务'); return }
+  if (!generalForm.maxBizTopoLevel) { ElMessage.warning('请输入拓扑最大可建层级'); return }
   saving.value = true
   try {
     await http.put('/admin/update/system_config/platform_setting', {
       backend: {
-        snapshotBizId: generalForm.snapshotBizId,
-        maxBizTopoLevel: Number(generalForm.maxBizTopoLevel)
+        max_biz_topo_level: Number(generalForm.maxBizTopoLevel),
+        snapshot_biz_id: generalForm.snapshotBizId
       }
     })
     ElMessage.success('保存成功')
@@ -264,62 +287,59 @@ async function saveGeneral() {
   } finally { saving.value = false }
 }
 function resetGeneral() {
-  generalForm.snapshotBizId = originGeneral.snapshotBizId
-  generalForm.maxBizTopoLevel = originGeneral.maxBizTopoLevel
+  generalForm.snapshotBizId = origin.snapshotBizId
+  generalForm.maxBizTopoLevel = origin.maxBizTopoLevel
 }
 
-// ---------- 空闲机池操作 ----------
+// ---------- 空闲机池 ----------
+function cancelRow(key) {
+  rowEditing[key] = false
+  loadConfig()
+}
 async function confirmIdleSet() {
   if (!idleForm.setName.trim()) { ElMessage.warning('请输入集群名称'); return }
-  saving.value = true
+  idleSaving.value = true
   try {
     await http.post('/topo/update/biz/idle_set', {
       type: 'set',
-      set: { set_key: 'idle_pool', set_name: idleForm.setName.trim() }
+      set: { set_key: idleForm.setKey, set_name: idleForm.setName.trim() }
     })
     ElMessage.success('保存成功')
-    idleEditing.set = false
+    rowEditing.set = false
     await loadConfig()
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
-  } finally { saving.value = false }
+  } finally { idleSaving.value = false }
 }
-
 async function confirmBuiltinModule(key) {
-  const name = (idleForm.buildInModules[key] || '').trim()
+  const name = (idleForm.builtin[key] || '').trim()
   if (!name) { ElMessage.warning('请输入模块名称'); return }
-  saving.value = true
+  idleSaving.value = true
   try {
     await http.post('/topo/update/biz/idle_set', {
       type: 'module',
       module: { module_key: key, module_name: name }
     })
     ElMessage.success('保存成功')
-    idleEditing[key] = false
+    rowEditing[key] = false
     await loadConfig()
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
-  } finally { saving.value = false }
+  } finally { idleSaving.value = false }
 }
-
 function addUserModule() {
-  idleForm.userModules.push({ moduleKey: '', moduleName: '', isNew: true, editing: true, editKey: '', editName: '' })
+  idleForm.userModules.push({ uid: uidSeq++, moduleKey: '', moduleName: '', isNew: true, editing: true, editKey: '', editName: '' })
 }
 function cancelUserModule(um) {
-  if (um.isNew) {
-    idleForm.userModules = idleForm.userModules.filter((x) => x !== um)
-  } else {
-    um.editing = false
-    um.editKey = um.moduleKey
-    um.editName = um.moduleName
-  }
+  if (um.isNew) idleForm.userModules = idleForm.userModules.filter((x) => x !== um)
+  else { um.editing = false; um.editKey = um.moduleKey; um.editName = um.moduleName }
 }
 async function confirmUserModule(um) {
   const key = (um.editKey || '').trim()
   const name = (um.editName || '').trim()
   if (!/^[a-zA-Z0-9_-]+$/.test(key)) { ElMessage.warning('模块 ID 需为英文/数字'); return }
   if (!name) { ElMessage.warning('请输入模块名称'); return }
-  saving.value = true
+  idleSaving.value = true
   try {
     await http.post('/topo/update/biz/idle_set', {
       type: 'module',
@@ -329,13 +349,11 @@ async function confirmUserModule(um) {
     await loadConfig()
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
-  } finally { saving.value = false }
+  } finally { idleSaving.value = false }
 }
 async function removeUserModule(um) {
-  try {
-    await ElMessageBox.confirm(`确定删除模块「${um.moduleName}」?`, '删除确认', { type: 'warning' })
-  } catch { return }
-  saving.value = true
+  try { await ElMessageBox.confirm(`确定删除模块「${um.moduleName}」?`, '删除确认', { type: 'warning' }) } catch { return }
+  idleSaving.value = true
   try {
     await http.post('/topo/delete/biz/extra_moudle', {
       module_key: um.moduleKey,
@@ -345,32 +363,36 @@ async function removeUserModule(um) {
     await loadConfig()
   } catch (e) {
     ElMessage.error('删除失败: ' + (e?.message || '后端异常'))
-  } finally { saving.value = false }
+  } finally { idleSaving.value = false }
 }
 
 // ---------- ID 生成器 ----------
+function startIdEdit() {
+  // init_id 以 current_id 为基准进入编辑
+  for (const k of Object.keys(idForm.currentId)) {
+    if (idForm.initId[k] === undefined) idForm.initId[k] = idForm.currentId[k]
+  }
+  idEditing.value = true
+}
 function cancelIdEdit() {
   idEditing.value = false
   loadConfig()
 }
 async function submitId() {
   try {
-    await ElMessageBox.confirm('提交后新的起始 ID 将立即生效,确认提交?', '确认提交', { type: 'warning' })
+    await ElMessageBox.confirm('提交后新的起始ID将立即生效,确认提交?', '确认提交', { type: 'warning' })
   } catch { return }
-  // 仅提交发生变化的 init_id(与老版逻辑一致)
+  // 仅提交变化的 init_id(对齐老版 changeInitId 逻辑)
   const changeInitId = {}
   let hasChange = false
   for (const k of Object.keys(idForm.currentId)) {
-    if (idForm.currentId[k] !== idForm.initId[k]) {
-      changeInitId[k] = idForm.initId[k]
-      hasChange = true
-    }
+    if (idForm.currentId[k] !== idForm.initId[k]) { changeInitId[k] = idForm.initId[k]; hasChange = true }
   }
-  const submitForm = { enabled: idForm.enabled, step: idForm.step }
-  if (hasChange) submitForm.init_id = changeInitId
+  const payload = { enabled: idForm.enabled, step: idForm.step }
+  if (hasChange) payload.init_id = changeInitId
   saving.value = true
   try {
-    await http.put('/admin/update/system_config/platform_setting', { idGenerator: submitForm })
+    await http.put('/admin/update/system_config/platform_setting', { id_generator: payload })
     ElMessage.success('提交成功')
     idEditing.value = false
     await loadConfig()
@@ -393,7 +415,7 @@ onMounted(async () => {
 <style scoped>
 .global-config { padding: 20px; }
 .config-container { display: flex; justify-content: center; margin-top: 30px; padding-bottom: 40px; }
-.config-form { width: 760px; }
+.config-form { width: 780px; }
 .field-tip { font-size: 12px; color: #979BA5; line-height: 20px; margin-top: 4px; }
 .field-tip.danger { color: #EA3636; }
 .append-text { margin-left: 8px; color: #63656E; }
@@ -404,15 +426,32 @@ onMounted(async () => {
   position: absolute; left: 12px; top: -18px; width: 14px; height: 36px;
   border-left: 1px solid #DCDEE5; border-bottom: 1px solid #DCDEE5;
 }
-.module-icon {
-  width: 22px; height: 22px; border-radius: 2px; background: #E1ECFF; color: #3A84FF;
-  font-size: 12px; display: inline-flex; align-items: center; justify-content: center; flex: none;
-}
-.module-icon.set-icon { background: #3A84FF; color: #fff; }
-.module-key { width: 56px; color: #63656E; font-size: 13px; flex: none; }
+.key-input { width: 180px; flex: none; }
+.name-input { flex: 1; max-width: 400px; }
+.edit-icon { color: #979BA5; margin-left: 4px; }
+.edit-icon:hover { color: #3A84FF; }
 
 .id-gen { flex-direction: column; align-items: center; }
-.idgen-collapse { width: 760px; }
+.idgen-tips {
+  display: flex; gap: 8px; width: 860px;
+  background: #F0F5FF; border: 1px solid #D6E8FF; border-radius: 2px;
+  padding: 10px 14px; margin-bottom: 20px;
+}
+.tips-icon { color: #3A84FF; font-size: 16px; margin-top: 2px; flex: none; }
+.tips-body p { margin: 0; font-size: 12px; color: #63656E; line-height: 20px; }
+
+.idgen-collapse { width: 860px; }
 .collapse-title { font-weight: 500; color: #313238; }
-.footer { margin-top: 20px; width: 760px; text-align: center; }
+.view-value { color: #313238; font-size: 14px; }
+
+/* 起始 ID 三列网格(对齐老版) */
+.init-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 40px; padding: 0 24px;
+}
+.init-item { display: flex; align-items: flex-start; gap: 8px; }
+.init-label { font-size: 14px; color: #63656E; line-height: 32px; flex: none; }
+.init-label .req { color: #EA3636; font-style: normal; margin-right: 2px; }
+.init-field { flex: 1; min-width: 0; }
+
+.footer { margin-top: 20px; width: 860px; text-align: left; }
 </style>
