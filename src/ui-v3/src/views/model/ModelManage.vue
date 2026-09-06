@@ -15,7 +15,7 @@
         <el-button type="primary" :icon="'Plus'" @click="openCreateModel">新建模型</el-button>
         <el-button :icon="'Plus'" plain @click="clsDialog = true">新建分组</el-button>
         <el-button :icon="'Upload'" @click="importDialog = true">导入</el-button>
-        <el-button :icon="'Download'" :disabled="!checkedModels.length" @click="exportModels">导出{{ checkedModels.length ? `(${checkedModels.length})` : '' }}</el-button>
+        <el-button :icon="'Download'" :disabled="exportSelecting" @click="startExportSelect">导出</el-button>
         <div class="spacer" />
         <el-button :type="statusFilter === 'all' ? 'primary' : 'default'" size="small" @click="statusFilter = 'all'">全部</el-button>
         <el-button :type="statusFilter === 'on' ? 'primary' : 'default'" size="small" @click="statusFilter = 'on'">启用中</el-button>
@@ -46,9 +46,9 @@
             </el-dropdown>
           </div>
           <div class="model-cards">
-            <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" :class="['model-card', { checked: checkedModels.includes(m.id) }]" @click="goDetail(m)">
-              <label class="card-check" @click.stop>
-                <el-checkbox :model-value="checkedModels.includes(m.id)" @change="(v) => toggleCheck(m, v)" />
+            <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" :class="['model-card', { checked: exportSelecting && checkedModels.includes(m.id) }]" @click="goDetail(m)">
+              <label v-if="exportSelecting" class="card-check" @click.stop>
+                <el-checkbox :model-value="checkedModels.includes(m.id)" :disabled="!!m.bk_ispre" @change="(v) => toggleCheck(m, v)" />
               </label>
               <div class="card-top">
                 <span class="model-icon" :style="{ background: iconBg(m), color: iconfg(m) }">
@@ -71,6 +71,15 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- 导出选择模式底部操作栏(对齐老版 model-management-footer) -->
+      <div v-if="exportSelecting" class="export-action-bar">
+        <el-checkbox v-model="exportSelectAll" @change="toggleExportAll">全选</el-checkbox>
+        <span class="selected-count">已选：<em>{{ checkedModels.length }}</em></span>
+        <div class="spacer" />
+        <el-button @click="cancelExportSelect">取消</el-button>
+        <el-button type="primary" :disabled="!checkedModels.length" @click="exportDialog = true">下一步</el-button>
       </div>
     </div>
 
@@ -181,8 +190,29 @@ const importing = ref(false)
 const importResult = ref(null)
 const exportDialog = ref(false)
 const exporting = ref(false)
+const exportSelecting = ref(false) // 导出选择模式(点「导出」进入,checkbox 才显示)
+const exportSelectAll = ref(false)
 const checkedModels = ref([]) // 勾选的模型 id(数字 id,导出接口要的是 id 不是 bk_obj_id)
 const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
+
+function startExportSelect() {
+  exportSelecting.value = true
+  checkedModels.value = []
+  exportSelectAll.value = false
+}
+function cancelExportSelect() {
+  exportSelecting.value = false
+  checkedModels.value = []
+  exportSelectAll.value = false
+}
+function toggleExportAll(v) {
+  if (v) {
+    // 全选所有非内置模型(内置模型不允许导出)
+    checkedModels.value = groups.value.flatMap((g) => g.models).filter((m) => !m.bk_ispre).map((m) => m.id)
+  } else {
+    checkedModels.value = []
+  }
+}
 
 function toggleCheck(m, v) {
   if (v) {
@@ -259,6 +289,7 @@ async function doExport() {
     URL.revokeObjectURL(a.href)
     ElMessage.success('导出成功')
     exportDialog.value = false
+    cancelExportSelect()
   } catch (e) {
     ElMessage.error('导出失败: ' + (e?.message || '后端异常'))
   } finally { exporting.value = false }
@@ -467,6 +498,16 @@ onMounted(load)
   display: inline-flex; align-items: center;
 }
 .model-card.checked { border-color: #3A84FF; background: #F0F5FF; }
+
+.export-action-bar {
+  position: sticky; bottom: 0;
+  display: flex; align-items: center; gap: 16px;
+  background: #FAFBFD; border-top: 1px solid #DCDEE5;
+  padding: 10px 20px;
+}
+.export-action-bar .selected-count { color: #63656E; font-size: 13px; }
+.export-action-bar .selected-count em { color: #3A84FF; font-style: normal; font-weight: bold; padding: 0 2px; }
+.export-action-bar .spacer { flex: 1; }
 .model-icon {
   width: 32px; height: 32px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
