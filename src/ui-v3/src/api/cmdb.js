@@ -357,6 +357,10 @@ export const searchServiceCategories = (bizId) =>
   http.post('/findmany/proc/service_category/with_statistics', { bk_biz_id: bizId })
 export const createServiceCategory = (bizId, name, parentId) =>
   http.post('/create/proc/service_category', { bk_biz_id: bizId, name, parent_id: parentId })
+export const updateServiceCategory = (bizId, id, name) =>
+  http.put('/update/proc/service_category', { bk_biz_id: bizId, id, name })
+export const deleteServiceCategory = (bizId, id) =>
+  http.delete('/delete/proc/service_category', { data: { id, bk_biz_id: bizId } })
 
 // ---------- 动态分组 ----------
 export const searchDynamicGroups = (bizId, page) =>
