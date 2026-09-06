@@ -27,10 +27,23 @@
         <div v-for="cls in filteredGroups" :key="cls.clsId" class="model-group">
           <div class="group-header">
             <span class="group-name"><el-icon style="margin-right:4px;vertical-align:-2px"><CaretBottom /></el-icon>{{ cls.clsName }} ( {{ cls.models.length }} )</span>
-            <el-button
-              v-if="!cls.bk_ispre" link type="danger" size="small"
-              @click="removeClassification(cls)"
-            >删除分组</el-button>
+            <el-dropdown
+              v-if="!cls.bk_ispre"
+              class="group-menu"
+              trigger="click"
+              size="small"
+              @command="(cmd) => onGroupCmd(cmd, cls)"
+            >
+              <span class="group-more" @click.stop>
+                <el-icon><MoreFilled /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="rename">重命名分组</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>删除分组</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
           <div class="model-cards">
             <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" class="model-card" @click="goDetail(m)">
@@ -79,14 +92,14 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="clsDialog" title="新建分组" width="440px">
+    <el-dialog v-model="clsDialog" :title="clsDialogTitle" width="440px">
       <el-form label-width="90px">
-        <el-form-item label="分组 ID" required>
-          <el-input v-model="clsForm.bk_classification_id" placeholder="英文唯一标识" />
-        </el-form-item>
-        <el-form-item label="分组名称" required>
-          <el-input v-model="clsForm.bk_classification_name" />
-        </el-form-item>
+          <el-form-item label="分组 ID" required v-if="!editingCls">
+            <el-input v-model="clsForm.bk_classification_id" placeholder="英文唯一标识" />
+          </el-form-item>
+          <el-form-item label="分组名称" required>
+            <el-input v-model="clsForm.bk_classification_name" />
+          </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="clsDialog = false">取消</el-button>
@@ -101,8 +114,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { MoreFilled, Search } from '@element-plus/icons-vue'
 import {
   searchClassificationWithObjects, searchClassifications, createClassification, deleteClassification,
+  updateClassification,
   createModel, updateModel, deleteModel
 } from '../../api/cmdb'
 
@@ -119,6 +134,8 @@ const modelDialog = ref(false)
 const editing = ref(null)
 const modelForm = ref({ bk_obj_id: '', bk_obj_name: '', bk_classification_id: '' })
 const clsDialog = ref(false)
+const clsDialogTitle = ref('新建分组')
+const editingCls = ref(null)
 const clsForm = ref({ bk_classification_id: '', bk_classification_name: '' })
 
 const filteredGroups = computed(() => {
@@ -214,13 +231,30 @@ async function removeModel(row) {
   load()
 }
 
+function onGroupCmd(cmd, cls) {
+  if (cmd === 'rename') {
+    editingCls.value = cls
+    clsDialogTitle.value = '重命名分组'
+    clsForm.value = { bk_classification_id: cls.clsId, bk_classification_name: cls.clsName }
+    clsDialog.value = true
+  } else if (cmd === 'delete') {
+    removeClassification(cls)
+  }
+}
+
 async function saveClassification() {
   saving.value = true
   try {
-    await createClassification(clsForm.value)
-    ElMessage.success('分组已创建')
+    if (editingCls.value) {
+      await updateClassification(editingCls.value.clsId, { bk_classification_name: clsForm.value.bk_classification_name })
+      ElMessage.success('分组已重命名')
+    } else {
+      await createClassification(clsForm.value)
+      ElMessage.success('分组已创建')
+    }
     clsDialog.value = false
     clsForm.value = { bk_classification_id: '', bk_classification_name: '' }
+    editingCls.value = null
     load()
   } finally {
     saving.value = false
@@ -263,6 +297,13 @@ onMounted(load)
   padding-bottom: 8px; border-bottom: 1px solid #E7E9EF; margin-bottom: 12px;
 }
 .group-name { font-size: 14px; font-weight: 600; color: #313238; }
+.group-menu { margin-left: auto; }
+.group-more {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 2px; cursor: pointer;
+  color: #979BA5; font-size: 16px;
+}
+.group-more:hover { background: #eaebf0; color: #3a84ff; }
 .model-cards { display: flex; flex-wrap: wrap; gap: 12px; }
 .model-card {
   width: 236px; padding: 10px 14px;

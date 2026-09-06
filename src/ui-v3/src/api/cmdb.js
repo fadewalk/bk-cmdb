@@ -259,6 +259,7 @@ export const searchClassifications = () => http.post('/find/objectclassification
 export const createClassification = (data) => http.post('/create/objectclassification', {
   bk_supplier_account: '0', ...data
 })
+export const updateClassification = (id, data) => http.put(`/update/objectclassification/${id}`, data)
 export const deleteClassification = (id) => http.delete(`/delete/objectclassification/${id}`)
 
 // 模型属性 CRUD

@@ -26,7 +26,7 @@
         >
           <template #default="{ data }">
             <span class="dir-row">
-              <i class="bk-cmdb-icon icon-cc-square" />
+              <i :class="['bk-cmdb-icon', data.__icon || 'icon-cc-host']" />
               <span class="d-name">{{ data.name }}</span>
               <span v-if="data.__count" class="d-count">{{ data.__count }}</span>
             </span>
@@ -546,7 +546,10 @@ async function loadDirectoryTree() {
       __count: d.bk_host_count
     }))
     dirTreeData.value = [
-      { id: 'default', name: '默认', children: items.length ? items : [{ id: 'empty', name: '(空)' }] }
+      {
+        id: 'default', name: '默认', children: items.length ? items : [{ id: 'empty', name: '(空)' }],
+        __icon: 'icon-cc-host'
+      }
     ]
   } catch (e) {
     dirTreeData.value = [{ id: 'default', name: '默认', children: [] }]
