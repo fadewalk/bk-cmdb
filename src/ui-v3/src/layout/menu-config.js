@@ -42,9 +42,7 @@ export const MENUS = [
     icon: 'icon-cc-nav-model-02',
     children: [
       { id: 'management', name: '模型管理', icon: 'icon-cc-nav-model-02', path: '/model/management' },
-      { id: 'topology', name: '模型拓扑', icon: 'icon-cc-nav-model-topo', path: '/model/topology' },
-      { id: 'relation', name: '模型关系', icon: 'icon-cc-nav-model-topo', path: '/model/relation' },
-      { id: 'hierarchy', name: '业务层级', icon: 'icon-cc-tree', path: '/model/hierarchy' },
+      { id: 'topology', name: '模型关系', icon: 'icon-cc-nav-model-topo', path: '/model/topology' },
       { id: 'association', name: '关联类型', icon: 'icon-cc-nav-associated', path: '/model/association' },
       { id: 'field-template', name: '字段组合模板', icon: 'icon-cc-menu-field-template', path: '/model/field-template' }
     ]
