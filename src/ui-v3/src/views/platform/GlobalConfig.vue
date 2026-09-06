@@ -1,10 +1,13 @@
 <template>
   <div class="page-card global-config" v-loading="loading">
-    <el-tabs v-model="tab" @tab-change="onTabChange">
-      <el-tab-pane label="业务通用" name="general" />
-      <el-tab-pane label="业务空闲机池" name="idle" />
-      <el-tab-pane label="ID生成器" name="id" />
-    </el-tabs>
+    <div class="box-tabs">
+      <button
+        v-for="t in tabs"
+        :key="t.name"
+        :class="['box-tab', { active: tab === t.name }]"
+        @click="switchTab(t.name)"
+      >{{ t.label }}</button>
+    </div>
 
     <!-- 业务通用 -->
     <template v-if="tab === 'general'">
@@ -24,8 +27,9 @@
             </div>
           </el-form-item>
           <el-form-item required label="拓扑最大可建层级">
-            <el-input-number v-model="generalForm.maxBizTopoLevel" :min="3" :max="10" :step="1" step-strictly controls-position="right" style="width: 260px" />
-            <span class="append-text">层</span>
+            <el-input v-model.number="generalForm.maxBizTopoLevel" class="topo-level-input" placeholder="请输入 3-10">
+              <template #append>层</template>
+            </el-input>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :loading="saving" @click="saveGeneral">保存</el-button>
@@ -117,7 +121,12 @@
           <el-collapse-item name="sync">
             <template #title><span class="collapse-title">同步设置</span></template>
             <el-form label-width="150px">
-              <el-form-item required label="允许数据同步">
+              <el-form-item required>
+                <template #label>
+                  <el-tooltip content="开启后业务拓扑数据将同步至消息队列,用于多 CMDB 数据集中" placement="bottom">
+                    <span class="label-tooltip">允许数据同步</span>
+                  </el-tooltip>
+                </template>
                 <div v-if="!idEditing" class="view-value">当前设置{{ idForm.enabled ? '允许同步' : '不允许同步' }}</div>
                 <el-radio-group v-else v-model="idForm.enabled">
                   <el-radio :value="false">不允许同步</el-radio>
@@ -182,6 +191,16 @@ import { Check, Close, Edit, Delete, InfoFilled } from '@element-plus/icons-vue'
 import { http, searchBusiness } from '../../api/cmdb'
 
 const tab = ref('general')
+const tabs = [
+  { name: 'general', label: '业务通用' },
+  { name: 'idle', label: '业务空闲机池' },
+  { name: 'id', label: 'ID生成器' }
+]
+function switchTab(name) {
+  if (tab.value === name) return
+  tab.value = name
+  onTabChange()
+}
 const loading = ref(false)
 const saving = ref(false)
 const idleSaving = ref(false)
@@ -271,7 +290,10 @@ async function loadConfig() {
 
 async function saveGeneral() {
   if (generalForm.snapshotBizId == null) { ElMessage.warning('请选择业务'); return }
-  if (!generalForm.maxBizTopoLevel) { ElMessage.warning('请输入拓扑最大可建层级'); return }
+  const level = Number(generalForm.maxBizTopoLevel)
+  if (!level || level < 3 || level > 10 || !Number.isInteger(level)) {
+    ElMessage.warning('拓扑最大可建层级需为 3-10 的整数'); return
+  }
   saving.value = true
   try {
     await http.put('/admin/update/system_config/platform_setting', {
@@ -413,12 +435,50 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.global-config { padding: 20px; }
-.config-container { display: flex; justify-content: center; margin-top: 30px; padding-bottom: 40px; }
-.config-form { width: 780px; }
+.global-config { padding: 0; }
+
+/* ===== box 型 tab 头(对齐老版 bk-tab,自绘) ===== */
+.box-tabs {
+  display: flex;
+  border-bottom: 1px solid #DCDEE5;
+}
+.box-tab {
+  height: 42px; line-height: 42px;
+  padding: 0 24px;
+  border: none;
+  border-right: 1px solid #DCDEE5;
+  background: #F5F7FA;
+  color: #63656E; font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.box-tab:hover { color: #3A84FF; }
+.box-tab.active {
+  background: #fff;
+  color: #3A84FF; font-weight: 500;
+  margin-bottom: -1px;
+  border-bottom: 1px solid #fff;
+}
+
+.config-container { display: flex; justify-content: center; margin-top: 40px; padding-bottom: 50px; }
+.config-form { width: 800px; }
 .field-tip { font-size: 12px; color: #979BA5; line-height: 20px; margin-top: 4px; }
 .field-tip.danger { color: #EA3636; }
-.append-text { margin-left: 8px; color: #63656E; }
+
+/* 拓扑层级输入框: '层' 作为 append 单元格(对齐老版 bk-input append) */
+.topo-level-input { width: 400px; }
+.topo-level-input :deep(.el-input__inner) { text-align: left; }
+.topo-level-input :deep(.el-input-group__append) {
+  background: #FAFBFD; color: #63656E; padding: 0 14px;
+}
+
+/* 蓝色虚线 tooltip label(对齐老版) */
+.label-tooltip {
+  color: #3A84FF;
+  border-bottom: 1px dashed #3A84FF;
+  cursor: help;
+  line-height: 32px;
+}
 
 .module-row { display: flex; align-items: center; gap: 8px; }
 .module-row.indent { position: relative; padding-left: 28px; }
@@ -433,25 +493,58 @@ onMounted(async () => {
 
 .id-gen { flex-direction: column; align-items: center; }
 .idgen-tips {
-  display: flex; gap: 8px; width: 860px;
+  display: flex; gap: 8px; width: 880px;
   background: #F0F5FF; border: 1px solid #D6E8FF; border-radius: 2px;
   padding: 10px 14px; margin-bottom: 20px;
 }
 .tips-icon { color: #3A84FF; font-size: 16px; margin-top: 2px; flex: none; }
 .tips-body p { margin: 0; font-size: 12px; color: #63656E; line-height: 20px; }
 
-.idgen-collapse { width: 860px; }
-.collapse-title { font-weight: 500; color: #313238; }
+/* ===== collapse 独立卡片样式(对齐老版 cmdb-collapse) ===== */
+.idgen-collapse {
+  width: 880px;
+  border-top: 1px solid transparent;
+}
+.idgen-collapse :deep(.el-collapse-item) {
+  margin-bottom: 20px;
+  border: 1px solid #DCDEE5;
+  border-radius: 2px;
+  background: #fff;
+  overflow: hidden;
+}
+.idgen-collapse :deep(.el-collapse-item__header) {
+  height: 52px; line-height: 52px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid transparent;
+  font-size: 14px;
+  /* 箭头移到标题左侧(对齐老版 cmdb-collapse ▼ 在左) */
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.idgen-collapse :deep(.el-collapse-item__arrow) { margin: 0; }
+.idgen-collapse :deep(.el-collapse-item__header.is-active) {
+  border-bottom-color: #DCDEE5;
+}
+.idgen-collapse :deep(.el-collapse-item__header:hover) { color: #3A84FF; }
+.idgen-collapse :deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+}
+.idgen-collapse :deep(.el-collapse-item__content) {
+  padding: 24px 20px 24px 50px;
+}
+.collapse-title { font-weight: 700; color: #313238; }
 .view-value { color: #313238; font-size: 14px; }
 
 /* 起始 ID 三列网格(对齐老版) */
 .init-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 40px; padding: 0 24px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 48px; padding: 0;
 }
 .init-item { display: flex; align-items: flex-start; gap: 8px; }
 .init-label { font-size: 14px; color: #63656E; line-height: 32px; flex: none; }
 .init-label .req { color: #EA3636; font-style: normal; margin-right: 2px; }
 .init-field { flex: 1; min-width: 0; }
 
-.footer { margin-top: 20px; width: 860px; text-align: left; }
+.footer { margin-top: 4px; width: 880px; text-align: left; padding-left: 2px; }
 </style>
