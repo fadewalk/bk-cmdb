@@ -53,8 +53,9 @@
             }"
             @click="selectGroup(g)"
           >
-            <i :class="['toggle-arrow', g._collapsed ? 'icon-angle-right' : 'icon-angle-down']"
-               @click.stop="toggleCollapse(g)" />
+            <span class="toggle-arrow" @click.stop="toggleCollapse(g)">
+              <el-icon><component :is="g._collapsed ? 'ArrowRight' : 'ArrowDown'" /></el-icon>
+            </span>
             <span class="group-name" :title="g.bk_classification_name">{{ g.bk_classification_name }}</span>
             <span class="model-count">{{ countByGroup(g.bk_classification_id) }}</span>
           </div>
@@ -245,6 +246,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import { http, searchModels, searchClassifications } from '../../api/cmdb'
 
 const router = useRouter()
@@ -660,7 +662,7 @@ onMounted(async () => {
     ])
     modelList.value = models || []
     classifications.value = (groups || [])
-      .map((g) => ({ ...g, _collapsed: false }))
+      .map((g) => ({ ...g, _collapsed: true }))
       .sort((a, b) => (a.bk_classification_id || 0) - (b.bk_classification_id || 0))
     try {
       const modelIds = modelList.value.map((m) => m.bk_obj_id)
@@ -724,9 +726,10 @@ onBeforeUnmount(() => {
 .group-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-count { color: #979BA5; font-size: 12px; }
 .toggle-arrow {
-  width: 14px; font-size: 12px; color: #979BA5;
-  font-style: normal; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; color: #979BA5; cursor: pointer; flex: none;
 }
+.toggle-arrow:hover { color: #3A84FF; }
 .model-list {
   list-style: none; margin: 0; padding: 0 0 4px 28px;
 }
