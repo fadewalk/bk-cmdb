@@ -141,7 +141,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.waitForTimeout(2500)
     ok('资源目录加载')
     // 点 bk_switch 分类 → 跳模型实例页 /resource/instance/bk_switch(对齐老版 general-model)
-    await page.locator('.res-item:has(.res-name:has-text("交换机"))').click()
+    await page.locator('.models-link:has(.model-name:has-text("交换机"))').click()
     await page.waitForTimeout(1500)
     if (page.url().includes('/resource/instance/bk_switch')) ok(`点击"交换机"跳到: ${page.url()}`)
     else fail('资源目录路由', page.url())

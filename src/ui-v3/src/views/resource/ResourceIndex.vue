@@ -1,233 +1,204 @@
 <template>
   <div class="res-index">
-    <h1 class="page-title sr-only">资源目录</h1>
-    <h1 class="page-title sr-only">资源目录</h1>
+    <h1 class="page-title">资源目录</h1>
     <div class="res-body">
-      <!-- 左:资源分类树(对齐旧版:分组 + 计数) -->
-      <div class="tree-col">
-        <el-input v-model="keyword" placeholder="请输入关键字" size="small" clearable style="margin-bottom: 10px" />
-        <div v-for="group in groups" :key="group.name" class="res-group">
-          <h4 class="group-name">{{ group.name }}</h4>
-          <div
-            v-for="item in group.items" :key="item.id"
-            :class="['res-item', { active: activeType === item.id }]"
-            @click="selectType(item)"
-          >
-            <el-icon class="res-icon"><component :is="item.icon || 'Files'" /></el-icon>
-            <span class="res-name">{{ item.name }}</span>
-            <span class="res-count">{{ item.count }}</span>
-          </div>
-        </div>
+      <!-- 顶部搜索(对齐老版 classify-filter) -->
+      <div class="classify-filter">
+        <el-input
+          v-model="filter"
+          placeholder="请输入关键字"
+          clearable
+          style="width: 260px"
+          :suffix-icon="'Search'"
+        />
       </div>
 
-      <!-- 右:选中类型的资源列表 -->
-      <div class="main-col">
-        <div class="toolbar">
-          <span class="col-title">{{ activeName }}</span>
-          <div class="spacer" />
-          <el-button size="small" :icon="'Refresh'" @click="load">刷新</el-button>
+      <!-- 空状态 -->
+      <el-empty v-if="!loading && isEmpty" description="没有找到相关模型" :image-size="90" />
+
+      <!-- 瀑布流分组卡片(对齐老版 classify-waterfall 4 列) -->
+      <div v-show="!isEmpty" class="classify-waterfall-layout">
+        <div v-for="(col, ci) in classifyColumns" :key="ci" class="classify-waterfall">
+          <div v-for="group in col" :key="group.bk_classification_id" class="classify">
+            <h4 class="classify-name" :title="group.bk_classification_name">
+              <span class="classify-name-text">{{ group.bk_classification_name }}</span>
+            </h4>
+            <div class="models-layout">
+              <div
+                v-for="model in group.bk_objects"
+                :key="model.bk_obj_id"
+                class="models-link"
+                :title="model.bk_obj_name"
+                @click="redirect(model)"
+              >
+                <i :class="['model-icon', 'bk-cmdb-icon', model.bk_obj_icon]" />
+                <span class="model-name">{{ model.bk_obj_name }}</span>
+                <el-icon
+                  :class="['model-star']"
+                  :size="14"
+                  :title="isCollected(model) ? '取消收藏' : '收藏至导航'"
+                  :style="{ color: isCollected(model) ? '#FFB23A' : '#C4C6CC' }"
+                  @click.prevent.stop="toggleCollect(model)"
+                >
+                  <StarFilled v-if="isCollected(model)" />
+                  <Star v-else />
+                </el-icon>
+                <div class="model-instance-count">{{ counts[model.bk_obj_id] ?? 0 }}</div>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <!-- 主机 -->
-        <el-table v-if="activeType === 'host'" :data="hosts" v-loading="loading" size="small">
-          <el-table-column label="内网IPv4" min-width="130">
-            <template #default="{ row }">
-              <el-link type="primary" :underline="false" @click="$router.push({ path: '/host-detail', query: { id: row.bk_host_id } })">
-                {{ row.bk_host_innerip || '--' }}
-              </el-link>
-            </template>
-          </el-table-column>
-          <el-table-column label="主机名称" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.bk_host_name || '--' }}</template>
-          </el-table-column>
-          <el-table-column label="管控区域" width="130">
-            <template #default="{ row }">{{ row.bk_cloud_id === 0 ? 'Default Area[0]' : (row.bk_cloud_id ?? '--') }}</template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-if="activeType === 'host' && !loading && hosts.length === 0" description="暂无主机" :image-size="60" />
-
-        <!-- 业务 -->
-        <el-table v-if="activeType === 'biz'" :data="bizList" v-loading="loading" size="small">
-          <el-table-column prop="bk_biz_id" label="业务 ID" width="110" />
-          <el-table-column prop="bk_biz_name" label="业务名称" min-width="200" />
-        </el-table>
-
-        <!-- 其他模型:暂无实例时显示空态 -->
-        <el-empty v-if="!['host', 'biz'].includes(activeType)" :description="`「${activeName}」暂无实例(可在模型管理中维护)`" :image-size="70" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-// 资源目录:左分类树(带实例计数)+ 右侧列表,对齐旧版 resource/index
-import { ref, computed, watch, onMounted } from 'vue'
+// 资源目录:分类卡片瀑布流 + 实例计数(对齐老版 resource-manage/classify-panel)
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  listHostsWithoutApp, searchBusiness, getModelStatistics,
-  searchCloudAreas, searchCloudAccounts
-} from '../../api/cmdb'
-import { useBizStore } from '../../stores/biz'
+import { Star, StarFilled } from '@element-plus/icons-vue'
+import { http, searchClassificationWithObjects } from '../../api/cmdb'
 
 const router = useRouter()
-const bizStore = useBizStore()
-const keyword = ref('')
+const filter = ref('')
 const loading = ref(false)
-const activeType = ref('host')
-const activeName = ref('主机')
-const hosts = ref([])
-const bizList = ref([])
-const modelCounts = ref({})
+const classifications = ref([])
+const counts = ref({})
+// 收藏状态(老版存 userCustom,独立模式存 localStorage)
+const COLLECT_KEY = 'resource.collection'
+const collected = ref([])
 
-// 路由别名 → ui-v3 实际菜单路径
-const routeMap = {
+// 内置模型 → 资源菜单跳转(对齐老版 BUILTIN_MODEL_RESOURCE_MENUS)
+const BUILTIN_RESOURCE_MENUS = {
   host: '/resource/host',
-  biz: '/business/topo',
-  'biz-set': '/business/topo',
-  'bk_switch': '/resource/host',
-  'bk_router': '/resource/host',
-  'bk_load_balance': '/resource/host',
-  'bk_firewall': '/resource/host'
+  biz: '/resource/business',
+  bk_biz_set_obj: '/resource/biz-set',
+  bk_project: '/resource/project'
 }
+// 集群/模块不允许查看实例,不展示(对齐老版)
+const EXCLUDED = new Set(['set', 'module'])
 
-const groups = computed(() => {
-  const hostCount = modelCounts.value.host ?? 0
-  const bizCount = bizList.value.length
-  const areaCount = modelCounts.value['bk_cloud_area'] || 0
-  const acctCount = modelCounts.value['bk_cloud_account'] || 0
-  return [
-    { name: '主机管理', items: [
-      { id: 'host', name: '主机', count: hostCount, icon: 'Monitor' }
-    ]},
-    {
-      name: '组织架构',
-      items: [
-        { id: 'biz', name: '业务', count: bizCount, icon: 'OfficeBuilding' },
-        { id: 'biz-set', name: '业务集', count: 0, icon: 'Files' },
-        { id: 'project', name: '项目', count: 0, icon: 'Folder' }
-      ]
-    },
-    {
-      name: '网络',
-      items: ['bk_switch:交换机', 'bk_router:路由器', 'bk_load_balance:负载均衡', 'bk_firewall:防火墙'].map((s) => {
-        const [id, name] = s.split(':')
-        return { id, name, count: modelCounts.value[id] || 0, icon: 'Connection' }
-      })
-    },
-    {
-      name: '云资源',
-      items: [
-        { id: 'cloud-area', name: '管控区域', count: areaCount, icon: 'CirclePlus', route: '/resource/cloud-area' },
-        { id: 'cloud-account', name: '云账户', count: acctCount, icon: 'User', route: '/resource/cloud-account' },
-        { id: 'cloud-discover', name: '云资源发现', count: 0, icon: 'View', route: '/resource/cloud-discover' }
-      ]
-    }
-  ]
+const filteredClassifications = computed(() => {
+  const kw = filter.value.trim().toLowerCase()
+  const result = []
+  for (const classification of classifications.value) {
+    const models = (classification.bk_objects || []).filter((model) => {
+      if (model.bk_ishidden || model.bk_ispaused) return false
+      if (EXCLUDED.has(model.bk_obj_id)) return false
+      if (!kw) return true
+      return (model.bk_obj_name || '').toLowerCase().includes(kw) ||
+        (model.bk_obj_id || '').toLowerCase().includes(kw)
+    })
+    if (models.length) result.push({ ...classification, bk_objects: models })
+  }
+  return result
 })
 
-const flatItems = computed(() => groups.value.flatMap((g) => g.items))
+// 4 列瀑布流:按累计高度(1 + 模型数)贪心放入最矮列(对齐老版 classifyColumns)
+const classifyColumns = computed(() => {
+  const colHeight = [0, 0, 0, 0]
+  const columns = [[], [], [], []]
+  for (const classify of filteredClassifications.value) {
+    const minIndex = colHeight.indexOf(Math.min(...colHeight))
+    columns[minIndex].push(classify)
+    colHeight[minIndex] += 1 + classify.bk_objects.length
+  }
+  return columns.filter((col) => col.length)
+})
 
-function selectType(item) {
-  activeType.value = item.id
-  activeName.value = item.name
-  // 联动到独立页:管控区域 / 云账户 / 资源池主机
-  if (item.route) {
-    router.push(item.route)
+const isEmpty = computed(() => classifyColumns.value.length === 0)
+
+function isCollected(model) {
+  return collected.value.includes(model.bk_obj_id)
+}
+function toggleCollect(model) {
+  const id = model.bk_obj_id
+  if (collected.value.includes(id)) {
+    collected.value = collected.value.filter((x) => x !== id)
+  } else {
+    collected.value = [...collected.value, id]
+  }
+  try { localStorage.setItem(COLLECT_KEY, JSON.stringify(collected.value)) } catch { /* ignore */ }
+}
+
+function redirect(model) {
+  const builtin = BUILTIN_RESOURCE_MENUS[model.bk_obj_id]
+  if (builtin) {
+    router.push(builtin)
     return
   }
-  // 通用分类页面:跳到模型实例列表(对齐旧版 general-model)
-  if (item.id !== 'host' && item.id !== 'biz') {
-    router.push(`/resource/instance/${item.id}`)
-    return
-  }
-  // host / biz 维持内嵌切换
-  if (item.id === 'host') loadHosts()
-  if (item.id === 'biz') loadBiz()
+  router.push(`/resource/instance/${model.bk_obj_id}`)
 }
 
-async function loadHosts() {
-  loading.value = true
+async function loadCounts(objIds) {
+  // /object/count 挂在 web_server 根路径(不在 /api/v3 下)
   try {
-    const data = await listHostsWithoutApp({ start: 0, limit: 500, sort: 'bk_host_id' })
-    hosts.value = (data?.info || []).map((h) => h.host || h)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadBiz() {
-  loading.value = true
-  try {
-    const data = await searchBusiness({ start: 0, limit: 200 })
-    bizList.value = data?.info || []
-  } finally {
-    loading.value = false
-  }
-}
-
-async function load() {
-  loading.value = true
-  try {
-    await Promise.allSettled([loadHosts(), loadBiz(), loadModelCounts(), loadCloudCounts()])
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadCloudCounts() {
-  const [a, acc] = await Promise.allSettled([
-    searchCloudAreas({ start: 0, limit: 1000 }),
-    searchCloudAccounts({ start: 0, limit: 1000 })
-  ])
-  const next = { ...modelCounts.value }
-  if (a.status === 'fulfilled') next['bk_cloud_area'] = (a.value?.info || []).length
-  if (acc.status === 'fulfilled') next['bk_cloud_account'] = (acc.value?.info || []).length
-  modelCounts.value = next
-}
-
-async function loadModelCounts() {
-  try {
-    const stats = await getModelStatistics()
+    const data = await http.post('/object/count', { condition: { obj_ids: objIds } }, { baseURL: '' })
     const map = {}
-    for (const s of stats || []) map[s.bk_obj_id] = s.instance_count
-    modelCounts.value = map
-  } catch (e) { /* 忽略 */ }
+    for (const item of data || []) map[item.bk_obj_id] = item.inst_count
+    counts.value = map
+  } catch { counts.value = {} }
 }
 
 onMounted(async () => {
-  await bizStore.ensureLoaded()
-  load()
+  loading.value = true
+  try {
+    try { collected.value = JSON.parse(localStorage.getItem(COLLECT_KEY) || 'null') } catch { collected.value = null }
+    // 老版默认收藏内置资源模型(黄星)
+    if (!Array.isArray(collected.value)) collected.value = Object.keys(BUILTIN_RESOURCE_MENUS)
+    const data = await searchClassificationWithObjects()
+    classifications.value = data || []
+    const ids = classifications.value
+      .flatMap((c) => c.bk_objects || [])
+      .filter((m) => !m.bk_ishidden && !m.bk_ispaused && !EXCLUDED.has(m.bk_obj_id))
+      .map((m) => m.bk_obj_id)
+    loadCounts(ids)
+  } finally { loading.value = false }
 })
 </script>
 
 <style scoped>
-.res-index { height: 100%; display: flex; flex-direction: column; background: #fff; }
+.res-index { height: 100%; display: flex; flex-direction: column; background: #fff; overflow-y: auto; }
 .page-title {
+  flex: none;
   font-size: 16px; color: #313238; font-weight: 400;
   padding: 0 20px; height: 50px; line-height: 50px;
-  border-bottom: 1px solid #E7E9EF; margin: 0;
+  background: #fff;
+  border-bottom: 1px solid #E7E9EF;
+  margin: 0;
 }
-.res-body { flex: 1; display: flex; overflow: hidden; }
-.tree-col {
-  width: 260px; flex: 0 0 260px;
-  border-right: 1px solid #E7E9EF;
-  padding: 12px; overflow: auto;
+.res-body { flex: 1; padding: 20px 20px 40px; }
+
+.classify-filter { margin-bottom: 20px; }
+
+/* 瀑布流 4 列(对齐老版 classify-waterfall fl) */
+.classify-waterfall-layout { display: flex; gap: 20px; align-items: flex-start; }
+.classify-waterfall { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+
+.classify {
+  background: #fff;
+  border: 1px solid #DCDEE5;
+  border-radius: 2px;
+  padding: 0 20px 10px;
 }
-.group-name {
-  margin: 10px 0 4px; font-size: 13px; color: #313238; font-weight: 600;
+.classify-name {
+  margin: 0 -20px; padding: 0 20px;
+  height: 50px; line-height: 50px;
+  font-size: 14px; color: #313238; font-weight: 700;
+  border-bottom: 1px solid #E7E9EF;
 }
-.res-item {
-  display: flex; align-items: center; gap: 8px;
-  height: 32px; padding: 0 8px; font-size: 12px;
-  color: #63656E; cursor: pointer; border-radius: 2px;
+.models-layout { padding: 8px 0; }
+.models-link {
+  display: flex; align-items: center; gap: 10px;
+  height: 40px; line-height: 40px;
+  cursor: pointer; user-select: none;
 }
-.res-item:hover { background: #F6F6F9; }
-.res-item.active { background: #E1ECFF; color: #3A84FF; }
-.res-icon { display: flex; }
-.res-name { flex: 1; }
-.res-count { color: #979BA5; }
-.main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 16px 12px; }
-.toolbar { display: flex; align-items: center; margin-bottom: 10px; }
-.toolbar .spacer { flex: 1; }
-.col-title { font-size: 14px; font-weight: 600; color: #313238; }
+.models-link:hover .model-name { color: #3A84FF; }
+.model-icon { font-size: 16px; color: #3A84FF; flex: none; }
+.model-name { flex: 1; min-width: 0; font-size: 14px; color: #63656E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-star { font-size: 14px; color: #C4C6CC; cursor: pointer; flex: none; }
+.model-star:hover { color: #979BA5; }
+.models-link .icon-star-shape { color: #FFB23A; }
+.model-instance-count { font-size: 12px; color: #979BA5; flex: none; min-width: 24px; text-align: right; }
 </style>
