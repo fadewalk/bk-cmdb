@@ -217,37 +217,71 @@
       </div>
 
       <!-- 右侧详情面板 -->
-      <div v-if="selectedModel" class="topo-detail">
-        <div class="detail-head">
-          <h3>{{ selectedModel.bk_obj_name }}</h3>
-          <el-button link type="primary" size="small" @click="goModel(selectedModel)">查看详情 →</el-button>
-        </div>
-        <el-descriptions :column="1" border size="small">
-          <el-descriptions-item label="模型 ID">{{ selectedModel.bk_obj_id }}</el-descriptions-item>
-          <el-descriptions-item label="分类 ID">{{ selectedModel.bk_classification_id || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="是否预置">{{ selectedModel.bk_ispre ? '是' : '否' }}</el-descriptions-item>
-        </el-descriptions>
-        <div v-if="modelAssocs.length" class="detail-assoc">
-          <div class="da-title">关联此模型 ({{ modelAssocs.length }})</div>
-          <ul>
-            <li v-for="(a, i) in modelAssocs" :key="i" @click="goAssoc(a)" class="da-item">
-              <span class="da-name">{{ a.name }}</span>
-              <span class="da-arrow">{{ a.dir }}</span>
-              <span class="da-target">{{ a.targetName }}</span>
-            </li>
-          </ul>
+        <div v-if="selectedModel" class="topo-detail">
+          <div class="detail-head">
+            <h3>{{ selectedModel.bk_obj_name }}</h3>
+            <el-button link type="primary" size="small" @click="goModel(selectedModel)">查看详情 →</el-button>
+          </div>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="模型 ID">{{ selectedModel.bk_obj_id }}</el-descriptions-item>
+            <el-descriptions-item label="分类 ID">{{ selectedModel.bk_classification_id || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="是否预置">{{ selectedModel.ispre ? '是' : '否' }}</el-descriptions-item>
+          </el-descriptions>
+          <div class="detail-actions">
+            <el-button v-if="isEdit" type="primary" size="small" @click="openCreateRelation(selectedModel.bk_obj_id)">创建关联</el-button>
+          </div>
+          <div v-if="modelAssocs.length" class="detail-assoc">
+            <div class="da-title">关联此模型 ({{ modelAssocs.length }})</div>
+            <ul>
+              <li v-for="(a, i) in modelAssocs" :key="i" @click="goAssoc(a)" class="da-item">
+                <span class="da-name">{{ a.name }}</span>
+                <span class="da-arrow">{{ a.dir }}</span>
+                <span class="da-target">{{ a.targetName }}</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
+
+    <!-- 关系详情/编辑 -->
+      <el-drawer v-model="relationDetailVisible" :title="relationForm.bk_obj_asst_name || relationForm.bk_asst_id || '关联关系详情'" size="460px">
+        <el-form label-width="100px">
+          <el-form-item label="源模型"><el-input :model-value="modelName(relationForm.bk_obj_id)" disabled /></el-form-item>
+          <el-form-item label="目标模型"><el-input :model-value="modelName(relationForm.bk_asst_obj_id)" disabled /></el-form-item>
+          <el-form-item label="关联类型"><el-input :model-value="relationForm.bk_asst_id" disabled /></el-form-item>
+          <el-form-item label="源-目标约束"><el-input :model-value="relationForm.mapping || '--'" disabled /></el-form-item>
+          <el-form-item label="关联描述"><el-input v-model="relationForm.bk_obj_asst_name" :disabled="!isEdit || relationForm.ispre || relationForm.bk_asst_id === 'bk_mainline'" maxlength="256" /></el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="relationDetailVisible = false">关闭</el-button>
+          <el-button v-if="isEdit && relationForm.id && !relationForm.ispre && relationForm.bk_asst_id !== 'bk_mainline'" type="primary" :loading="relationSaving" @click="saveRelation">保存</el-button>
+          <el-button v-if="isEdit && relationForm.id && !relationForm.ispre && relationForm.bk_asst_id !== 'bk_mainline'" type="danger" plain :loading="relationSaving" @click="removeRelation">删除关联</el-button>
+        </template>
+      </el-drawer>
+
+      <!-- 创建关系 -->
+      <el-drawer v-model="relationCreateVisible" title="新建关联" size="500px">
+        <el-form ref="relationCreateFormRef" :model="relationCreateForm" :rules="relationRules" label-width="110px">
+          <el-form-item label="源模型" prop="bk_obj_id"><el-select v-model="relationCreateForm.bk_obj_id" filterable style="width: 100%"><el-option v-for="m in modelList" :key="m.bk_obj_id" :label="`${m.bk_obj_name} (${m.bk_obj_id})`" :value="m.bk_obj_id" /></el-select></el-form-item>
+          <el-form-item label="目标模型" prop="bk_asst_obj_id"><el-select v-model="relationCreateForm.bk_asst_obj_id" filterable style="width: 100%"><el-option v-for="m in modelList" :key="m.bk_obj_id" :label="`${m.bk_obj_name} (${m.bk_obj_id})`" :value="m.bk_obj_id" /></el-select></el-form-item>
+          <el-form-item label="关联类型" prop="bk_asst_id"><el-select v-model="relationCreateForm.bk_asst_id" filterable style="width: 100%"><el-option v-for="a in relationTypes" :key="a.bk_asst_id" :label="`${a.bk_asst_id}${a.bk_asst_name ? `(${a.bk_asst_name})` : ''}`" :value="a.bk_asst_id" /></el-select></el-form-item>
+          <el-form-item label="源-目标约束" prop="mapping"><el-select v-model="relationCreateForm.mapping" style="width: 100%"><el-option label="N-N" value="n:n" /><el-option v-if="relationCreateForm.bk_obj_id !== relationCreateForm.bk_asst_obj_id" label="1-N" value="1:n" /><el-option label="1-1" value="1:1" /></el-select></el-form-item>
+          <el-form-item label="关联描述"><el-input v-model="relationCreateForm.bk_obj_asst_name" type="textarea" maxlength="256" /></el-form-item>
+        </el-form>
+        <template #footer><el-button @click="relationCreateVisible = false">取消</el-button><el-button type="primary" :loading="relationSaving" @click="createRelation">提交</el-button></template>
+      </el-drawer>
     </div>
-  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
-import { http, searchModels, searchClassifications } from '../../api/cmdb'
+import {
+  searchModels, searchClassifications, searchAssociationTypes,
+  searchObjectAssociations, createObjectAssociation, updateObjectAssociation, deleteObjectAssociation
+} from '../../api/cmdb'
 
 const router = useRouter()
 const wrap = ref(null)
@@ -263,6 +297,19 @@ const hideGroupIds = ref([])
 const selectedModelId = ref(null)
 const selectedEdge = ref(null)
 const hoveredNode = ref(null)
+const relationTypes = ref([])
+const relationDetailVisible = ref(false)
+const relationCreateVisible = ref(false)
+const relationSaving = ref(false)
+const relationForm = ref({})
+const relationCreateForm = ref({})
+const relationCreateFormRef = ref(null)
+const relationRules = {
+  bk_obj_id: [{ required: true, message: '请选择源模型', trigger: 'change' }],
+  bk_asst_obj_id: [{ required: true, message: '请选择目标模型', trigger: 'change' }],
+  bk_asst_id: [{ required: true, message: '请选择关联类型', trigger: 'change' }],
+  mapping: [{ required: true, message: '请选择源-目标约束', trigger: 'change' }]
+}
 
 const isEdit = ref(false)
 const isFullscreen = ref(false)
@@ -354,12 +401,120 @@ function selectModel(m) {
 function goModel(m) {
   router.push(`/model/management/details/${m.bk_obj_id}`)
 }
+function modelName(id) {
+  return modelList.value.find((m) => m.bk_obj_id === id)?.bk_obj_name || id || '--'
+}
+function associationItems(data) {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.info)) return data.info
+  return []
+}
 function goAssoc(a) {
-  if (a.dir === '→') {
-    const t = modelList.value.find((m) => m.bk_obj_id === a.targetId)
-    if (t) { selectedModelId.value = t.bk_obj_id; selectModel(t) }
-  } else {
-    selectedModelId.value = selectedModelId.value
+  const relation = assocList.value.find((item) => item.id === a.id || (item.bk_obj_id === selectedModelId.value && item.bk_asst_obj_id === a.targetId))
+  if (relation) onEdgeClick(edges.value.find((edge) => edge.assocId === relation.id) || { assoc: relation, key: null })
+}
+
+async function loadRelationTypes() {
+  try {
+    const data = await searchAssociationTypes({ page: { start: 0, limit: 200, sort: 'bk_asst_id' } })
+    relationTypes.value = associationItems(data).filter((item) => item.bk_asst_id !== 'bk_mainline')
+  } catch (e) {
+    relationTypes.value = []
+    ElMessage.error('关联类型加载失败: ' + (e?.message || '后端异常'))
+  }
+}
+
+async function reloadAssociations() {
+  const modelIds = modelList.value.map((m) => m.bk_obj_id)
+  const data = await searchObjectAssociations({ condition: { $or: [{ bk_obj_id: { $in: modelIds } }, { bk_asst_obj_id: { $in: modelIds } }] }, page: { start: 0, limit: 2000 } })
+  assocList.value = associationItems(data)
+  layout()
+}
+
+async function openRelationDetail(relation) {
+  relationDetailVisible.value = true
+  relationForm.value = { ...relation }
+  try {
+    const data = await searchObjectAssociations({ condition: { id: relation.id }, page: { start: 0, limit: 1 } })
+    const item = associationItems(data)[0]
+    if (item) relationForm.value = { ...item }
+  } catch (e) { ElMessage.error('关联详情加载失败: ' + (e?.message || '后端异常')) }
+}
+function openCreateRelation(fromObjId = '') {
+  relationCreateForm.value = {
+    bk_obj_id: fromObjId,
+    bk_asst_obj_id: '',
+    bk_asst_id: relationTypes.value[0]?.bk_asst_id || '',
+    mapping: 'n:n',
+    bk_obj_asst_name: ''
+  }
+  relationCreateVisible.value = true
+}
+async function createRelation() {
+  const valid = await relationCreateFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+  if (relationCreateForm.value.bk_obj_id === relationCreateForm.value.bk_asst_obj_id && relationCreateForm.value.mapping === '1:n') {
+    ElMessage.warning('自关联不支持 1-N 约束')
+    return
+  }
+  relationSaving.value = true
+    try {
+      await createObjectAssociation({ ...relationCreateForm.value, bk_obj_asst_id: `${relationCreateForm.value.bk_obj_id}_${relationCreateForm.value.bk_asst_id}_${relationCreateForm.value.bk_asst_obj_id}` })
+    } catch (e) {
+      ElMessage.error('关联创建失败: ' + (e?.message || '后端异常'))
+      return
+    } finally {
+      relationSaving.value = false
+    }
+    ElMessage.success('关联创建成功')
+    relationCreateVisible.value = false
+    try {
+      await reloadAssociations()
+    } catch (e) {
+      ElMessage.error('关联已创建，但拓扑刷新失败: ' + (e?.message || '后端异常'))
+    }
+}
+async function saveRelation() {
+  relationSaving.value = true
+  try {
+    await updateObjectAssociation(relationForm.value.id, { bk_obj_asst_name: relationForm.value.bk_obj_asst_name })
+  } catch (e) {
+    ElMessage.error('关联更新失败: ' + (e?.message || '后端异常'))
+    return
+  } finally {
+    relationSaving.value = false
+  }
+  ElMessage.success('关联已更新')
+  relationDetailVisible.value = false
+  try {
+    await reloadAssociations()
+  } catch (e) {
+    ElMessage.error('关联已更新，但拓扑刷新失败: ' + (e?.message || '后端异常'))
+  }
+}
+
+async function removeRelation() {
+  try {
+    await ElMessageBox.confirm('确定删除关联关系?', '删除确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  relationSaving.value = true
+  try {
+    await deleteObjectAssociation(relationForm.value.id)
+  } catch (e) {
+    ElMessage.error('关联删除失败: ' + (e?.message || '后端异常'))
+    return
+  } finally {
+    relationSaving.value = false
+  }
+  ElMessage.success('关联已删除')
+  relationDetailVisible.value = false
+  selectedEdge.value = null
+  try {
+    await reloadAssociations()
+  } catch (e) {
+    ElMessage.error('关联已删除，但拓扑刷新失败: ' + (e?.message || '后端异常'))
   }
 }
 
@@ -372,10 +527,10 @@ const modelAssocs = computed(() => {
   for (const a of assocList.value) {
     if (a.bk_obj_id === selectedModelId.value) {
       const t = modelList.value.find((m) => m.bk_obj_id === a.bk_asst_obj_id)
-      out.push({ name: a.bk_asst_name || a.bk_asst_id, dir: '→', targetId: a.bk_asst_obj_id, targetName: t?.bk_obj_name || a.bk_asst_obj_id })
+      out.push({ id: a.id, name: a.bk_asst_name || a.bk_asst_id, dir: '→', targetId: a.bk_asst_obj_id, targetName: t?.bk_obj_name || a.bk_asst_obj_id })
     } else if (a.bk_asst_obj_id === selectedModelId.value) {
       const t = modelList.value.find((m) => m.bk_obj_id === a.bk_obj_id)
-      out.push({ name: a.bk_asst_name || a.bk_asst_id, dir: '←', targetId: a.bk_obj_id, targetName: t?.bk_obj_name || a.bk_obj_id })
+      out.push({ id: a.id, name: a.bk_asst_name || a.bk_asst_id, dir: '←', targetId: a.bk_obj_id, targetName: t?.bk_obj_name || a.bk_obj_id })
     }
   }
   return out
@@ -447,16 +602,18 @@ function layout() {
   nodes.value = Object.values(placed)
   edges.value = assocList.value
     .filter((a) => placed[a.bk_obj_id] && placed[a.bk_asst_obj_id])
-    .map((a, i) => ({
-      key: i,
-      label: a.bk_asst_name || a.bk_asst_id,
+      .map((a, i) => ({
+        key: i,
+        assocId: a.id,
+        assoc: a,
+        label: a.bk_asst_name || a.bk_asst_id,
       x1: placed[a.bk_obj_id].x,
       y1: placed[a.bk_obj_id].y,
       x2: placed[a.bk_asst_obj_id].x,
       y2: placed[a.bk_asst_obj_id].y,
       g1: placed[a.bk_obj_id].groupId,
       g2: placed[a.bk_asst_obj_id].groupId,
-      builtIn: !!(a.bk_ispre) || (placed[a.bk_obj_id].mainLine && placed[a.bk_asst_obj_id].mainLine),
+      builtIn: !!(a.ispre) || (placed[a.bk_obj_id].mainLine && placed[a.bk_asst_obj_id].mainLine),
       hover: false
     }))
   fitView()
@@ -620,7 +777,11 @@ function onEdgeLeave() {
 function onEdgeClick(e) {
   selectedEdge.value = e.key
   selectedModelId.value = null
-  ElMessage.info(`关联 ${e.label}:从 ${e.g1} 到 ${e.g2}`)
+  if (e.assoc) {
+    openRelationDetail(e.assoc)
+  } else {
+    ElMessage.warning('关联数据不存在,请刷新拓扑')
+  }
 }
 
 // ===== 悬浮 tooltip =====
@@ -658,20 +819,33 @@ onMounted(async () => {
   try {
     const [models, groups] = await Promise.all([
       searchModels({}),
-      searchClassifications().catch(() => [])
+      searchClassifications().catch((e) => {
+        ElMessage.error('分类加载失败: ' + (e?.message || '后端异常'))
+        return []
+      })
     ])
     modelList.value = models || []
     classifications.value = (groups || [])
       .map((g) => ({ ...g, _collapsed: true }))
       .sort((a, b) => (a.bk_classification_id || 0) - (b.bk_classification_id || 0))
+    await loadRelationTypes()
     try {
       const modelIds = modelList.value.map((m) => m.bk_obj_id)
-      const assoc = await http.post('/find/objectassociation', {
-        condition: { bk_obj_id: { $in: modelIds } }
-      }).catch(() => [])
-      assocList.value = Array.isArray(assoc) ? assoc : []
-    } catch { assocList.value = [] }
+      const assoc = await searchObjectAssociations({
+        condition: { $or: [{ bk_obj_id: { $in: modelIds } }, { bk_asst_obj_id: { $in: modelIds } }] },
+        page: { start: 0, limit: 2000 }
+      })
+      assocList.value = associationItems(assoc)
+    } catch (e) {
+      assocList.value = []
+      ElMessage.error('关联数据加载失败: ' + (e?.message || '后端异常'))
+    }
     layout()
+  } catch (e) {
+    modelList.value = []
+    classifications.value = []
+    assocList.value = []
+    ElMessage.error('拓扑数据加载失败: ' + (e?.message || '后端异常'))
   } finally { loading.value = false }
 })
 onBeforeUnmount(() => {
