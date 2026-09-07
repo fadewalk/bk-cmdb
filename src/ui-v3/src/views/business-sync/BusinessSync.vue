@@ -4,8 +4,14 @@
     <p class="page-tips">查看服务实例与所属服务模板之间的差异;支持手动触发同步,保障业务属性与服务模板配置一致</p>
 
     <div class="toolbar">
-      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 260px" :disabled="!bizStore.bizId" @change="load">
+      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 220px" :disabled="!bizStore.bizList.length" @change="loadTemplates">
         <el-option v-for="b in bizStore.bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
+      </el-select>
+      <el-select v-model="templateId" placeholder="选择服务模板" filterable style="width: 220px" :disabled="!bizId" @change="loadModules">
+        <el-option v-for="t in templates" :key="t.id" :label="t.name || t.bk_service_template_name" :value="t.id" />
+      </el-select>
+      <el-select v-model="moduleId" placeholder="选择模块" filterable style="width: 220px" :disabled="!templateId" @change="load">
+        <el-option v-for="m in modules" :key="m.id" :label="m.name || m.bk_module_name" :value="m.id" />
       </el-select>
       <div class="spacer" />
       <el-button :icon="'Refresh'" @click="load">刷新</el-button>
@@ -32,9 +38,9 @@
             <span v-if="!(row.diff_fields || []).length" style="color: #2DCB56">无差异</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" :disabled="!row.diff_fields?.length" @click="syncOne(row)">同步</el-button>
+            <el-button link type="primary" size="small" :disabled="!row.diff_fields?.length" @click="syncOne(row)">同步当前模块</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -47,52 +53,116 @@
 import { ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
-import { http } from '../../api/cmdb'
+import { searchServiceTemplates, getServiceTemplateDiff, syncServiceInstances, listModulesByServiceTemplate } from '../../api/cmdb'
 
 const bizStore = useBizStore()
 const bizId = ref(bizStore.bizId || null)
+const templateId = ref(null)
+const moduleId = ref(null)
+const templates = ref([])
+const modules = ref([])
 const loading = ref(false)
 const syncing = ref(false)
 const diffs = ref([])
 
-async function load() {
+async function loadTemplates() {
+  templateId.value = null
+  moduleId.value = null
+  modules.value = []
+  diffs.value = []
   if (!bizId.value) return
+  try {
+    const data = await searchServiceTemplates(bizId.value, { start: 0, limit: 200 })
+    templates.value = data?.info || []
+  } catch { templates.value = [] }
+}
+
+async function loadModules() {
+  moduleId.value = null
+  diffs.value = []
+  modules.value = []
+  if (!bizId.value || !templateId.value) return
+
+  try {
+    const data = await listModulesByServiceTemplate(bizId.value, templateId.value)
+    modules.value = (data?.info || []).map((module) => ({
+      id: module.bk_module_id || module.id,
+      name: module.bk_module_name || module.name || String(module.bk_module_id || module.id)
+    }))
+  } catch {
+    modules.value = []
+  }
+}
+
+function normalizeDiff(data) {
+  const rows = []
+  for (const [type, items] of [['changed', data?.changed], ['added', data?.added], ['removed', data?.removed]]) {
+    for (const item of items || []) {
+      rows.push({
+        instance_id: item.id || item.process_template_id || '-',
+        instance_name: item.name || item.process_template_name || '-',
+        template_id: templateId.value,
+        diff_fields: [{ field: type, cur: type === 'added' ? '' : item.name || '-', target: type === 'removed' ? '' : '模板配置' }],
+        raw: item
+      })
+    }
+  }
+  if (data?.attributes?.length) {
+    rows.push({
+      instance_id: '-',
+      instance_name: '模块属性',
+      template_id: templateId.value,
+      diff_fields: data.attributes.map((item) => ({ field: item.name || item.id || '属性', cur: item.current, target: item.template }))
+    })
+  }
+  return rows
+}
+
+async function load() {
+  if (!bizId.value || !templateId.value || !moduleId.value) return
   loading.value = true
   try {
-    const data = await http.post(`/find/proc/service_template/general_difference/bk_biz_id/${bizId.value}`, {})
-    const list = data?.info || data?.differences || []
-    diffs.value = list
-  } catch (e) {
+    const data = await getServiceTemplateDiff({
+      bk_biz_id: bizId.value,
+      service_template_id: templateId.value,
+      bk_module_id: moduleId.value
+    })
+    diffs.value = normalizeDiff(data)
+  } catch {
     diffs.value = []
   } finally { loading.value = false }
 }
 
 async function syncAll() {
-  if (!diffs.value.length) return
-  await ElMessageBox.confirm(`确定对 ${diffs.value.length} 个差异实例执行同步?`, '同步', { type: 'warning' })
+  if (!bizId.value || !templateId.value || !moduleId.value || !diffs.value.length) return
+  await ElMessageBox.confirm(`确定同步当前模块的服务模板差异?`, '同步', { type: 'warning' })
   syncing.value = true
   try {
-    await http.post(`/updatemany/proc/service_instance/sync/bk_biz_id/${bizId.value}`, { difference: diffs.value })
-    ElMessage.success('同步已提交,可在「同步历史」查看进度')
+    await syncServiceInstances({
+      bk_biz_id: bizId.value,
+      service_template_id: templateId.value,
+      bk_module_ids: [moduleId.value]
+    })
+    ElMessage.success('同步已提交')
     await load()
   } catch (e) {
     ElMessage.error('同步失败: ' + (e?.message || '后端异常'))
   } finally { syncing.value = false }
 }
 
-async function syncOne(row) {
-  await ElMessageBox.confirm(`同步实例「${row.instance_name}」?`, '同步', { type: 'warning' })
-  syncing.value = true
-  try {
-    await http.post(`/updatemany/proc/service_instance/sync/bk_biz_id/${bizId.value}`, { difference: [row] })
-    ElMessage.success('已同步')
-    await load()
-  } catch (e) { ElMessage.error('同步失败: ' + (e?.message || '后端异常')) }
-  finally { syncing.value = false }
+async function syncOne() {
+  return syncAll()
 }
 
-watch(() => bizStore.bizId, (v) => { bizId.value = v; load() })
-onMounted(() => { if (bizId.value) load() })
+watch(() => bizStore.bizId, (v) => {
+  bizId.value = v
+  loadTemplates()
+})
+onMounted(async () => {
+  await bizStore.ensureLoaded()
+  bizId.value = bizStore.bizId
+  if (bizId.value) await loadTemplates()
+})
 </script>
 
 <style scoped>

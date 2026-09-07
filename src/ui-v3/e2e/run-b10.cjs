@@ -70,15 +70,16 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.goto('http://localhost:8090/#/model/association', { waitUntil: 'load' })
     await page.waitForTimeout(2500)
     ok('关联类型页加载')
-    const assocTabs = await page.locator('.el-tabs__item').allTextContents()
-    if (assocTabs.length >= 2) ok(`关联类型 tabs: ${assocTabs.join(' | ')}`)
-    // 新建关联类型
-    const newAssoc = page.locator('button:has-text("新建关联类型")')
+    const assocRows = await page.locator('.relation-table .el-table__row').count()
+    ok(`关联类型 rows: ${assocRows}`)
+    const newAssoc = page.locator('button:has-text("新建")').first()
     if (await newAssoc.count() > 0) {
       await newAssoc.click()
       await page.waitForTimeout(500)
-      const dlg = await page.locator('.el-dialog:has-text("新建关联类型")').isVisible().catch(() => false)
-      if (dlg) ok('关联类型新建对话框打开')
+      const drawer = await page.locator('.el-drawer:has-text("新建关联类型")').isVisible().catch(() => false)
+      if (drawer) ok('关联类型新建抽屉打开')
+      else fail('关联类型新建', '抽屉未出现')
+      await page.keyboard.press('Escape')
     }
 
     console.log('')

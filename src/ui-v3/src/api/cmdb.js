@@ -17,6 +17,10 @@ export const getBizTopoTree = (bizId) =>
 export const getBizInternalTopo = (bizId) =>
   http.get(`/topo/internal/0/${bizId}/with_statistics`)
 
+// 按服务模板查询已绑定的业务模块
+export const listModulesByServiceTemplate = (bizId, serviceTemplateId, page = { start: 0, limit: 200 }) =>
+  http.post(`/module/bk_biz_id/${bizId}/service_template_id/${serviceTemplateId}`, { page })
+
 // 集群 / 模块 CRUD
 export const createSet = (bizId, name) =>
   http.post(`/set/${bizId}`, { bk_set_name: name, bk_parent_id: bizId, bk_supplier_account: '0' })
@@ -314,14 +318,42 @@ export const deleteUnique = (objId, id) =>
   http.post(`/delete/objectunique/object/${objId}/unique/${id}`, {})
 
 // ---------- 关联类型 ----------
-export const searchAssociationTypes = () =>
-  http.post('/find/associationtype', { condition: {}, page: { start: 0, limit: 100 } })
+export const searchAssociationTypes = (data = {}) =>
+  http.post('/find/associationtype', data)
+export const countAssociationTypes = (asstIds) =>
+  http.post('/count/topoassociationtype', { asst_ids: asstIds })
+export const getAssociationType = (id) =>
+  http.post('/find/associationtype', { condition: { id }, page: { start: 0, limit: 1 } })
 export const createAssociationType = (data) =>
   http.post('/create/associationtype', { ...data })
 export const updateAssociationType = (id, data) =>
   http.put(`/update/associationtype/${id}`, { ...data })
 export const deleteAssociationType = (id) =>
   http.delete(`/delete/associationtype/${id}`)
+
+// ---------- 模型关联关系 ----------
+export const searchObjectAssociations = (data = {}) =>
+  http.post('/find/objectassociation', data)
+export const createObjectAssociation = (data) =>
+  http.post('/create/objectassociation', data)
+export const updateObjectAssociation = (id, data) =>
+  http.put(`/update/objectassociation/${id}`, data)
+export const deleteObjectAssociation = (id) =>
+  http.delete(`/delete/objectassociation/${id}`)
+
+// ---------- 通用模型实例(自定义模型;内置模型后端拒绝) ----------
+export const searchInstances = (objId, data = {}) =>
+  http.post(`/search/instances/object/${objId}`, data)
+export const countInstances = (objId, data = {}) =>
+  http.post(`/count/instances/object/${objId}`, data)
+export const createInstance = (objId, data) =>
+  http.post(`/create/instance/object/${objId}`, data)
+export const updateInstance = (objId, instId, data) =>
+  http.put(`/update/instance/object/${objId}/inst/${instId}`, data)
+export const deleteInstance = (objId, instId) =>
+  http.delete(`/delete/instance/object/${objId}/inst/${instId}`)
+export const deleteInstances = (objId, ids) =>
+  http.delete(`/deletemany/instance/object/${objId}`, { data: { delete: { inst_ids: ids } } })
 
 // ---------- 集群模板 ----------
 export const searchSetTemplates = (bizId, page) =>
@@ -348,16 +380,42 @@ export const searchBusinessSetTopology = (bizSetId, data) =>
   http.post(`/find/topoinst/bk_biz_id/${bizSetId}`, data)
 
 // ---------- 字段组合模板 ----------
-export const searchFieldTemplates = (data) =>
+export const searchFieldTemplates = (data = {}) =>
   http.post('/findmany/field_template', data)
 export const getFieldTemplate = (id) =>
   http.get(`/find/field_template/${id}`)
+export const searchFieldTemplateAttributes = (id, page = { start: 0, limit: 100, sort: 'bk_property_index' }) =>
+  http.post('/findmany/field_template/attribute', { bk_template_id: id, page })
+export const countFieldTemplateAttributes = (ids) =>
+  http.post('/findmany/field_template/attribute/count', { bk_template_ids: ids })
+export const searchFieldTemplateUniques = (id, page = { start: 0, limit: 100 }) =>
+  http.post('/findmany/field_template/unique', { bk_template_id: id, page })
+export const searchFieldTemplateModels = (id, page = { start: 0, limit: 100 }) =>
+  http.post('/findmany/object/by_field_template', { bk_template_id: id, page })
 export const createFieldTemplate = (data) =>
   http.post('/create/field_template', data)
-export const updateFieldTemplate = (id, data) =>
-  http.put(`/update/field_template/${id}`, data)
+export const updateFieldTemplate = (data) =>
+  http.put('/update/field_template', data)
+export const updateFieldTemplateInfo = (data) =>
+  http.put('/update/field_template/info', data)
+export const cloneFieldTemplate = (data) =>
+  http.post('/create/field_template/clone', data)
 export const deleteFieldTemplate = (id) =>
-  http.delete(`/delete/field_template/${id}`)
+  http.delete('/delete/field_template', { data: { id } })
+export const bindFieldTemplateModels = (templateId, objectIds) =>
+  http.post('/update/field_template/bind/object', { bk_template_id: templateId, object_ids: objectIds })
+export const unbindFieldTemplateModel = (templateId, objectId) =>
+  http.post('/update/field_template/unbind/object', { bk_template_id: templateId, object_id: objectId })
+export const compareFieldTemplateAttributes = (data) =>
+  http.post('/find/field_template/attribute/difference', data)
+export const compareFieldTemplateUniques = (data) =>
+  http.post('/find/field_template/unique/difference', data)
+export const syncFieldTemplateToModels = (data) =>
+  http.post('/update/topo/field_template/sync', data)
+export const getFieldTemplateTaskStatus = (data) =>
+  http.post('/find/field_template/tasks_status', data)
+export const getFieldTemplateSyncStatus = (data) =>
+  http.post('/find/field_template/sync/status', data)
 
 // ---------- 服务模板 ----------
 export const searchServiceTemplates = (bizId, page) =>
@@ -405,14 +463,24 @@ export const updateOperationChartPosition = (data) =>
   http.post('/update/operation/chart/position', data)
 
 // ---------- 进程模板 CRUD ----------
-export const searchProcTemplates = (bizId, data) =>
-  http.post('/findmany/proc/proc_template', { bk_biz_id: bizId, ...(data || {}) })
-export const createProcTemplate = (bizId, data) =>
-  http.post(`/create/proc/proc_template/bk_biz_id/${bizId}`, data)
-export const updateProcTemplate = (bizId, id, data) =>
-  http.put(`/update/proc/proc_template/bk_biz_id/${bizId}/id/${id}`, data)
-export const deleteProcTemplate = (bizId, id) =>
-  http.delete(`/delete/proc/proc_template/bk_biz_id/${bizId}/id/${id}`)
+export const searchProcTemplates = (bizId, data = {}) =>
+  http.post('/findmany/proc/proc_template', { bk_biz_id: bizId, ...data })
+export const createProcTemplate = (bizId, serviceTemplateId, property) =>
+  http.post('/createmany/proc/proc_template', {
+    bk_biz_id: bizId,
+    service_template_id: serviceTemplateId,
+    processes: [{ spec: property }]
+  })
+export const updateProcTemplate = (bizId, id, property) =>
+  http.put('/update/proc/proc_template', {
+    bk_biz_id: bizId,
+    process_template_id: id,
+    process_property: property
+  })
+export const deleteProcTemplate = (bizId, ids) =>
+  http.delete('/deletemany/proc/proc_template', {
+    data: { bk_biz_id: bizId, process_templates: Array.isArray(ids) ? ids : [ids] }
+  })
 
 // ---------- 实例标签 ----------
 export const createInstanceLabels = (data) =>
@@ -421,13 +489,14 @@ export const updateInstanceLabels = (data) =>
   http.post('/updatemany/proc/service_instance/labels', data)
 export const deleteInstanceLabels = (data) =>
   http.delete('/deletemany/proc/service_instance/labels', { data })
+// 后端以 aggregation 接口返回业务下实例标签，data 为 { key: uniqueValues[] }。
 export const listInstanceLabels = (data) =>
-  http.post('/findmany/proc/service_instance/labels', data)
+  http.post('/findmany/proc/service_instance/labels/aggregation', data)
 export const getLabelHistory = (data) =>
   http.post('/findmany/proc/service_instance/labels/aggregation', data)
 
 // ---------- 业务同步 ----------
-export const getServiceTemplateDiff = (bizId, data) =>
-  http.post(`/find/proc/service_template/general_difference/bk_biz_id/${bizId}`, data)
-export const syncServiceInstances = (bizId, data) =>
-  http.post(`/updatemany/proc/service_instance/sync/bk_biz_id/${bizId}`, data)
+export const getServiceTemplateDiff = (data) =>
+  http.post('/find/proc/service_template/general_difference', data)
+export const syncServiceInstances = (data) =>
+  http.put('/update/proc/service_instance/sync', data)

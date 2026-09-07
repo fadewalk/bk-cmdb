@@ -212,6 +212,10 @@
 
     <!-- 服务模板进程列表 -->
     <el-drawer v-model="tplDrawer" :title="`「${tplDetailName}」进程模板`" size="45%">
+      <div class="drawer-toolbar">
+        <span class="drawer-count">共 {{ tplProcesses.length }} 个进程模板</span>
+        <el-button type="primary" size="small" :icon="'Plus'" @click="openAddProcTpl({ id: tplDetailId, name: tplDetailName })">新增进程模板</el-button>
+      </div>
       <el-table :data="tplProcesses" v-loading="tplDetailLoading" size="default">
         <el-table-column label="进程名称" min-width="140">
           <template #default="{ row }">{{ row.bk_func_name || '-' }}</template>
@@ -445,16 +449,10 @@ async function saveProcTpl() {
   try {
     const property = buildTemplateProperty(procTplForm.value)
     if (procTplEditing.value) {
-      await updateProcTemplate(bizId.value, procTplEditing.value.id, {
-        bk_biz_id: bizId.value,
-        process_property: property
-      })
+      await updateProcTemplate(bizId.value, procTplEditing.value.id, property)
       ElMessage.success('进程模板已更新')
     } else {
-      await createProcTemplate(bizId.value, {
-        service_template_id: procTplTarget.value.id,
-        spec: property
-      })
+      await createProcTemplate(bizId.value, procTplTarget.value.id, property)
       ElMessage.success('进程模板已创建')
     }
     procTplDialog.value = false
@@ -700,6 +698,7 @@ async function showTplDetail(row) {
         id: t.id,
         serviceTemplateId: t.service_template_id,
         bk_func_name: t.property?.bk_func_name?.value || '-',
+        bk_process_name: t.property?.bk_process_name?.value || t.property?.bk_func_name?.value || '-',
         port: bind?.port?.value?.value || bind?.port?.value || '-',
         bindIp: bind?.ip?.value?.value || bind?.ip?.value,
         bindProtocol: bind?.protocol?.value?.value || bind?.protocol?.value,
@@ -708,7 +707,9 @@ async function showTplDetail(row) {
         work_path: t.property?.work_path?.value || '-',
         start_cmd: t.property?.start_cmd?.value || '',
         stop_cmd: t.property?.stop_cmd?.value || '',
-        description: t.property?.description?.value || ''
+        description: t.property?.description?.value || '',
+        auto_start: Boolean(t.property?.auto_start?.value),
+        property: t.property
       }
     })
   } finally { tplDetailLoading.value = false }

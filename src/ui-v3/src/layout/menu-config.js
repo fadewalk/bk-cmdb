@@ -14,6 +14,7 @@ export const MENUS = [
     children: [
       { id: 'topo', name: '业务拓扑', icon: 'icon-cc-host', path: '/business/topo', biz: true },
       { id: 'service-template', name: '服务模板', icon: 'icon-cc-service-template', path: '/business/service-template', biz: true },
+      { id: 'process-template', name: '进程模板', icon: 'icon-cc-service-template', path: '/business/process-template', biz: true },
       { id: 'set-template', name: '集群模板', icon: 'icon-cc-set-template', path: '/business/set-template', biz: true },
       { id: 'service-category', name: '服务分类', icon: 'icon-cc-nav-service-topo', path: '/business/service-category', biz: true },
       { id: 'host-apply', name: '主机自动应用', icon: 'icon-cc-host-apply', path: '/business/host-apply', biz: true },

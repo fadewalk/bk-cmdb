@@ -27,9 +27,10 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     const dirTree = await page.locator('.dir-tree .el-tree-node').count()
     if (dirTree > 0) ok(`资源目录树节点数: ${dirTree}`)
     else fail('资源目录树', '未渲染')
-    // 资源池 scope
-    const groups = await page.locator('.group-item').count()
-    if (groups >= 2) ok(`资源池 scope 数: ${groups}`)
+    // scope tabs
+    const scopes = await page.locator('.scope-tabs .scope-tab').count()
+    if (scopes >= 3) ok(`主机 scope tabs: ${scopes}`)
+    else fail('主机 scope tabs', '未渲染完整')
     // 筛选器按钮
     const filterBtn = page.locator('button:has-text("筛选")')
     if (await filterBtn.isVisible()) ok('筛选按钮可见')

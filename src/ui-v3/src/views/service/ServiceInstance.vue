@@ -165,8 +165,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, deleteServiceInstances, searchProcessInstances,
-  listHostsWithNoSvcInst, createProcessInstance,
-  listInstanceLabels, createInstanceLabels, deleteInstanceLabels,
+  listHostsWithNoSvcInst, createProcessInstance, createInstanceLabels, deleteInstanceLabels,
   getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
@@ -391,20 +390,18 @@ async function showProcesses(row) {
   procInstName.value = row.name || `实例 ${row.id}`
   procInstId.value = row.id
   procDrawer.value = true
+  processes.value = []
+  labels.value = Object.entries(row.labels || {}).map(([key, value]) => ({
+    key,
+    value,
+    creator: row.creator || '',
+    create_time: row.create_time || ''
+  }))
   loadProcesses(row.id)
-  loadLabels(row.id)
 }
 
-async function loadLabels(id) {
-  labelLoading.value = true
-  try {
-    const data = await listInstanceLabels({ bk_biz_id: bizId.value, service_instance_id: id })
-    const list = (data?.info || data?.data || []).map((l) => ({
-      key: l.key, value: l.value, creator: l.creator, create_time: l.create_time, id: l.id
-    }))
-    labels.value = list
-  } catch (e) { labels.value = [] }
-  finally { labelLoading.value = false }
+async function loadLabels() {
+  labels.value = []
 }
 
 function openAddLabel() {
@@ -420,11 +417,18 @@ async function submitLabel() {
   try {
     await createInstanceLabels({
       bk_biz_id: bizId.value,
-      labels: [{ service_instance_id: procInstId.value, key: labelForm.value.key, value: labelForm.value.value }]
+      instance_ids: [procInstId.value],
+      labels: { [labelForm.value.key]: labelForm.value.value }
     })
     ElMessage.success('已新增')
     labelFormVisible.value = false
-    loadLabels(procInstId.value)
+    const nextLabels = labels.value.filter((item) => item.key !== labelForm.value.key)
+    labels.value = [...nextLabels, {
+      key: labelForm.value.key,
+      value: labelForm.value.value,
+      creator: 'admin',
+      create_time: new Date().toISOString()
+    }]
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
   }
@@ -435,11 +439,11 @@ async function removeLabel(row) {
   try {
     await deleteInstanceLabels({
       bk_biz_id: bizId.value,
-      service_instance_ids: [procInstId.value],
+      instance_ids: [procInstId.value],
       keys: [row.key]
     })
     ElMessage.success('已删除')
-    loadLabels(procInstId.value)
+    labels.value = labels.value.filter((item) => item.key !== row.key)
   } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
 }
 
