@@ -66,6 +66,8 @@ const router = createRouter({
 
         // 平台管理
         { path: 'platform/global-config', name: 'GlobalConfig', component: () => import('../views/platform/GlobalConfig.vue'), meta: { title: '全局配置' } },
+        { path: 'platform-management/global-config', name: 'LegacyGlobalConfig', redirect: (to) => ({ path: '/platform/global-config', query: to.query }), meta: { title: '全局配置' } },
+        { path: 'platform-management', name: 'LegacyPlatform', redirect: '/platform/global-config', meta: { title: '平台管理' } },
         { path: 'platform/roadmap', name: 'Roadmap', component: () => import('../views/Roadmap.vue'), meta: { title: '功能路线' } },
 
         // 主机详情(独立页)

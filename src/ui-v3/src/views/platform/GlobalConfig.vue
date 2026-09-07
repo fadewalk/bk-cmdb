@@ -186,9 +186,13 @@
 // - POST /topo/update/biz/idle_set                             空闲机池集群/模块 更新与创建
 // - POST /topo/delete/biz/extra_moudle                         删除用户自定义空闲机模块
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Close, Edit, Delete, InfoFilled } from '@element-plus/icons-vue'
 import { http, searchBusiness } from '../../api/cmdb'
+
+const route = useRoute()
+const router = useRouter()
 
 const tab = ref('general')
 const tabs = [
@@ -196,15 +200,59 @@ const tabs = [
   { name: 'idle', label: '业务空闲机池' },
   { name: 'id', label: 'ID生成器' }
 ]
-function switchTab(name) {
+// 旧版 tab query 名 → 新版名(兼容旧书签 ?tab=id-generate 等)
+const LEGACY_TAB = { 'business-general-config': 'general', 'idle-pool-config': 'idle', 'id-generate': 'id' }
+
+// ---------- 未保存变更检测(对齐老版 hasChange + before-toggle/leave-confirm) ----------
+function generalDirty() {
+  return generalForm.snapshotBizId !== origin.snapshotBizId ||
+    Number(generalForm.maxBizTopoLevel) !== Number(origin.maxBizTopoLevel)
+}
+function idleSnap() {
+  return JSON.stringify({
+    setName: idleForm.setName,
+    builtin: idleForm.builtin,
+    userModules: idleForm.userModules.map((m) => [m.moduleKey, m.moduleName])
+  })
+}
+let idleOriginSnap = ''
+function idleDirty() {
+  const editing = Object.values(rowEditing).some(Boolean) || idleForm.userModules.some((m) => m.editing)
+  return editing || idleSnap() !== idleOriginSnap
+}
+function anyDirty() {
+  return generalDirty() || idleDirty() || (idEditing.value && idChanged.value)
+}
+function confirmLeave(next) {
+  ElMessageBox.confirm('离开将会导致未保存信息丢失', '确认离开当前页？', {
+    type: 'warning', confirmButtonText: '离开', cancelButtonText: '取消'
+  }).then(() => next()).catch(() => {})
+}
+
+async function switchTab(name) {
   if (tab.value === name) return
+  if (anyDirty()) {
+    confirmLeave(() => {
+      tab.value = name
+      onTabChange()
+    })
+    return
+  }
   tab.value = name
   onTabChange()
 }
+
+onBeforeRouteLeave((to, from, next) => {
+  if (!anyDirty()) { next(); return }
+  confirmLeave(() => next())
+})
 const loading = ref(false)
 const saving = ref(false)
 const idleSaving = ref(false)
 const bizList = ref([])
+// 后端 PUT /admin/update/system_config/platform_setting 按完整配置解码并全量校验,
+// 局部提交会被 validation_rules 等零值字段卡住,必须"读全量 → 改 → 交全量"(对齐老版)
+const fullConfig = ref(null)
 
 const MODEL_NAMES = {
   biz: '业务', host: '主机', inst_asst: '实例关联', module: '模块',
@@ -270,6 +318,7 @@ function snapshotConfig(config) {
   for (const [k, v] of Object.entries(gen.init_id || {})) initId[k] = v
   idForm.currentId = currentId
   idForm.initId = initId
+  idleOriginSnap = idleSnap()
   syncIdOrigin()
 }
 function syncIdOrigin() {
@@ -282,7 +331,9 @@ async function loadConfig() {
   loading.value = true
   try {
     const res = await http.get('/admin/find/system_config/platform_setting/current')
-    snapshotConfig(res?.data || res || {})
+    const config = res?.data || res || {}
+    fullConfig.value = config
+    snapshotConfig(config)
   } catch (e) { /* 独立模式异常时保留默认 */ } finally {
     loading.value = false
   }
@@ -296,12 +347,13 @@ async function saveGeneral() {
   }
   saving.value = true
   try {
-    await http.put('/admin/update/system_config/platform_setting', {
-      backend: {
-        max_biz_topo_level: Number(generalForm.maxBizTopoLevel),
-        snapshot_biz_id: generalForm.snapshotBizId
-      }
-    })
+    const payload = { ...(fullConfig.value || {}) }
+    payload.backend = {
+      ...(payload.backend || {}),
+      max_biz_topo_level: level,
+      snapshot_biz_id: generalForm.snapshotBizId
+    }
+    await http.put('/admin/update/system_config/platform_setting', payload)
     ElMessage.success('保存成功')
     await loadConfig()
   } catch (e) {
@@ -410,8 +462,13 @@ async function submitId() {
   for (const k of Object.keys(idForm.currentId)) {
     if (idForm.currentId[k] !== idForm.initId[k]) { changeInitId[k] = idForm.initId[k]; hasChange = true }
   }
-  const payload = { enabled: idForm.enabled, step: idForm.step }
-  if (hasChange) payload.init_id = changeInitId
+  const payload = { ...(fullConfig.value || {}) }
+  payload.id_generator = {
+    ...(payload.id_generator || {}),
+    enabled: idForm.enabled,
+    step: idForm.step,
+    ...(hasChange ? { init_id: changeInitId } : {})
+  }
   saving.value = true
   try {
     await http.put('/admin/update/system_config/platform_setting', { id_generator: payload })
@@ -423,9 +480,15 @@ async function submitId() {
   } finally { saving.value = false }
 }
 
-function onTabChange() { loadConfig() }
+function onTabChange() {
+  router.replace({ query: { ...route.query, tab: tab.value } }).catch(() => {})
+  loadConfig()
+}
 
 onMounted(async () => {
+  // 兼容旧书签 ?tab=business-general-config|idle-pool-config|id-generate
+  const legacy = LEGACY_TAB[route.query.tab]
+  if (legacy) tab.value = legacy
   loadConfig()
   try {
     const res = await searchBusiness({ start: 0, limit: 200 })

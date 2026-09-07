@@ -112,12 +112,31 @@
     </el-dialog>
 
     <!-- 实例详情 -->
-    <el-drawer v-model="detailVisible" :title="detailRow ? (detailRow.bk_inst_name || `实例 ${detailInstId}`) : '实例详情'" size="480px">
-      <el-descriptions v-if="detailRow" :column="1" border size="small">
-        <el-descriptions-item v-for="(v, k) in detailProps" :key="k" :label="attrName(k)">
-          {{ v === null || v === '' || v === undefined ? '--' : v }}
-        </el-descriptions-item>
-      </el-descriptions>
+    <el-drawer v-model="detailVisible" :title="detailRow ? (detailRow.bk_inst_name || `实例 ${detailInstId}`) : '实例详情'" size="520px">
+      <el-tabs v-model="detailTab">
+        <el-tab-pane label="属性" name="props" />
+        <el-tab-pane label="变更历史" name="history" />
+      </el-tabs>
+      <template v-if="detailTab === 'props'">
+        <el-descriptions v-if="detailRow" :column="1" border size="small">
+          <el-descriptions-item v-for="(v, k) in detailProps" :key="k" :label="attrName(k)">
+            {{ v === null || v === '' || v === undefined ? '--' : v }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template v-else>
+        <el-table :data="auditRows" v-loading="auditLoading" size="small">
+          <el-table-column label="操作人" prop="user" width="110" />
+          <el-table-column label="操作" width="90">
+            <template #default="{ row }">{{ actionName(row.action) }}</template>
+          </el-table-column>
+          <el-table-column label="实例名称" prop="resource_name" min-width="140" show-overflow-tooltip />
+          <el-table-column label="时间" min-width="150">
+            <template #default="{ row }">{{ (row.operation_time || '').replace('T', ' ').slice(0, 19) }}</template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!auditLoading && auditRows.length === 0" description="暂无变更记录" :image-size="60" />
+      </template>
     </el-drawer>
   </div>
 </template>
@@ -129,7 +148,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchModels, searchModelAttributes,
   searchInstances, countInstances,
-  createInstance, updateInstance, deleteInstance, deleteInstances
+  createInstance, updateInstance, deleteInstance, deleteInstances,
+  searchInstAudit
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -155,6 +175,36 @@ const formMap = ref({})
 const detailVisible = ref(false)
 const detailRow = ref(null)
 const detailInstId = ref(null)
+const detailTab = ref('props')
+const auditRows = ref([])
+const auditLoading = ref(false)
+
+const AUDIT_ACTIONS = {
+  create: '新增', update: '修改', delete: '删除',
+  assign_host: '分配主机', unassign_host: '回收主机',
+  transfer_host_module: '转移模块', archive: '归档', recover: '恢复'
+}
+function actionName(a) { return AUDIT_ACTIONS[a] || a || '--' }
+
+async function loadAudit() {
+  if (!detailInstId.value) return
+  auditLoading.value = true
+  try {
+    const data = await searchInstAudit({
+      condition: { bk_obj_id: objId.value, resource_type: 'model_instance', resource_id: detailInstId.value },
+      page: { start: 0, limit: 50, sort: '-operation_time' }
+    })
+    auditRows.value = data?.info || []
+  } catch {
+    auditRows.value = []
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+watch(detailTab, (v) => {
+  if (v === 'history' && !auditRows.value.length && !auditLoading.value) loadAudit()
+})
 
 // 展示列:跳过系统字段,最多展示 6 个,长字符排后
 const displayCols = computed(() => attrs.value
@@ -332,6 +382,8 @@ async function batchRemove() {
 function openDetail(row) {
   detailRow.value = row
   detailInstId.value = instIdOf(row)
+  detailTab.value = 'props'
+  auditRows.value = []
   detailVisible.value = true
 }
 

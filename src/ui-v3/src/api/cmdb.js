@@ -355,6 +355,9 @@ export const deleteInstance = (objId, instId) =>
 export const deleteInstances = (objId, ids) =>
   http.delete(`/deletemany/instance/object/${objId}`, { data: { delete: { inst_ids: ids } } })
 
+// 实例变更历史
+export const searchInstAudit = (data) => http.post('/find/inst_audit', data)
+
 // ---------- 集群模板 ----------
 export const searchSetTemplates = (bizId, page) =>
   http.post(`/findmany/topo/set_template/bk_biz_id/${bizId}/web`, { page })

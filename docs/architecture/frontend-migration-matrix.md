@@ -61,7 +61,7 @@
 | 关联类型 | `src/ui/src/views/model-association/` | `/model/association` | 核心流程 | 类型 CRUD、使用统计和模型关联列表 |
 | 字段组合模板 | `src/ui/src/views/field-template/` | `/model/field-template` | 核心流程 | 多步创建/编辑/绑定、差异、同步结果、深链 |
 | 字段分组 | 模型详情/通用 field-group 组件 | 模型详情内 | 部分迁移 | 分组 CRUD、移动字段和排序 |
-| 模型实例 | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 实例列表/搜索/分页、新建/编辑/删除/批量删除、详情抽屉;旧版深链 `/resource/instance/:objId/:instId` 已兼容;导入/列配置/历史 tab 未迁移 |
+| 模型实例 | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 实例列表/搜索/分页、新建/编辑/删除/批量删除、详情抽屉、变更历史(/find/inst_audit,resource_type=model_instance);旧版深链已兼容;导入/列配置未迁移 |
 
 ## 运营与平台
 
@@ -69,7 +69,7 @@
 |---|---|---|---|---|
 | 操作审计 | `src/ui/src/views/audit/` | `/analysis/audit` | 核心流程 | 资源类型筛选、详情、权限和分页 |
 | 运营统计 | `src/ui/src/views/operation/` | `/analysis/operation` | 核心流程 | 图表 CRUD、排序、图表详情和字段敏感性 |
-| 全局配置 | `src/ui/src/views/global-config/` | `/platform/global-config` | 部分迁移 | 业务配置、平台信息、ID 生成、模块构造、校验规则、空闲机池、离开确认 |
+| 全局配置 | `src/ui/src/views/global-config/` | `/platform/global-config` | 核心流程 | 三 tab 对齐(旧版运行时即三 tab);未保存切 tab/离开确认、tab query 同步、旧路径 platform-management 重定向已补;保存契约修复为全量读-改-写(局部提交会被后端全量校验拒绝)并经真实回读验证 |
 
 ## 依赖型模块
 
@@ -85,7 +85,7 @@
 2. **第二批（已完成）**：业务拓扑/主机旧版深链兼容(`business/:bizId/index`、`business/:bizId/host/:id`、`resource/host/:id`、`resource/host/:business/:id`、`business-set/...`、`host-landing/:ip/:cloudId?`),业务上下文 params/query 双读。
 3. **第三批（已完成）**：通用模型实例页(`/resource/instance/:objId`,列表/搜索/分页/新建/编辑/删除/批量删除/详情,必填校验,CRUD 真实回读验证);模型详情关联 tab 修复双向查询并支持编辑/删除(内置保护);旧版实例详情深链兼容。
 4. **第四批（已完成）**：服务模板 create/details/edit 深链与 operational 旧链重定向;进程模板动态全量字段编辑(21 属性,必填校验,覆盖式更新真实回读);修复服务模板/集群模板删除请求体契约与叶子分类过滤。
-5. **第五批（进行中）**：模型导入导出完整流程、模型实例导入/列配置/变更历史、主机自动应用完整向导、全局配置完整子页面、业务同步、集群模板同步和资源详情深链。
-6. **第六批**：云资源、Pod、跨业务转移及正式 IAM;依赖不足时明确阻塞,不用占位页冒充完成。
+5. **第五批（已完成）**：全局配置交互语义补齐(未保存确认/tab query/旧路径重定向)并修复保存契约为全量读-改-写(真实回读验证);模型实例变更历史(/find/inst_audit)。
+6. **第六批（进行中）**：模型实例导入/列配置、主机自动应用完整向导、业务同步完整流程、集群模板同步、跨业务转移;云资源/Pod/正式 IAM 依赖不足时明确阻塞。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。
