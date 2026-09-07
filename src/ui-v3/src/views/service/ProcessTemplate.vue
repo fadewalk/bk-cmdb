@@ -43,6 +43,7 @@
       :title="editing ? '编辑进程模板' : '新建进程模板'"
       mode="template"
       :form="form"
+      :attrs="processAttrs"
       :saving="saving"
       @update:visible="formVisible = $event"
       @save="save"
@@ -59,7 +60,8 @@ import {
   searchProcTemplates,
   createProcTemplate,
   updateProcTemplate,
-  deleteProcTemplate
+  deleteProcTemplate,
+  searchModelAttributes
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
@@ -74,14 +76,10 @@ const saving = ref(false)
 const formVisible = ref(false)
 const editing = ref(null)
 
+// 进程模型属性(动态渲染全量字段,对齐老版)
+const processAttrs = ref([])
+
 const form = reactive({
-  bk_func_name: '',
-  bk_process_name: '',
-  user: '',
-  work_path: '',
-  start_cmd: '',
-  stop_cmd: '',
-  description: '',
   __bind_port: '',
   __bind_ip: '1',
   __bind_protocol: '1',
@@ -105,10 +103,17 @@ function readProperty(property, name, fallback = '') {
 function flattenTemplate(item) {
   const property = item.property || {}
   const bind = property.bind_info?.value?.[0]
+  // 展开全量 property 值(供动态表单编辑)
+  const flat = {}
+  for (const [k, v] of Object.entries(property)) {
+    if (v && typeof v === 'object' && 'value' in v) flat[k] = (v.value && typeof v.value === 'object' && 'value' in v.value) ? v.value.value : v.value
+    else flat[k] = v
+  }
   return {
     id: item.id,
     service_template_id: item.service_template_id,
     service_template_name: serviceTemplates.value.find((template) => template.id === item.service_template_id)?.name || `模板 ${item.service_template_id}`,
+    ...flat,
     bk_func_name: readProperty(property, 'bk_func_name', '-'),
     bk_process_name: readProperty(property, 'bk_process_name', '-'),
     user: readProperty(property, 'user', '-'),
@@ -126,25 +131,41 @@ function flattenTemplate(item) {
 }
 
 function propertyForForm(row) {
-  return {
-    bk_func_name: row?.bk_func_name === '-' ? '' : row?.bk_func_name || '',
-    bk_process_name: row?.bk_process_name === '-' ? '' : row?.bk_process_name || row?.bk_func_name || '',
-    user: row?.user === '-' ? '' : row?.user || '',
-    work_path: row?.work_path === '-' ? '' : row?.work_path || '',
-    start_cmd: row?.start_cmd || '',
-    stop_cmd: row?.stop_cmd || '',
-    description: row?.description || '',
-    __bind_port: row?.port === '-' ? '' : row?.port || '',
-    __bind_ip: row?.bindIp || '1',
-    __bind_protocol: row?.bindProtocol || '1',
-    __bind_row_id: row?.bindRowId
+  const next = { __bind_port: '', __bind_ip: '1', __bind_protocol: '1', __bind_row_id: undefined }
+  for (const f of processAttrs.value) {
+    if (f.bk_property_id === 'bind_info') continue
+    const v = row?.[f.bk_property_id]
+    next[f.bk_property_id] = f.bk_property_type === 'bool'
+      ? (v === undefined ? false : Boolean(v))
+      : (v === undefined || v === null ? '' : v)
   }
+  if (!processAttrs.value.length) {
+    next.bk_func_name = row?.bk_func_name === '-' ? '' : row?.bk_func_name || ''
+    next.bk_process_name = row?.bk_process_name === '-' ? '' : row?.bk_process_name || row?.bk_func_name || ''
+    next.user = row?.user === '-' ? '' : row?.user || ''
+    next.work_path = row?.work_path === '-' ? '' : row?.work_path || ''
+    next.start_cmd = row?.start_cmd || ''
+    next.stop_cmd = row?.stop_cmd || ''
+    next.description = row?.description || ''
+  }
+  if (next.bk_func_name === '-') next.bk_func_name = ''
+  next.__bind_port = row?.port === '-' ? '' : row?.port || ''
+  next.__bind_ip = row?.bindIp || '1'
+  next.__bind_protocol = row?.bindProtocol || '1'
+  next.__bind_row_id = row?.bindRowId
+  return next
 }
 
 function buildProperty() {
   const property = {}
-  for (const field of ['bk_func_name', 'bk_process_name', 'user', 'work_path', 'start_cmd', 'stop_cmd', 'description']) {
-    property[field] = { value: form[field] || '', as_default_value: Boolean(form[field]) }
+  for (const f of processAttrs.value) {
+    if (f.bk_property_id === 'bind_info') continue
+    const v = form[f.bk_property_id]
+    const hasValue = v !== '' && v !== null && v !== undefined
+    property[f.bk_property_id] = {
+      value: hasValue ? v : (f.bk_property_type === 'bool' ? false : null),
+      as_default_value: hasValue
+    }
   }
   property.bind_info = {
     value: form.__bind_port
@@ -205,8 +226,17 @@ async function save() {
     ElMessage.warning('请先选择业务和服务模板')
     return
   }
-  if (!form.bk_func_name || !form.bk_process_name) {
-    ElMessage.warning('请输入功能名称和进程名称')
+  if (!form.bk_func_name) {
+    ElMessage.warning('请输入进程名称')
+    return
+  }
+  const missing = processAttrs.value.filter((f) => {
+    if (!f.isrequired || f.bk_property_id === 'bk_func_name') return false
+    const v = form[f.bk_property_id]
+    return v === '' || v === null || v === undefined
+  })
+  if (missing.length) {
+    ElMessage.warning(`请填写必填字段: ${missing.map((f) => f.bk_property_name).join('、')}`)
     return
   }
   saving.value = true
@@ -246,8 +276,17 @@ watch(() => bizStore.bizId, async (value) => {
   await loadTemplates()
 })
 
+async function loadProcessAttrs() {
+  try {
+    processAttrs.value = (await searchModelAttributes('process')) || []
+  } catch {
+    processAttrs.value = []
+  }
+}
+
 onMounted(async () => {
   await bizStore.ensureLoaded()
+  loadProcessAttrs()
   selectedBizId.value = bizStore.bizId
   await loadServiceTemplates()
   await loadTemplates()

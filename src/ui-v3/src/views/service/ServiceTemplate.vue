@@ -245,6 +245,7 @@
       title="进程模板"
       mode="template"
       :form="procTplForm"
+      :attrs="processAttrs"
       :saving="saving"
       @update:visible="procTplDialog = $event"
       @save="saveProcTpl"
@@ -258,7 +259,7 @@
         </el-form-item>
         <el-form-item label="服务分类">
           <el-select v-model="editForm.service_category_id" style="width: 100%">
-            <el-option v-for="c in flatCategories" :key="c.category.id" :label="c.category.name" :value="c.category.id" />
+            <el-option v-for="c in leafCategories" :key="c.category.id" :label="c.category.name" :value="c.category.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -276,7 +277,7 @@
         </el-form-item>
         <el-form-item label="服务分类">
           <el-select v-model="tplForm.service_category_id" style="width: 100%">
-            <el-option v-for="c in flatCategories" :key="c.category.id" :label="c.category.name" :value="c.category.id" />
+            <el-option v-for="c in leafCategories" :key="c.category.id" :label="c.category.name" :value="c.category.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -297,7 +298,8 @@ import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http,
   getSetTemplateDetail, searchSetTemplateStatus, syncSetTemplateToInstances, searchSetTemplateSyncHistory,
-  createProcTemplate, updateProcTemplate, deleteProcTemplate
+  createProcTemplate, updateProcTemplate, deleteProcTemplate,
+  searchModelAttributes
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
@@ -334,22 +336,35 @@ const procTplForm = ref({})
 const procTplTarget = ref(null)
 const procTplEditing = ref(null) // 编辑中的进程模板原始数据
 
-// 展示行 → 表单对象(模板模式带 __bind_* 编辑字段)
+// 进程模型属性(动态渲染进程模板全量字段,对齐老版)
+const processAttrs = ref([])
+
+// 展示行 → 表单对象(模板模式带 __bind_* 编辑字段);动态字段从行数据直接拷贝
 function tplRowToForm(row) {
-  return {
-    id: row.id,
-    bk_func_name: row.bk_func_name === '-' ? '' : row.bk_func_name,
-    bk_process_name: row.bk_func_name === '-' ? '' : row.bk_func_name,
-    user: row.user === '-' ? '' : row.user,
-    work_path: row.work_path === '-' ? '' : row.work_path,
-    start_cmd: row.start_cmd || '',
-    stop_cmd: row.stop_cmd || '',
-    description: row.description || '',
-    __bind_port: row.port === '-' ? '' : row.port,
-    __bind_ip: row.bindIp || '1',
-    __bind_protocol: row.bindProtocol || '1',
-    __bind_row_id: row.bindRowId
+  const form = {}
+  for (const f of processAttrs.value) {
+    const v = row[f.bk_property_id]
+    if (f.bk_property_type === 'bool') form[f.bk_property_id] = v === undefined ? false : Boolean(v)
+    else form[f.bk_property_id] = v === undefined || v === null ? '' : v
   }
+  // 兜底:未加载到属性元数据时至少保留原核心字段
+  if (!processAttrs.value.length) {
+    Object.assign(form, {
+      bk_func_name: row.bk_func_name === '-' ? '' : row.bk_func_name,
+      bk_process_name: row.bk_func_name === '-' ? '' : row.bk_func_name,
+      user: row.user === '-' ? '' : row.user,
+      work_path: row.work_path === '-' ? '' : row.work_path,
+      start_cmd: row.start_cmd || '',
+      stop_cmd: row.stop_cmd || '',
+      description: row.description || ''
+    })
+  }
+  if (form.bk_func_name === '-') form.bk_func_name = ''
+  form.__bind_port = row.port === '-' ? '' : row.port
+  form.__bind_ip = row.bindIp || '1'
+  form.__bind_protocol = row.bindProtocol || '1'
+  form.__bind_row_id = row.bindRowId
+  return form
 }
 
 // 编辑 / 克隆服务模板
@@ -396,7 +411,7 @@ async function cloneTpl(row) {
 
 async function removeTpl(row) {
   await ElMessageBox.confirm(`确定删除服务模板「${row.name}」?`, '删除确认', { type: 'warning' })
-  await http.delete('/delete/proc/service_template', { bk_biz_id: bizId.value, service_template_ids: [row.id] })
+  await http.delete('/delete/proc/service_template', { data: { bk_biz_id: bizId.value, service_template_id: row.id } })
   ElMessage.success('已删除')
   loadTemplates()
 }
@@ -419,9 +434,14 @@ function openEditProcTpl(row) {
 // 组装模板全量 property(该接口为覆盖式更新,必须提交所有字段)
 function buildTemplateProperty(form) {
   const prop = {}
-  const textFields = ['bk_func_name', 'bk_process_name', 'user', 'work_path', 'start_cmd', 'stop_cmd', 'description']
-  for (const f of textFields) {
-    prop[f] = { value: form[f] || '', as_default_value: !!form[f] }
+  for (const f of processAttrs.value) {
+    if (f.bk_property_id === 'bind_info') continue
+    const v = form[f.bk_property_id]
+    const hasValue = v !== '' && v !== null && v !== undefined
+    prop[f.bk_property_id] = {
+      value: hasValue ? v : (f.bk_property_type === 'bool' ? false : null),
+      as_default_value: hasValue
+    }
   }
   if (form.__bind_port) {
     prop.bind_info = {
@@ -486,6 +506,8 @@ const flatCategories = computed(() => {
   }
   return flat
 })
+// 后端仅允许叶子分类绑定模板
+const leafCategories = computed(() => flatCategories.value.filter((c) => c.isLeaf))
 
 // 过滤:一级分类 / 二级分类 / 名称
 const filterMainCate = ref(null)
@@ -551,9 +573,10 @@ async function loadCategories() {
     // 分类接口返回树形(子分类含 sub_categories),展平为一层
     const flat = []
     for (const item of data?.info || []) {
-      flat.push({ id: item.category.id, category: item.category, usage_count: item.usage_count, isRoot: true })
+      const subCount = (item.sub_categories || []).length
+      flat.push({ id: item.category.id, category: item.category, usage_count: item.usage_count, isRoot: true, isLeaf: subCount === 0 })
       for (const sub of item.sub_categories || []) {
-        flat.push({ id: sub.category.id, category: sub.category, usage_count: sub.usage_count, isRoot: false })
+        flat.push({ id: sub.category.id, category: sub.category, usage_count: sub.usage_count, isRoot: false, isLeaf: true })
       }
     }
     categories.value = flat
@@ -584,7 +607,7 @@ async function saveSetTpl() {
 async function removeSetTpl(row) {
   await ElMessageBox.confirm(`确定删除集群模板「${row.name}」?`, '删除确认', { type: 'warning' })
   await http.delete(`/deletemany/topo/set_template/bk_biz_id/${bizId.value}/`, {
-    set_template_ids: [row.id]
+    data: { set_template_ids: [row.id] }
   })
   ElMessage.success('已删除')
   loadSetTemplates()
@@ -694,9 +717,16 @@ async function showTplDetail(row) {
     })
     tplProcesses.value = (data?.info || []).map((t) => {
       const bind = t.property?.bind_info?.value?.[0]
+      // 展开全量 property 值(供动态表单编辑),结构化字段仍取 value 层
+      const flat = {}
+      for (const [k, v] of Object.entries(t.property || {})) {
+        if (v && typeof v === 'object' && 'value' in v) flat[k] = (v.value && typeof v.value === 'object' && 'value' in v.value) ? v.value.value : v.value
+        else flat[k] = v
+      }
       return {
         id: t.id,
         serviceTemplateId: t.service_template_id,
+        ...flat,
         bk_func_name: t.property?.bk_func_name?.value || '-',
         bk_process_name: t.property?.bk_process_name?.value || t.property?.bk_func_name?.value || '-',
         port: bind?.port?.value?.value || bind?.port?.value || '-',
@@ -715,11 +745,45 @@ async function showTplDetail(row) {
   } finally { tplDetailLoading.value = false }
 }
 
+async function loadProcessAttrs() {
+  try {
+    processAttrs.value = (await searchModelAttributes('process')) || []
+  } catch { processAttrs.value = [] }
+}
+
+// ---------- 旧版深链(/business/:bizId/service/template/create|details/:id|edit/:id) ----------
+function applyDeepLink() {
+  const bizParam = Number(route.params.bizId)
+  if (bizParam && bizStore.bizList.some((b) => b.bk_biz_id === bizParam)) bizStore.select(bizParam)
+  if (tab.value === 'settpl') return
+  const p = route.path
+  if (p.endsWith('/create')) {
+    tplFormVisible.value = true
+    return
+  }
+  const tid = Number(route.params.templateId)
+  if (!tid) return
+  const open = () => {
+    const row = templates.value.find((t) => t.id === tid)
+    if (!row) return false
+    if (p.includes('/details/')) showTplDetail(row)
+    else if (p.includes('/edit/')) openEditTpl(row)
+    return true
+  }
+  if (!open()) {
+    const timer = setInterval(() => { if (open()) clearInterval(timer) }, 400)
+    setTimeout(() => clearInterval(timer), 8000)
+  }
+}
+
 onMounted(async () => {
   await bizStore.ensureLoaded()
-  if (bizId.value) loadAll()
+  loadProcessAttrs()
+  if (bizId.value) await loadAll()
+  applyDeepLink()
 })
 
 watch(bizId, () => { if (bizId.value) loadAll() })
+watch(() => route.path, () => { if (route.params.bizId || route.path.includes('/service/template/')) applyDeepLink() })
 watch(tab, () => { if (bizId.value) loadAll() })
 </script>

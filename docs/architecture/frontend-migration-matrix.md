@@ -25,14 +25,15 @@
 | 业务拓扑主机详情 | `business-topology` + `host-details` | `/host-detail?id=...` | 部分迁移 | 旧版多上下文深链兼容、属性/服务/Pod/关联/历史 tabs |
 | 主机操作 | `src/ui/src/views/host-operation/` | 业务拓扑/主机列表内操作 | 部分迁移 | 新增、编辑、批量编辑、转移、导入导出、自动应用 |
 | 服务实例与进程 | `business-topology/service-instance/` | `/business/service-instance` + 业务拓扑抽屉 | 核心流程 | 创建、克隆、标签、批量删除、进程 CRUD、真实回读 |
-| 服务模板 | `src/ui/src/views/service-template/` | `/business/service-template` | 核心流程 | create/details/edit 深链、配置/实例 tabs、同步状态 |
-| 集群模板 | `src/ui/src/views/set-template/` | `/business/set-template` | 部分迁移 | create/details/edit、实例配置和同步历史 |
+| 服务模板 | `src/ui/src/views/service-template/` | `/business/service-template` | 核心流程 | create/details/edit 深链已兼容(含 operational 旧链重定向);分类下拉仅叶子分类;删除契约已修正;配置/实例双 tab 的待同步红点未迁移 |
+| 集群模板 | `src/ui/src/views/set-template/` | `/business/set-template` | 部分迁移 | create/details/edit、实例配置和同步历史;删除请求体已修正 |
 | 集群模板同步 | `src/ui/src/views/set-sync/` | 无等价新版路由 | 未迁移 | 模块/属性差异、实例同步、历史记录 |
 | 服务分类 | `src/ui/src/views/service-category/` | `/business/service-category` | 核心流程 | 分类树、父子分类 CRUD、统计和错误状态 |
 | 主机自动应用 | `src/ui/src/views/host-apply/` | `/business/host-apply` | 部分迁移 | 多步配置、确认、执行、冲突/失败列表、任务恢复 |
 | 动态分组 | `src/ui/src/views/dynamic-group/` | `/business/dynamic-group` | 部分迁移 | 1202px 编辑侧滑、条件编辑、预览、清空确认 |
 | 自定义字段 | `src/ui/src/views/custom-fields/` | `/business/custom-fields` | 部分迁移 | 字段分组、导入、字段详情和完整 CRUD |
 | 业务同步 | `src/ui/src/views/business-synchronous/` | `/business/sync` | 部分迁移 | 模块实例、属性/进程差异、同步执行和结果 |
+| 进程模板 | `service-template/children/process-form.vue` | `/business/process-template` | 核心流程 | 按进程模型属性动态渲染全量字段(21 属性),必填校验;bind_info 多行编辑未迁移 |
 
 ## 资源上下文
 
@@ -83,8 +84,8 @@
 1. **第一批（已完成）**：修复跨模块入口死链，建立路由/深链/错误状态 smoke 和本矩阵。
 2. **第二批（已完成）**：业务拓扑/主机旧版深链兼容(`business/:bizId/index`、`business/:bizId/host/:id`、`resource/host/:id`、`resource/host/:business/:id`、`business-set/...`、`host-landing/:ip/:cloudId?`),业务上下文 params/query 双读。
 3. **第三批（已完成）**：通用模型实例页(`/resource/instance/:objId`,列表/搜索/分页/新建/编辑/删除/批量删除/详情,必填校验,CRUD 真实回读验证);模型详情关联 tab 修复双向查询并支持编辑/删除(内置保护);旧版实例详情深链兼容。
-4. **第四批（进行中）**：模型导入导出完整流程、模型实例导入/列配置/变更历史、服务模板 create/details/edit 深链与进程模板完整编辑。
-5. **第五批**：主机自动应用完整向导、全局配置完整子页面、业务同步、集群模板同步和资源详情深链。
+4. **第四批（已完成）**：服务模板 create/details/edit 深链与 operational 旧链重定向;进程模板动态全量字段编辑(21 属性,必填校验,覆盖式更新真实回读);修复服务模板/集群模板删除请求体契约与叶子分类过滤。
+5. **第五批（进行中）**：模型导入导出完整流程、模型实例导入/列配置/变更历史、主机自动应用完整向导、全局配置完整子页面、业务同步、集群模板同步和资源详情深链。
 6. **第六批**：云资源、Pod、跨业务转移及正式 IAM;依赖不足时明确阻塞,不用占位页冒充完成。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。
