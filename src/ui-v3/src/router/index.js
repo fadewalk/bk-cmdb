@@ -52,7 +52,10 @@ const router = createRouter({
         // 资源
         { path: 'resource/index', name: 'ResourceIndex', component: () => import('../views/resource/ResourceIndex.vue'), meta: { title: '资源目录' } },
         { path: 'resource/project', name: 'Project', component: () => import('../views/project/Project.vue'), meta: { title: '项目' } },
+        { path: 'resource/project/details/:projectId', name: 'ProjectDetail', component: () => import('../views/project/ProjectDetail.vue'), meta: { title: '项目详情' } },
         { path: 'resource/biz-set', name: 'BizSetList', component: () => import('../views/biz-set/BizSet.vue'), meta: { title: '业务集' } },
+        { path: 'resource/biz-set/details/:bizSetId', name: 'BizSetDetail', component: () => import('../views/biz-set/BizSetDetail.vue'), meta: { title: '业务集详情' } },
+        { path: 'resource/business-set/details/:bizSetId', name: 'LegacyBizSetDetail', redirect: (to) => ({ path: `/resource/biz-set/details/${to.params.bizSetId}` }), meta: { title: '业务集详情' } },
         { path: 'resource/business', name: 'Business', component: () => import('../views/BusinessList.vue'), meta: { title: '业务' } },
         { path: 'resource/business/details/:bizId', name: 'BusinessDetail', component: () => import('../views/business/BusinessDetail.vue'), meta: { title: '业务详情' } },
         { path: 'business/details/:bizId', name: 'LegacyBusinessDetail', redirect: (to) => ({ path: `/resource/business/details/${to.params.bizId}` }), meta: { title: '业务详情' } },

@@ -42,9 +42,9 @@
 | 资源目录 | `src/ui/src/views/resource/` | `/resource/index` | 部分迁移 | 全量资源分类、实例列表和详情跳转 |
 | 资源池主机 | `resource/index`、`host-details` | `/resource/host` | 核心流程 | 目录筛选、收藏、导入导出、转移、列配置、历史 |
 | 通用模型实例 | `src/ui/src/views/general-model/` | 无等价深度实例路由 | 未迁移 | 新建/批量编辑/删除、属性/关联/历史、导入 |
-| 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 部分迁移 | 详情页(属性/变更历史,`/resource/business/details/:bizId`)与旧版 `/business/details/:bizId` 深链已接;新建编辑、批量修改、归档/恢复/彻底删除未迁移 |
-| 业务集管理/详情 | `src/ui/src/views/business-set/` | `/resource/biz-set` | 部分迁移 | 详情 tabs、业务集拓扑消费和深链 |
-| 项目管理/详情 | `src/ui/src/views/project/` | `/resource/project` | 部分迁移 | 新建编辑、批量修改、列配置、详情 tabs |
+| 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 核心流程 | 列表正常/已归档双 tab;新建(web_server table 入口,根路径)/编辑/归档/恢复/彻底删除(CRUD 全闭环真实验证);详情页(属性/变更历史)+旧版 `/business/details/:bizId` 深链;批量修改未迁移 |
+| 业务集管理/详情 | `src/ui/src/views/business-set/` | `/resource/biz-set` | 部分迁移 | 详情页(属性/变更历史)+旧版 `/resource/business-set/details/:bizSetId` 深链;新建编辑、列配置未迁移 |
+| 项目管理/详情 | `src/ui/src/views/project/` | `/resource/project` | 部分迁移 | 列表修正为专用接口 /findmany/project;详情页(属性/变更历史);新建编辑、批量修改、列配置未迁移 |
 | 主机历史 | `src/ui/src/views/history/` | 无等价深链 | 未迁移 | 变更记录展示、筛选和详情 |
 | 管控区域 | `src/ui/src/views/cloud-area/` | `/resource/cloud-area` | 核心流程 | 表格内编辑、新增、区域选择和错误处理 |
 | 云账户 | `src/ui/src/views/cloud-account/` | `/resource/cloud-account` | 部分迁移 | 新增/编辑/删除、详情侧滑和任务关联 |
@@ -89,6 +89,7 @@
 6. **第六批（已完成）**：模型实例列配置与 Excel 导入(模板下载+上传真实闭环);业务拓扑跨业务转移对话框(替换"暂未支持"占位);修复主机导入走错前缀(/api/v3→根路径)的历史 bug。
 7. **第七批（已完成）**：盘点确认主机自动应用向导/业务同步闭环/集群模板同步已达成核心流程;补齐 host-apply、set-sync、set/template、synchronous/module 旧版深链兼容;「未应用主机列表」标记为后端能力限制(仅 count 接口)。
 8. **第八批（已完成）**：实例导出(修复 web_server 导出空 `$in` 条件的后端缺陷,重编 webserver 二进制,真实导出验证);业务详情页(属性/变更历史)+旧版深链;IAM 方向确认为对接开源方案体系。
-9. **第九批（进行中）**：业务新建/编辑/归档、业务集与项目详情页、服务模板双 tab 待同步红点;云资源/Pod 依赖不足时明确阻塞;IAM 按开源方案方向另行立项。
+9. **第九批（已完成）**：业务完整 CRUD(新建/编辑/归档/恢复/彻底删除,闭环验证);修复 createBusiness/updateHostProperties 根路径前缀 bug;业务集/项目详情页+旧版深链;项目列表改用专用接口;Roadmap 口径修正。
+10. **第十批（收尾）**：全量 E2E 回归、依赖阻塞项最终标注(云资源/Pod)、IAM 开源方案立项说明;云资源/Pod 依赖不足时明确阻塞。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。

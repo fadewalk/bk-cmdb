@@ -8,7 +8,11 @@
 
     <el-table :data="filtered" v-loading="loading" stripe>
       <el-table-column prop="bk_project_id" label="项目 ID" width="110" />
-      <el-table-column prop="bk_project_name" label="项目名称" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="bk_project_name" label="项目名称" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_project_name }}</el-link>
+        </template>
+      </el-table-column>
       <el-table-column prop="project_desc" label="描述" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">{{ row.project_desc || row.bk_project_desc || '-' }}</template>
       </el-table-column>
@@ -24,10 +28,12 @@
 </template>
 
 <script setup>
-// 项目列表(资源导航「项目」):老版 MENU_RESOURCE_PROJECT,走通用实例查询
+// 项目列表(资源导航「项目」):专用接口 /findmany/project
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { http } from '../../api/cmdb'
 
+const router = useRouter()
 const keyword = ref('')
 const loading = ref(false)
 const rows = ref([])
@@ -41,18 +47,17 @@ const filtered = computed(() => {
   )
 })
 
+function goDetail(row) {
+  router.push({ path: `/resource/project/details/${row.bk_project_id}` })
+}
+
 async function load() {
   loading.value = true
   try {
-    // 项目是独立模型(bk_project),按通用模型实例查询
-    const data = await http.post('/create/generalmodel/query', {}).catch(() => null)
-    if (data?.info) { rows.value = data.info; return }
-    // fallback: 尝试通用实例搜索
-    const alt = await http.post('/find/instance', {
-      bk_obj_id: 'project',
-      page: { start: 0, limit: 200 }
-    }).catch(() => null)
-    rows.value = alt?.info || []
+    const data = await http.post('/findmany/project', { page: { start: 0, limit: 200 } })
+    rows.value = data?.info || []
+  } catch {
+    rows.value = []
   } finally { loading.value = false }
 }
 

@@ -329,7 +329,8 @@ async function saveEdit() {
   saving.value = true
   try {
     const targetBizId = bizId || host.value?.bk_biz_id || 0
-    await http.post(`/table/update/instance/object/host/bk_biz_id/${targetBizId}/inst/${hostId}`, editMap.value)
+    // table 路由挂在根路径,不在 /api/v3 下
+    await http.post(`/table/update/instance/object/host/bk_biz_id/${targetBizId}/inst/${hostId}`, editMap.value, { baseURL: '' })
     ElMessage.success('属性已更新')
     editing.value = false
     await loadHost()

@@ -10,7 +10,11 @@
     <template v-if="tab === 'bizset'">
       <el-table :data="bizSets" v-loading="loading" stripe>
         <el-table-column prop="bk_biz_set_id" label="业务集 ID" width="130" />
-        <el-table-column prop="bk_biz_set_name" label="业务集名称" min-width="200" />
+        <el-table-column prop="bk_biz_set_name" label="业务集名称" min-width="200">
+          <template #default="{ row }">
+            <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_biz_set_name }}</el-link>
+          </template>
+        </el-table-column>
         <el-table-column prop="bk_biz_set_desc" label="描述" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.bk_biz_set_desc || '-' }}</template>
         </el-table-column>
@@ -42,8 +46,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { http } from '../../api/cmdb'
+
+const router = useRouter()
+function goDetail(row) {
+  router.push({ path: `/resource/biz-set/details/${row.bk_biz_set_id}` })
+}
 
 const tab = ref('bizset')
 const bizSets = ref([])

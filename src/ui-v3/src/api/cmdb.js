@@ -8,6 +8,20 @@ export { http }
 export const searchBusiness = (page, condition = {}) =>
   http.post('/biz/search/0', { page, condition })
 
+// ---------- 业务 ----------
+// 按业务 ID 精确查询(带 condition)
+export const searchBusinessById = (bizId) =>
+  http.post('/biz/search/0', { page: { start: 0, limit: 1 }, condition: { bk_biz_id: bizId } })
+// 新建业务(web_server table 入口,自动补默认字段;根路径,不在 /api/v3 下)
+export const createBusiness = (params) => http.post('/table/biz/0', params, { baseURL: '' })
+// 编辑业务
+export const updateBusiness = (bizId, params) => http.put(`/biz/0/${bizId}`, params)
+// 归档(disabled)/恢复(enable)
+export const archiveBusiness = (bizId) => http.put(`/biz/status/disabled/0/${bizId}`)
+export const recoverBusiness = (bizId, params = {}) => http.put(`/biz/status/enable/0/${bizId}`, params)
+// 彻底删除已归档业务
+export const deleteArchivedBiz = (bizIds) => http.post('/deletemany/biz', { bk_biz_id: bizIds })
+
 // ---------- 业务拓扑 ----------
 // 完整业务拓扑树(自定义集群/模块层级;?with_default 附带空闲机池)
 export const getBizTopoTree = (bizId) =>
@@ -147,9 +161,9 @@ export const deleteResourceDirectory = (moduleId) =>
   http.delete(`/delete/resource/directory/${moduleId}`)
 export const transferHostsToDirectory = (data) =>
   http.post('/host/transfer/resource/directory', data)
-// 主机属性更新
+// 主机属性更新(table 路由挂在根路径,不在 /api/v3 下)
 export const updateHostProperties = (hostId, bizId, data) =>
-  http.post(`/table/update/instance/object/host/bk_biz_id/${bizId || 0}/inst/${hostId}`, data)
+  http.post(`/table/update/instance/object/host/bk_biz_id/${bizId || 0}/inst/${hostId}`, data, { baseURL: '' })
 
 // ---------- 资源池主机列表 ----------
 export const searchHostsResource = (data) =>

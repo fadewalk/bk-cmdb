@@ -1,14 +1,20 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
+      <span
+        v-for="t in scopeTabs" :key="t.key"
+        :class="['scope-tab', { active: scope === t.key }]"
+        @click="switchScope(t.key)"
+      >{{ t.label }}</span>
+      <div class="spacer" />
       <el-input
         v-model="keyword"
         placeholder="按业务名称过滤"
         clearable
-        style="width: 260px"
+        style="width: 240px"
         :prefix-icon="'Search'"
       />
-      <div class="spacer" />
+      <el-button v-if="scope === 'normal'" type="primary" :icon="'Plus'" @click="openForm()">新建</el-button>
       <el-button :icon="'Refresh'" @click="load">刷新</el-button>
     </div>
 
@@ -34,9 +40,17 @@
         </template>
       </el-table-column>
       <el-table-column prop="time_zone" label="时区" width="150" />
-      <el-table-column label="操作" width="140" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="goTopo(row)">查看拓扑</el-button>
+          <template v-if="scope === 'normal'">
+            <el-button link type="primary" size="small" @click="goTopo(row)">查看拓扑</el-button>
+            <el-button link type="primary" size="small" @click="openForm(row)">编辑</el-button>
+            <el-button link type="warning" size="small" @click="archive(row)">归档</el-button>
+          </template>
+          <template v-else>
+            <el-button link type="primary" size="small" @click="recover(row)">恢复</el-button>
+            <el-button link type="danger" size="small" @click="removeForever(row)">彻底删除</el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -49,13 +63,57 @@
       style="margin-top: 16px; justify-content: flex-end"
       @current-change="load"
     />
+
+    <!-- 新建/编辑业务 -->
+    <el-dialog v-model="formVisible" :title="formBizId ? '编辑业务' : '新建业务'" width="560px">
+      <el-form label-width="100px">
+        <el-form-item label="业务名称" required>
+          <el-input v-model="form.bk_biz_name" />
+        </el-form-item>
+        <el-form-item label="运维人员" required>
+          <el-input v-model="form.bk_biz_maintainer" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="开发人员">
+          <el-input v-model="form.bk_biz_developer" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="测试人员">
+          <el-input v-model="form.bk_biz_tester" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="产品人员">
+          <el-input v-model="form.bk_biz_productor" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="生命周期">
+          <el-select v-model="form.life_cycle" style="width: 100%">
+            <el-option label="测试中" value="1" />
+            <el-option label="已上线" value="2" />
+            <el-option label="停运" value="3" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="时区" required>
+          <el-select v-model="form.time_zone" filterable style="width: 100%">
+            <el-option v-for="tz in timeZones" :key="tz" :label="tz" :value="tz" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="form.description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="formVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { searchBusiness } from '../api/cmdb'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  searchBusiness, createBusiness, updateBusiness,
+  archiveBusiness, recoverBusiness, deleteArchivedBiz
+} from '../api/cmdb'
 
 const router = useRouter()
 const keyword = ref('')
@@ -64,6 +122,25 @@ const pageSize = 20
 const total = ref(0)
 const rows = ref([])
 const loading = ref(false)
+const saving = ref(false)
+
+const scopeTabs = [
+  { key: 'normal', label: '正常' },
+  { key: 'archived', label: '已归档' }
+]
+const scope = ref('normal')
+
+const formVisible = ref(false)
+const formBizId = ref(null)
+const form = ref({})
+
+const timeZones = [
+  'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Singapore',
+  'Asia/Tokyo', 'Asia/Seoul', 'Asia/Bangkok', 'Asia/Dubai',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+  'America/New_York', 'America/Chicago', 'America/Los_Angeles',
+  'Australia/Sydney', 'UTC'
+]
 
 const filtered = computed(() =>
   keyword.value
@@ -74,12 +151,20 @@ const filtered = computed(() =>
 async function load() {
   loading.value = true
   try {
-    const data = await searchBusiness({ start: (page.value - 1) * pageSize, limit: pageSize })
+    const condition = scope.value === 'archived' ? { bk_data_status: 'disabled' } : {}
+    const data = await searchBusiness({ start: (page.value - 1) * pageSize, limit: pageSize }, condition)
     rows.value = data?.info || []
     total.value = data?.count || 0
   } finally {
     loading.value = false
   }
+}
+
+function switchScope(key) {
+  if (scope.value === key) return
+  scope.value = key
+  page.value = 1
+  load()
 }
 
 function goDetail(row) {
@@ -90,6 +175,98 @@ function goTopo(row) {
   router.push({ path: '/business/topo', query: { biz: row.bk_biz_id } })
 }
 
+function openForm(row) {
+  if (row) {
+    formBizId.value = row.bk_biz_id
+    form.value = {
+      bk_biz_name: row.bk_biz_name || '',
+      bk_biz_maintainer: row.bk_biz_maintainer || '',
+      bk_biz_developer: row.bk_biz_developer || '',
+      bk_biz_tester: row.bk_biz_tester || '',
+      bk_biz_productor: row.bk_biz_productor || '',
+      life_cycle: row.life_cycle || '2',
+      time_zone: row.time_zone || 'Asia/Shanghai',
+      description: row.description || ''
+    }
+  } else {
+    formBizId.value = null
+    form.value = {
+      bk_biz_name: '', bk_biz_maintainer: 'admin', bk_biz_developer: '',
+      bk_biz_tester: '', bk_biz_productor: '', life_cycle: '2',
+      time_zone: 'Asia/Shanghai', description: ''
+    }
+  }
+  formVisible.value = true
+}
+
+async function submitForm() {
+  if (!String(form.value.bk_biz_name || '').trim()) { ElMessage.warning('请填写业务名称'); return }
+  if (!String(form.value.bk_biz_maintainer || '').trim()) { ElMessage.warning('请填写运维人员'); return }
+  saving.value = true
+  try {
+    if (formBizId.value) {
+      await updateBusiness(formBizId.value, { ...form.value })
+      ElMessage.success('业务已更新')
+    } else {
+      await createBusiness({ ...form.value })
+      ElMessage.success('业务已创建')
+    }
+    formVisible.value = false
+    await load()
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
+  } finally { saving.value = false }
+}
+
+async function archive(row) {
+  try {
+    await ElMessageBox.confirm(`确定归档业务「${row.bk_biz_name}」?归档后业务默认不可见,可在「已归档」中恢复或彻底删除。`, '归档确认', { type: 'warning' })
+  } catch { return }
+  try {
+    await archiveBusiness(row.bk_biz_id)
+    ElMessage.success('已归档')
+    await load()
+  } catch (e) {
+    ElMessage.error('归档失败: ' + (e?.message || '后端异常'))
+  }
+}
+
+async function recover(row) {
+  try {
+    await ElMessageBox.confirm(`确定恢复业务「${row.bk_biz_name}」?`, '恢复确认', { type: 'warning' })
+  } catch { return }
+  try {
+    await recoverBusiness(row.bk_biz_id)
+    ElMessage.success('已恢复')
+    await load()
+  } catch (e) {
+    ElMessage.error('恢复失败: ' + (e?.message || '后端异常'))
+  }
+}
+
+async function removeForever(row) {
+  try {
+    await ElMessageBox.confirm(`彻底删除业务「${row.bk_biz_name}」?该操作不可恢复!`, '危险操作', { type: 'error', confirmButtonText: '彻底删除' })
+  } catch { return }
+  try {
+    await deleteArchivedBiz([row.bk_biz_id])
+    ElMessage.success('已彻底删除')
+    await load()
+  } catch (e) {
+    ElMessage.error('删除失败: ' + (e?.message || '后端异常'))
+  }
+}
 
 onMounted(load)
 </script>
+
+<style scoped>
+.table-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.table-toolbar .spacer { flex: 1; }
+.scope-tab {
+  padding: 6px 4px; margin-right: 20px; font-size: 14px;
+  color: #63656E; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.scope-tab:hover { color: #3A84FF; }
+.scope-tab.active { color: #3A84FF; border-bottom-color: #3A84FF; font-weight: 500; }
+</style>
