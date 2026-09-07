@@ -42,7 +42,7 @@
 | 资源目录 | `src/ui/src/views/resource/` | `/resource/index` | 部分迁移 | 全量资源分类、实例列表和详情跳转 |
 | 资源池主机 | `resource/index`、`host-details` | `/resource/host` | 核心流程 | 目录筛选、收藏、导入导出、转移、列配置、历史 |
 | 通用模型实例 | `src/ui/src/views/general-model/` | 无等价深度实例路由 | 未迁移 | 新建/批量编辑/删除、属性/关联/历史、导入 |
-| 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 部分迁移 | 新建编辑、批量修改、归档/恢复/彻底删除、详情 tabs |
+| 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 部分迁移 | 详情页(属性/变更历史,`/resource/business/details/:bizId`)与旧版 `/business/details/:bizId` 深链已接;新建编辑、批量修改、归档/恢复/彻底删除未迁移 |
 | 业务集管理/详情 | `src/ui/src/views/business-set/` | `/resource/biz-set` | 部分迁移 | 详情 tabs、业务集拓扑消费和深链 |
 | 项目管理/详情 | `src/ui/src/views/project/` | `/resource/project` | 部分迁移 | 新建编辑、批量修改、列配置、详情 tabs |
 | 主机历史 | `src/ui/src/views/history/` | 无等价深链 | 未迁移 | 变更记录展示、筛选和详情 |
@@ -61,7 +61,7 @@
 | 关联类型 | `src/ui/src/views/model-association/` | `/model/association` | 核心流程 | 类型 CRUD、使用统计和模型关联列表 |
 | 字段组合模板 | `src/ui/src/views/field-template/` | `/model/field-template` | 核心流程 | 多步创建/编辑/绑定、差异、同步结果、深链 |
 | 字段分组 | 模型详情/通用 field-group 组件 | 模型详情内 | 部分迁移 | 分组 CRUD、移动字段和排序 |
-| 模型实例 | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 实例列表/搜索/分页、新建/编辑/删除/批量删除、详情抽屉、变更历史、列配置(localStorage)、Excel 导入(模板下载+上传,真实闭环验证);旧版深链已兼容;导出未迁移 |
+| 模型实例 | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 实例列表/搜索/分页、新建/编辑/删除/批量删除、详情抽屉、变更历史、列配置(localStorage)、Excel 导入+导出(真实闭环验证);旧版深链已兼容 |
 
 ## 运营与平台
 
@@ -77,7 +77,7 @@
 |---|---|---|---|
 | 云资源发现/同步 | `src/ui/src/views/cloud-resource/` | 依赖阻塞 | standalone 或生产环境提供云供应商、账户、VPC 和任务数据链路 |
 | Pod/容器详情 | `src/ui/src/views/pod-details/` | 依赖阻塞 | Kubernetes 集群纳管和 Pod/容器 API 可用 |
-| 外部 IAM/正式登录 | 旧版 router auth/interceptor | 尚未完全验收 | admin/skip-login 与正式登录/IAM 各自完成权限、会话和错误路径测试 |
+| 外部 IAM/正式登录 | 旧版 router auth/interceptor(绑定蓝鲸 IAM) | 尚未实现 | **方向已定:对接开源方案体系**(OIDC/OAuth2 IdP、Casbin 等),不依赖蓝鲸权限中心;现有 StandaloneAPIKeyProxy 作为 OpenAPI/服务间鉴权基础;落地前 skip-login 模式验收 |
 
 ## 当前批次与发布门禁
 
@@ -88,6 +88,7 @@
 5. **第五批（已完成）**：全局配置交互语义补齐(未保存确认/tab query/旧路径重定向)并修复保存契约为全量读-改-写(真实回读验证);模型实例变更历史(/find/inst_audit)。
 6. **第六批（已完成）**：模型实例列配置与 Excel 导入(模板下载+上传真实闭环);业务拓扑跨业务转移对话框(替换"暂未支持"占位);修复主机导入走错前缀(/api/v3→根路径)的历史 bug。
 7. **第七批（已完成）**：盘点确认主机自动应用向导/业务同步闭环/集群模板同步已达成核心流程;补齐 host-apply、set-sync、set/template、synchronous/module 旧版深链兼容;「未应用主机列表」标记为后端能力限制(仅 count 接口)。
-8. **第八批（进行中）**：资源详情深链(业务/业务集/项目详情属性-关联-审计)、服务模板配置/实例双 tab 待同步红点、实例导出;云资源/Pod/正式 IAM 依赖不足时明确阻塞。
+8. **第八批（已完成）**：实例导出(修复 web_server 导出空 `$in` 条件的后端缺陷,重编 webserver 二进制,真实导出验证);业务详情页(属性/变更历史)+旧版深链;IAM 方向确认为对接开源方案体系。
+9. **第九批（进行中）**：业务新建/编辑/归档、业务集与项目详情页、服务模板双 tab 待同步红点;云资源/Pod 依赖不足时明确阻塞;IAM 按开源方案方向另行立项。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。

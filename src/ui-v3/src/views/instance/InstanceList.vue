@@ -7,6 +7,7 @@
       <el-button type="primary" :icon="'Plus'" @click="openForm()">新建</el-button>
       <el-button :disabled="!selected.length" @click="batchRemove">删除</el-button>
       <el-button :icon="'Upload'" @click="importVisible = true">导入</el-button>
+      <el-button :icon="'Download'" :loading="exporting" @click="submitExport">导出</el-button>
       <el-dropdown trigger="click" @command="onColCmd">
         <el-button :icon="'Setting'">列配置</el-button>
         <template #dropdown>
@@ -193,7 +194,7 @@ import {
   searchModels, searchModelAttributes,
   searchInstances, countInstances,
   createInstance, updateInstance, deleteInstance, deleteInstances,
-  searchInstAudit, importInstances, downloadInstTemplate
+  searchInstAudit, importInstances, downloadInstTemplate, exportInstances
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -372,6 +373,26 @@ async function fetchTemplate() {
   } catch (e) {
     ElMessage.error('模板下载失败: ' + (e?.message || '后端异常'))
   } finally { tplDownloading.value = false }
+}
+
+// ---------- 导出 ----------
+const exporting = ref(false)
+async function submitExport() {
+  exporting.value = true
+  try {
+    await exportInstances(objId.value)
+    ElMessage.success('已导出')
+  } catch (e) {
+    let msg = e?.message || '后端异常'
+    if (e?.response?.data instanceof Blob) {
+      try {
+        const text = JSON.parse(await e.response.data.text())
+        msg = text.bk_error_msg || msg
+      } catch { /* 保留原信息 */ }
+    }
+    // 空模型等场景:后端返回明确的错误文本
+    ElMessage.error('导出失败: ' + msg)
+  } finally { exporting.value = false }
 }
 async function submitImport() {
   if (!importFile.value) { ElMessage.warning('请选择文件'); return }

@@ -394,6 +394,27 @@ export const downloadInstTemplate = async (objId) => {
   URL.revokeObjectURL(url)
 }
 
+// 导出模型实例(web_server 生成真实 xlsx;根路径;object_unique_id=0 即可)
+export const exportInstances = async (objId, params = {}) => {
+  const res = await http.post(`/insts/object/${objId}/export`, {
+    bk_obj_id: objId,
+    export_custom_fields: [],
+    object_unique_id: 0,
+    association_condition: {},
+    ...params
+  }, {
+    baseURL: '',
+    responseType: 'blob',
+    timeout: 120000
+  })
+  const url = URL.createObjectURL(res)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `bk_cmdb_inst_${objId}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ---------- 集群模板 ----------
 export const searchSetTemplates = (bizId, page) =>
   http.post(`/findmany/topo/set_template/bk_biz_id/${bizId}/web`, { page })

@@ -127,12 +127,15 @@ func (e *InstParam) GetInstCond() (interface{}, error) {
 
 	e.cursor.setEnd()
 
+	condition := mapstr.MapStr{common.BKObjIDField: e.ObjID}
+	// 未指定实例 ID 时导出该模型全部实例,不能带空 $in 条件(空数组匹配不到任何数据)
+	if len(e.InstIDArr) > 0 {
+		condition[common.BKInstIDField] = mapstr.MapStr{common.BKDBIN: e.InstIDArr}
+	}
+
 	return mapstr.MapStr{
-		metadata.DBQueryCondition: mapstr.MapStr{
-			common.BKInstIDField: mapstr.MapStr{common.BKDBIN: e.InstIDArr},
-			common.BKObjIDField:  e.ObjID,
-		},
-		metadata.DBFields: fields,
+		metadata.DBQueryCondition: condition,
+		metadata.DBFields:         fields,
 	}, nil
 }
 

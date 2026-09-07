@@ -14,7 +14,11 @@
 
     <el-table :data="filtered" v-loading="loading" stripe>
       <el-table-column prop="bk_biz_id" label="业务 ID" width="110" sortable />
-      <el-table-column prop="bk_biz_name" label="业务名称" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="bk_biz_name" label="业务名称" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_biz_name }}</el-link>
+        </template>
+      </el-table-column>
       <el-table-column prop="bk_biz_maintainer" label="运维人员" width="160" show-overflow-tooltip>
         <template #default="{ row }">{{ row.bk_biz_maintainer || '-' }}</template>
       </el-table-column>
@@ -76,6 +80,10 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function goDetail(row) {
+  router.push({ path: `/resource/business/details/${row.bk_biz_id}` })
 }
 
 function goTopo(row) {
