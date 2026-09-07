@@ -135,9 +135,9 @@ function selectType(item) {
     router.push(item.route)
     return
   }
-  // 通用分类页面:跳到 /resource/catalog/{objId}
+  // 通用分类页面:跳到模型实例列表(对齐旧版 general-model)
   if (item.id !== 'host' && item.id !== 'biz') {
-    router.push(`/resource/catalog/${item.id}`)
+    router.push(`/resource/instance/${item.id}`)
     return
   }
   // host / biz 维持内嵌切换

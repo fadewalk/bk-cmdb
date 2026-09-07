@@ -86,16 +86,30 @@
       <!-- 模型关联 -->
       <template v-if="tab === 'assoc'">
         <el-table :data="assocs" size="small" v-loading="assocLoading">
-          <el-table-column label="源模型" width="140">
-            <template #default="{ row }">{{ row.bk_obj_id }}</template>
+          <el-table-column label="方向" width="70">
+            <template #default="{ row }">{{ row.bk_obj_id === objId ? '源' : '目标' }}</template>
           </el-table-column>
-          <el-table-column label="关联类型" width="120">
+          <el-table-column label="源模型" width="130">
+            <template #default="{ row }">{{ modelName(row.bk_obj_id) }}</template>
+          </el-table-column>
+          <el-table-column label="关联类型" width="110">
             <template #default="{ row }">{{ row.bk_asst_id }}</template>
           </el-table-column>
-          <el-table-column label="目标模型" width="140">
-            <template #default="{ row }">{{ row.bk_asst_obj_id }}</template>
+          <el-table-column label="目标模型" width="130">
+            <template #default="{ row }">{{ modelName(row.bk_asst_obj_id) }}</template>
           </el-table-column>
-          <el-table-column prop="bk_obj_asst_id" label="关联标识" min-width="180" />
+          <el-table-column label="源-目标约束" width="110">
+            <template #default="{ row }">{{ row.mapping || '--' }}</template>
+          </el-table-column>
+          <el-table-column prop="bk_obj_asst_name" label="关联描述" min-width="140">
+            <template #default="{ row }">{{ row.bk_obj_asst_name || '--' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="openAssocEdit(row)">编辑</el-button>
+              <el-button link type="danger" size="small" :disabled="row.ispre || row.bk_asst_id === 'bk_mainline'" @click="removeAssoc(row)">删除</el-button>
+            </template>
+          </el-table-column>
         </el-table>
         <el-empty v-if="!assocLoading && assocs.length === 0" description="暂无关联关系" :image-size="70" />
       </template>
@@ -192,6 +206,20 @@
         <el-button type="primary" :loading="saving" @click="submitUnique">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑关联描述 -->
+    <el-dialog v-model="assocDialog" title="编辑关联关系" width="460px">
+      <el-form label-width="100px">
+        <el-form-item label="源模型"><el-input :model-value="modelName(assocForm.bk_obj_id)" disabled /></el-form-item>
+        <el-form-item label="目标模型"><el-input :model-value="modelName(assocForm.bk_asst_obj_id)" disabled /></el-form-item>
+        <el-form-item label="关联类型"><el-input :model-value="assocForm.bk_asst_id" disabled /></el-form-item>
+        <el-form-item label="关联描述"><el-input v-model="assocForm.bk_obj_asst_name" maxlength="256" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="assocDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitAssocEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -201,11 +229,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Close, CaretBottom, MoreFilled, Search } from '@element-plus/icons-vue'
 import {
-  http, searchModels, searchModelAttributes,
+  searchModels, searchModelAttributes,
   createModelAttribute, updateModelAttribute, deleteModelAttribute,
   searchFieldGroups, createFieldGroup, updateFieldGroup, deleteFieldGroup,
   searchUniques, createUnique, updateUnique, deleteUnique,
-  getModelStatistics
+  getModelStatistics,
+  searchObjectAssociations, updateObjectAssociation, deleteObjectAssociation
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -213,6 +242,7 @@ const router = useRouter()
 const objId = String(route.params.objId || '')
 
 const model = ref(null)
+const modelList = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const tab = ref('fields')
@@ -231,6 +261,8 @@ const groupForm = ref({ id: null, name: '' })
 
 const assocs = ref([])
 const assocLoading = ref(false)
+const assocDialog = ref(false)
+const assocForm = ref({})
 const uniques = ref([])
 const uniqueLoading = ref(false)
 const uniqueDialog = ref(false)
@@ -242,6 +274,10 @@ function goBack() { router.push('/model/management') }
 function propName(keyId) {
   const a = attrs.value.find((x) => x.id === keyId)
   return a ? a.bk_property_name : `#${keyId}`
+}
+
+function modelName(id) {
+  return modelList.value.find((m) => m.bk_obj_id === id)?.bk_obj_name || id || '--'
 }
 
 function typeChar(t) {
@@ -276,10 +312,11 @@ const filteredFieldGroups = computed(() => {
 
 async function loadModel() {
   const [all, stats] = await Promise.all([
-    searchModels({ condition: { bk_obj_id: objId } }),
+    searchModels({}),
     getModelStatistics().catch(() => [])
   ])
-  const m = (all || [])[0] || null
+  modelList.value = all || []
+  const m = modelList.value.find((x) => x.bk_obj_id === objId) || null
   if (m) {
     const st = (stats || []).find((s) => s.bk_obj_id === objId)
     m.instCount = st ? st.instance_count : 0
@@ -335,13 +372,48 @@ async function loadUniques() {
 async function loadAssocs() {
   assocLoading.value = true
   try {
-    const data = await http.post('/find/objectassociation', {
-      condition: { bk_obj_id: { $in: [objId] } }
+    const data = await searchObjectAssociations({
+      condition: { $or: [{ bk_obj_id: objId }, { bk_asst_obj_id: objId }] }
     }).catch(() => [])
-    assocs.value = (Array.isArray(data) ? data : []).filter(
-      (a) => a.bk_obj_id === objId || a.bk_asst_obj_id === objId
-    )
+    const arr = Array.isArray(data) ? data : (data?.info || [])
+    assocs.value = arr.filter((a) => a.bk_obj_id === objId || a.bk_asst_obj_id === objId)
   } finally { assocLoading.value = false }
+}
+
+function openAssocEdit(row) {
+  if (row.ispre || row.bk_asst_id === 'bk_mainline') {
+    ElMessage.warning('内置或预置关联不可编辑')
+    return
+  }
+  assocForm.value = { ...row }
+  assocDialog.value = true
+}
+
+async function submitAssocEdit() {
+  saving.value = true
+  try {
+    await updateObjectAssociation(assocForm.value.id, { bk_obj_asst_name: assocForm.value.bk_obj_asst_name })
+    ElMessage.success('关联已更新')
+    assocDialog.value = false
+    await loadAssocs()
+  } catch (e) {
+    ElMessage.error('关联更新失败: ' + (e?.message || '后端异常'))
+  } finally { saving.value = false }
+}
+
+async function removeAssoc(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除关联「${row.bk_obj_asst_id}」?`, '删除确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteObjectAssociation(row.id)
+    ElMessage.success('关联已删除')
+    await loadAssocs()
+  } catch (e) {
+    ElMessage.error('关联删除失败: ' + (e?.message || '后端异常'))
+  }
 }
 
 async function load() {
