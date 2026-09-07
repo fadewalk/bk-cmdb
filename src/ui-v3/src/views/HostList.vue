@@ -1,18 +1,21 @@
 <template>
   <div class="host-page">
     <h1 class="page-title sr-only">主机</h1>
+    <!-- 全宽 scope tabs(对齐老版: 未分配/已分配/全部 在内容区顶部) -->
+    <div class="scope-tabs">
+      <span
+        v-for="t in groupTabs" :key="t.key"
+        :class="['scope-tab', { active: groupTab === t.key }]"
+        @click="groupTab = t.key"
+      >{{ t.label }}</span>
+    </div>
     <div class="host-body">
-      <!-- 左:资源目录树 + 资源池 scope 切换 -->
+      <!-- 左:分组目录树 -->
       <div class="group-col">
-        <div class="parent-label">资源目录</div>
-        <div class="group-tabs">
-          <span
-            v-for="t in groupTabs" :key="t.key"
-            :class="['group-tab', { active: groupTab === t.key }]"
-            @click="groupTab = t.key"
-          >{{ t.label }}</span>
+        <div class="dir-search-row">
+          <el-input v-model="dirKeyword" placeholder="分组目录" size="small" clearable :prefix-icon="'Search'" />
+          <el-button class="dir-add" size="small" :icon="'Plus'" link @click="openCreateDir()" />
         </div>
-        <el-input v-model="dirKeyword" placeholder="搜索目录" size="small" clearable style="margin: 10px 0 6px" />
         <el-tree
           ref="dirTreeRef"
           :data="dirTreeData"
@@ -34,20 +37,8 @@
           </template>
         </el-tree>
         <div class="dir-actions">
-          <el-button size="small" :icon="'Plus'" link @click="openCreateDir()">新建目录</el-button>
           <el-button size="small" :icon="'Edit'" link :disabled="currentDirId === 'default'" @click="onDirCmd('rename')">重命名</el-button>
           <el-button size="small" :icon="'Delete'" link :disabled="currentDirId === 'default'" @click="onDirCmd('delete')">删除</el-button>
-        </div>
-        <div class="group-list">
-          <div
-            v-for="g in groupList" :key="g.id"
-            :class="['group-item', { active: activeGroup === g.id }]"
-            @click="onGroupClick(g)"
-          >
-            <i class="bk-cmdb-icon icon-cc-host" />
-            <span class="g-name">{{ g.name }}</span>
-            <span class="g-count">{{ g.count }}</span>
-          </div>
         </div>
       </div>
 
@@ -55,36 +46,51 @@
       <div class="main-col">
     <div class="toolbar">
       <el-button size="small" type="primary" :icon="'Plus'" @click="importVisible = true">导入主机</el-button>
-      <el-button size="small" :icon="'Star'" @click="openFavs">收藏({{ favorites.length }})</el-button>
-          <el-button size="small" :disabled="!selectedHosts.length" @click="openTransferWizard">分配到 ({{ selectedHosts.length }})</el-button>
-          <el-dropdown trigger="click" @command="onMore">
-            <el-button size="small" :disabled="!selectedHosts.length">
-              更多<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="copy">复制 IP</el-dropdown-item>
-                <el-dropdown-item command="toResource">转移到资源池</el-dropdown-item>
-                <el-dropdown-item command="toDir" :disabled="!currentDirId">转移到目录…</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <div class="spacer" />
-          <el-button size="small" :icon="'Refresh'" @click="reload">刷新</el-button>
-          <span class="refresh-time">{{ refreshText }}</span>
-          <el-input
-            v-model="keyword"
-            placeholder="IP/固资编号/IPv6"
-            size="small"
-            clearable
-            style="width: 200px; margin-left: 8px"
-            @keyup.enter="reload"
-            @clear="reload"
-          />
-          <el-popover placement="bottom-end" :width="320" trigger="click" v-model:visible="filterVisible">
-            <template #reference>
-              <el-button size="small" :icon="'Filter'">筛选({{ activeFilterCount }})</el-button>
-            </template>
+      <el-button size="small" :disabled="!selectedHosts.length" @click="openTransferWizard">分配到<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+      <el-dropdown trigger="click" @command="onBatchEdit">
+        <el-button size="small" :disabled="!selectedHosts.length">编辑<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="edit">编辑属性</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <el-dropdown trigger="click" @command="onCopy">
+        <el-button size="small" :disabled="!selectedHosts.length">复制<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="ip">复制 IP</el-dropdown-item>
+            <el-dropdown-item command="name">复制主机名称</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <el-dropdown trigger="click" @command="onMore">
+        <el-button size="small" :disabled="!selectedHosts.length">
+          更多<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="toResource">转移到资源池</el-dropdown-item>
+            <el-dropdown-item command="toDir" :disabled="!currentDirId">转移到目录…</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <div class="spacer" />
+      <el-button size="small" :icon="'Refresh'" @click="reload">刷新</el-button>
+      <span class="refresh-time">{{ refreshText }}</span>
+      <el-input
+        v-model="keyword"
+        placeholder="请输入IP或固资编号"
+        size="small"
+        clearable
+        style="width: 190px; margin-left: 8px"
+        @keyup.enter="reload"
+        @clear="reload"
+      />
+      <el-popover placement="bottom-end" :width="320" trigger="click" v-model:visible="filterVisible">
+        <template #reference>
+          <el-button size="small" :icon="'Filter'">筛选({{ activeFilterCount }})</el-button>
+        </template>
             <div class="filter-panel">
               <div class="filter-row">
                 <span>操作系统</span>
@@ -114,6 +120,11 @@
           @selection-change="onSelect"
         >
           <el-table-column type="selection" width="36" />
+          <el-table-column label="ID" width="70" sortable>
+            <template #default="{ row }">
+              <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_id }}</el-link>
+            </template>
+          </el-table-column>
           <el-table-column label="内网IPv4" min-width="130">
             <template #default="{ row }">
               <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
@@ -673,6 +684,22 @@ async function doTransfer() {
   }
 }
 
+async function onCopy(cmd) {
+  const field = cmd === 'name' ? 'bk_host_name' : 'bk_host_innerip'
+  const vals = selectedHosts.value.map((h) => h[field]).filter(Boolean).join('\n')
+  if (!vals) { ElMessage.warning('所选主机无可复制内容'); return }
+  try {
+    await navigator.clipboard.writeText(vals)
+    ElMessage.success(`已复制 ${vals.split('\n').length} 项`)
+  } catch (e) {
+    ElMessage.error('复制失败')
+  }
+}
+
+function onBatchEdit() {
+  ElMessage.info(`批量编辑 ${selectedHosts.value.length} 台主机属性(请在主机详情中逐台编辑)`)
+}
+
 async function onMore(cmd) {
   if (cmd === 'copy') {
     const ips = selectedHosts.value.map((h) => h.bk_host_innerip).filter(Boolean).join('\n')
@@ -770,6 +797,8 @@ async function submitImport() {
 onMounted(() => {
   const ip = route.query.ip
   if (ip) keyword.value = String(ip)
+  if (route.query.cloudId !== undefined) filters.value.cloudId = Number(route.query.cloudId)
+  if (route.query.advanced) filterVisible.value = true
   loadDirectoryTree()
   load()
 })
@@ -789,33 +818,27 @@ onMounted(() => {
   padding: 12px; overflow: auto;
   background: #fafbfc;
 }
-.parent-label {
-  padding: 4px 4px 8px;
-  font-size: 12px; color: #979BA5;
-  border-bottom: 1px solid #F0F1F5;
-  margin-bottom: 8px;
+/* 全宽 scope tabs(对齐老版内容区顶部) */
+.scope-tabs {
+  display: flex; padding: 0 20px;
+  border-bottom: 1px solid #E7E9EF;
+  background: #fff;
 }
-.group-tabs { display: flex; border-bottom: 1px solid #E7E9EF; }
-.group-tab {
-  flex: 1; text-align: center; padding: 6px 0; font-size: 13px;
+.scope-tab {
+  padding: 10px 4px; margin-right: 32px; font-size: 14px;
   color: #63656E; cursor: pointer; border-bottom: 2px solid transparent;
 }
-.group-tab.active { color: #3A84FF; border-bottom-color: #3A84FF; }
+.scope-tab:hover { color: #3A84FF; }
+.scope-tab.active { color: #3A84FF; border-bottom-color: #3A84FF; font-weight: 500; }
+
+.dir-search-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.dir-add { color: #979BA5; }
+.dir-add:hover { color: #3A84FF; }
 .dir-tree { background: transparent; padding: 6px 0; }
 .dir-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .dir-row .d-name { flex: 1; }
 .d-count { color: #979ba5; font-size: 12px; }
-.group-list { margin-top: 4px; }
-.group-item {
-  display: flex; align-items: center; gap: 8px;
-  height: 32px; padding: 0 8px; font-size: 13px;
-  color: #63656E; cursor: pointer; border-radius: 2px;
-}
-.group-item:hover { background: #F6F6F9; }
-.group-item.active { background: #E1ECFF; color: #3A84FF; }
-.g-name { flex: 1; }
-.g-count { color: #979ba5; }
-.main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 16px 12px; }
+.main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 16px 12px; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toolbar .spacer { flex: 1; }
 .refresh-time { color: #979ba5; font-size: 12px; margin: 0 4px; }

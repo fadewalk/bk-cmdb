@@ -394,7 +394,7 @@ import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
-const bizId = computed(() => bizStore.bizId)
+const bizId = computed(() => Number(route.params.bizId || bizStore.bizId) || null)
 
 const keyword = ref('')
 const treeData = ref([])
@@ -994,7 +994,7 @@ onMounted(async () => {
   await bizStore.ensureLoaded()
   loadPickedColumns()
   if (bizId.value) {
-    const fromQuery = Number(route.query.biz)
+    const fromQuery = Number(route.query.biz || route.params.bizId)
     if (fromQuery && bizStore.bizList.some((b) => b.bk_biz_id === fromQuery)) bizStore.select(fromQuery)
     load()
     loadModuleOptions()

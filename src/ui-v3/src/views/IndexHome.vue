@@ -82,11 +82,11 @@ function handleSearch() {
   const kw = keyword.value.trim()
   if (!kw) return
   searching.value = true
-  router.push({ path: '/resource/catalog', query: { ip: kw } })
+  router.push({ path: '/resource/host', query: { ip: kw } })
 }
 
 function goAdvanced() {
-  router.push({ path: '/resource/catalog', query: { advanced: 1 } })
+  router.push({ path: '/resource/host', query: { advanced: 1 } })
 }
 
 function showFullTip() {

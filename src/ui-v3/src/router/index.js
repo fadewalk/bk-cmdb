@@ -16,9 +16,14 @@ const router = createRouter({
 
         // 业务
         { path: 'business/topo', name: 'Topo', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑' } },
+        { path: 'business/:bizId/index', name: 'LegacyBusinessTopo', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑' } },
+        { path: 'business/:bizId/host/:id', name: 'LegacyBusinessHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'biz-set/topo', name: 'BizSetTopo', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
+        { path: 'business-set/:bizSetId/index', name: 'LegacyBizSetTopo', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
+        { path: 'business-set/:bizSetId/host/:id', name: 'LegacyBizSetHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'business/sync', name: 'BusinessSync', component: () => import('../views/business-sync/BusinessSync.vue'), meta: { title: '业务同步' } },
         { path: 'business/service-template', name: 'ServiceTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
+        { path: 'business/process-template', name: 'ProcessTemplate', component: () => import('../views/service/ProcessTemplate.vue'), meta: { title: '进程模板' } },
         { path: 'business/set-template', name: 'SetTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '集群模板', tab: 'settpl' } },
         { path: 'business/service-category', name: 'ServiceCategory', component: () => import('../views/service-category/Index.vue'), meta: { title: '服务分类' } },
         { path: 'business/host-apply', name: 'HostApply', component: () => import('../views/host-apply/HostApply.vue'), meta: { title: '主机自动应用' } },
@@ -31,7 +36,11 @@ const router = createRouter({
         { path: 'resource/biz-set', name: 'BizSetList', component: () => import('../views/biz-set/BizSet.vue'), meta: { title: '业务集' } },
         { path: 'resource/business', name: 'Business', component: () => import('../views/BusinessList.vue'), meta: { title: '业务' } },
         { path: 'resource/catalog/:objId', name: 'ResourceCatalog', component: () => import('../views/resource/ResourceCatalog.vue'), meta: { title: '资源分类' } },
+        { path: 'resource/instance/:objId', name: 'InstanceList', component: () => import('../views/instance/InstanceList.vue'), meta: { title: '模型实例' } },
+        { path: 'resource/instance/:objId/:instId', name: 'LegacyInstanceDetail', redirect: (to) => ({ path: `/resource/instance/${to.params.objId}`, query: { instId: to.params.instId } }), meta: { title: '模型实例' } },
         { path: 'resource/host', name: 'ResourceHost', component: () => import('../views/HostList.vue'), meta: { title: '主机' } },
+        { path: 'resource/host/:id', name: 'LegacyResourceHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
+        { path: 'resource/host/:business/:id', name: 'LegacyBusinessResourceHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/Cloud.vue'), meta: { title: '管控区域', tab: 'area' } },
         { path: 'resource/cloud-account', name: 'CloudAccount', component: () => import('../views/cloud/Cloud.vue'), meta: { title: '云账户', tab: 'account' } },
         { path: 'resource/cloud-discover', name: 'CloudDiscover', component: () => import('../views/cloud/CloudDiscover.vue'), meta: { title: '云资源发现' } },
@@ -54,6 +63,7 @@ const router = createRouter({
         { path: 'platform/roadmap', name: 'Roadmap', component: () => import('../views/Roadmap.vue'), meta: { title: '功能路线' } },
 
         // 主机详情(独立页)
+        { path: 'host-landing/:ip/:cloudId?', name: 'LegacyHostLanding', redirect: (to) => ({ path: '/resource/host', query: { ip: to.params.ip, cloudId: to.params.cloudId || undefined } }), meta: { title: '主机搜索' } },
         { path: 'host-detail', name: 'HostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } }
       ]
     },

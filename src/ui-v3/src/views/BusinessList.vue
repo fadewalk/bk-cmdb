@@ -79,8 +79,9 @@ async function load() {
 }
 
 function goTopo(row) {
-  router.push({ path: '/topo', query: { biz: row.bk_biz_id } })
+  router.push({ path: '/business/topo', query: { biz: row.bk_biz_id } })
 }
+
 
 onMounted(load)
 </script>

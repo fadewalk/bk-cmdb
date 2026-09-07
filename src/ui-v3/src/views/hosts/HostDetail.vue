@@ -169,8 +169,8 @@ import {
 
 const route = useRoute()
 const router = useRouter()
-const hostId = Number(route.query.id)
-const bizId = route.query.biz ? Number(route.query.biz) : null
+const hostId = Number(route.params.id || route.query.id)
+const bizId = route.params.bizId || route.params.business || route.query.biz ? Number(route.params.bizId || route.params.business || route.query.biz) : null
 
 const tab = ref('property')
 const host = ref(null)
@@ -247,6 +247,10 @@ async function loadHost() {
 }
 
 async function loadSvcInstances() {
+  if (!bizId) {
+    svcInstances.value = []
+    return
+  }
   svcLoading.value = true
   try {
     const data = await searchServiceInstances(bizId, { start: 0, limit: 200 })
@@ -254,7 +258,7 @@ async function loadSvcInstances() {
     const all = data?.info || []
     // 尝试关联查询 host_inst_topo,只过滤与本主机相关的
     try {
-      const topo = await getHostInstTopo(hostId, { bk_biz_id: bizId || 0, page: { start: 0, limit: 200 } })
+      const topo = await getHostInstTopo(hostId, { bk_biz_id: bizId, page: { start: 0, limit: 200 } })
       const ids = new Set((topo?.info || []).map((x) => x.bk_inst_id || x.id))
       svcInstances.value = all.filter((r) => ids.has(r.id) || (r.bk_host_id === hostId))
     } catch (e) {
@@ -266,12 +270,17 @@ async function loadSvcInstances() {
 }
 
 async function loadAssoc() {
+  if (!bizId) {
+    assocGroups.value = []
+    return
+  }
   assocLoading.value = true
   try {
     // 用通用关联查询
     const data = await searchHostInstAssoc({
       bk_obj_id: 'host',
       bk_supplier_account: '0',
+      bk_biz_id: bizId,
       page: { start: 0, limit: 200 }
     }).catch(() => ({ info: [] }))
     // data.info 里是该主机关联的实例(按 objId 分组)
@@ -295,7 +304,7 @@ async function loadAssoc() {
 }
 
 watch(tab, (v) => {
-  if (v === 'service' && svcInstances.value.length === 0 && !svcLoading.value) loadSvcInstances()
+  if (v === 'service' && bizId && svcInstances.value.length === 0 && !svcLoading.value) loadSvcInstances()
   if (v === 'association' && assocGroups.value.length === 0 && !assocLoading.value) loadAssoc()
 })
 
@@ -333,7 +342,7 @@ async function saveEdit() {
 
 function goToTopologyForAdd() {
   if (!bizId) { ElMessage.warning('资源池主机无业务模块,请先转移到业务'); return }
-  router.push('/business/topo')
+  router.push({ path: '/business/topo', query: { biz: bizId } })
 }
 
 async function openSvcProcesses(row) {
@@ -342,7 +351,7 @@ async function openSvcProcesses(row) {
   procDrawer.value = true
   procLoading.value = true
   try {
-    const data = await searchProcessInstances(bizId, row.id, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
     processes.value = data?.info || []
   } finally {
     procLoading.value = false
