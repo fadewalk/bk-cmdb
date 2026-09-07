@@ -195,6 +195,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { useBizStore } from '../../stores/biz'
@@ -211,6 +212,7 @@ import {
 } from '../../api/cmdb'
 
 const bizStore = useBizStore()
+const route = useRoute()
 const mode = ref('module')
 const sidebarCollapsed = ref(false)
 const searchKw = ref('')
@@ -532,6 +534,9 @@ watch(() => bizStore.bizId, () => { clearSelection(); loadTree() })
 watch(mode, () => { clearSelection(); loadTree() })
 
 onMounted(async () => {
+  // 旧版深链 /business/:bizId/host-apply/:mode → 顶层切换模块/模板模式
+  const legacyMode = route.query.mode
+  if (legacyMode === 'template' || legacyMode === 'module') mode.value = legacyMode
   await bizStore.ensureLoaded()
   if (bizStore.bizId) await loadTree()
 })

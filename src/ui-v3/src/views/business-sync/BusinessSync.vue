@@ -51,9 +51,12 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
 import { searchServiceTemplates, getServiceTemplateDiff, syncServiceInstances, listModulesByServiceTemplate } from '../../api/cmdb'
+
+const route = useRoute()
 
 const bizStore = useBizStore()
 const bizId = ref(bizStore.bizId || null)
@@ -162,6 +165,14 @@ onMounted(async () => {
   await bizStore.ensureLoaded()
   bizId.value = bizStore.bizId
   if (bizId.value) await loadTemplates()
+  // 旧版深链 /business/:bizId/synchronous/module/:template/:modules
+  const legacyTpl = Number(route.query.template)
+  if (legacyTpl && templates.value.some((t) => t.id === legacyTpl)) {
+    templateId.value = legacyTpl
+    await loadModules()
+    const mods = String(route.query.modules || '').split(',').map((n) => Number(n)).filter(Boolean)
+    if (mods.length && modules.value.some((m) => m.id === mods[0])) moduleId.value = mods[0]
+  }
 })
 </script>
 

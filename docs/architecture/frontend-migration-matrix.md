@@ -27,12 +27,12 @@
 | 服务实例与进程 | `business-topology/service-instance/` | `/business/service-instance` + 业务拓扑抽屉 | 核心流程 | 创建、克隆、标签、批量删除、进程 CRUD、真实回读 |
 | 服务模板 | `src/ui/src/views/service-template/` | `/business/service-template` | 核心流程 | create/details/edit 深链已兼容(含 operational 旧链重定向);分类下拉仅叶子分类;删除契约已修正;配置/实例双 tab 的待同步红点未迁移 |
 | 集群模板 | `src/ui/src/views/set-template/` | `/business/set-template` | 部分迁移 | create/details/edit、实例配置和同步历史;删除请求体已修正 |
-| 集群模板同步 | `src/ui/src/views/set-sync/` | 无等价新版路由 | 未迁移 | 模块/属性差异、实例同步、历史记录 |
+| 集群模板同步 | `src/ui/src/views/set-sync/` | `/business/set-template`(同步对话框+历史) | 核心流程 | 旧版 set/sync/:setTemplateId、set/template/{create,details,history} 深链已兼容并自动打开同步/详情/历史;批量部署旧版交互未 1:1 |
 | 服务分类 | `src/ui/src/views/service-category/` | `/business/service-category` | 核心流程 | 分类树、父子分类 CRUD、统计和错误状态 |
-| 主机自动应用 | `src/ui/src/views/host-apply/` | `/business/host-apply` | 部分迁移 | 多步配置、确认、执行、冲突/失败列表、任务恢复 |
+| 主机自动应用 | `src/ui/src/views/host-apply/` | `/business/host-apply` | 核心流程 | 三步向导(配置→预览含冲突统计→执行+状态轮询)、启停/删除/批量删除;旧版 host-apply/:mode 深链已兼容;「未应用主机列表」受后端限制(仅有 count 接口无列表接口) |
 | 动态分组 | `src/ui/src/views/dynamic-group/` | `/business/dynamic-group` | 部分迁移 | 1202px 编辑侧滑、条件编辑、预览、清空确认 |
 | 自定义字段 | `src/ui/src/views/custom-fields/` | `/business/custom-fields` | 部分迁移 | 字段分组、导入、字段详情和完整 CRUD |
-| 业务同步 | `src/ui/src/views/business-synchronous/` | `/business/sync` | 部分迁移 | 模块实例、属性/进程差异、同步执行和结果 |
+| 业务同步 | `src/ui/src/views/business-synchronous/` | `/business/sync` | 核心流程 | 业务/模板/模块级联、差异(changed/added/removed/属性)展示、单模块/全量同步;旧版 synchronous/module 深链已兼容;旧版进程级差异细分视图未 1:1 |
 | 进程模板 | `service-template/children/process-form.vue` | `/business/process-template` | 核心流程 | 按进程模型属性动态渲染全量字段(21 属性),必填校验;bind_info 多行编辑未迁移 |
 
 ## 资源上下文
@@ -87,6 +87,7 @@
 4. **第四批（已完成）**：服务模板 create/details/edit 深链与 operational 旧链重定向;进程模板动态全量字段编辑(21 属性,必填校验,覆盖式更新真实回读);修复服务模板/集群模板删除请求体契约与叶子分类过滤。
 5. **第五批（已完成）**：全局配置交互语义补齐(未保存确认/tab query/旧路径重定向)并修复保存契约为全量读-改-写(真实回读验证);模型实例变更历史(/find/inst_audit)。
 6. **第六批（已完成）**：模型实例列配置与 Excel 导入(模板下载+上传真实闭环);业务拓扑跨业务转移对话框(替换"暂未支持"占位);修复主机导入走错前缀(/api/v3→根路径)的历史 bug。
-7. **第七批（进行中）**：主机自动应用完整向导、业务同步完整差异流程、集群模板同步(set-sync)深链;云资源/Pod/正式 IAM 依赖不足时明确阻塞。
+7. **第七批（已完成）**：盘点确认主机自动应用向导/业务同步闭环/集群模板同步已达成核心流程;补齐 host-apply、set-sync、set/template、synchronous/module 旧版深链兼容;「未应用主机列表」标记为后端能力限制(仅 count 接口)。
+8. **第八批（进行中）**：资源详情深链(业务/业务集/项目详情属性-关联-审计)、服务模板配置/实例双 tab 待同步红点、实例导出;云资源/Pod/正式 IAM 依赖不足时明确阻塞。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。

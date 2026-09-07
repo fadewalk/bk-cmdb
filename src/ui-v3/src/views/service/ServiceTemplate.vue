@@ -751,11 +751,15 @@ async function loadProcessAttrs() {
   } catch { processAttrs.value = [] }
 }
 
-// ---------- 旧版深链(/business/:bizId/service/template/create|details/:id|edit/:id) ----------
+// ---------- 旧版深链(/business/:bizId/service/template/... 与 set/template、set/sync) ----------
 function applyDeepLink() {
   const bizParam = Number(route.params.bizId)
   if (bizParam && bizStore.bizList.some((b) => b.bk_biz_id === bizParam)) bizStore.select(bizParam)
-  if (tab.value === 'settpl') return
+  // 集群模板 tab 深链: ?action=create|details|history|sync&templateId=
+  if (tab.value === 'settpl') {
+    applySetTplDeepLink(route.query.action, Number(route.query.templateId))
+    return
+  }
   const p = route.path
   if (p.endsWith('/create')) {
     tplFormVisible.value = true
@@ -768,6 +772,27 @@ function applyDeepLink() {
     if (!row) return false
     if (p.includes('/details/')) showTplDetail(row)
     else if (p.includes('/edit/')) openEditTpl(row)
+    return true
+  }
+  if (!open()) {
+    const timer = setInterval(() => { if (open()) clearInterval(timer) }, 400)
+    setTimeout(() => clearInterval(timer), 8000)
+  }
+}
+
+// 集群模板深链定位(action 来自旧版 set/template 与 set/sync 路由重定向)
+function applySetTplDeepLink(action, tid) {
+  if (action === 'create') {
+    setTplDialog.value = true
+    return
+  }
+  if (!tid) return
+  const open = () => {
+    const row = setTemplates.value.find((t) => t.id === tid)
+    if (!row) return false
+    if (action === 'details' || action === 'edit') openSetTplDetail(row)
+    else if (action === 'history') loadSetTemplateHistory(row)
+    else if (action === 'sync') openSetTplSync(row)
     return true
   }
   if (!open()) {
