@@ -183,7 +183,18 @@ apiGW:
     caFile:
     password:
 
-# 数据同步服务:独立模式不部署 transfer-service,关闭
+# standalone profile 由 Docker build arg / STANDALONE_PROFILE 选择:
+# core(默认)、cloud、sync、transfer、full。
+# 可选 profile 只改变对应服务是否构建/启动,不删除公共 API 契约或源码。
+standalone:
+  profile: core
+  capabilities:
+    cloud: false
+    synchronize: false
+    transfer: false
+    notification: false
+
+# 数据同步服务:独立模式默认不部署 transfer-service,关闭
 transferService:
   enableSync: false
   enableIncrSync: false

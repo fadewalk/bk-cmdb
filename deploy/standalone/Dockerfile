@@ -28,6 +28,7 @@ RUN npm run build
 # ---------- 2. 后端构建 ----------
 FROM golang:1.25-bookworm AS go-builder
 
+ARG STANDALONE_PROFILE=core
 WORKDIR /build
 
 ENV GOPROXY=https://goproxy.cn,direct \
@@ -39,23 +40,20 @@ RUN go mod download
 
 COPY . .
 
-# 核心链路 12 个服务(apiserver/web/admin + 8 个场景服务 + 2 个资源服务)
-RUN set -ex; \
+# 核心链路服务目标(standalone 默认构建核心入口;云同步/跨 CMDB 同步等业务源码保留,按 profile 可选构建)
+# 所有 standalone 服务显式以 open_source 配置运行,不依赖腾讯蓝鲸平台。
+RUN set -eux; \
     mkdir -p /out; \
-    for target in \
-      apiserver:cmdb_apiserver \
-      web_server:cmdb_webserver \
-      scene_server/admin_server:cmdb_adminserver \
-      scene_server/topo_server:cmdb_toposerver \
-      scene_server/host_server:cmdb_hostserver \
-      scene_server/proc_server:cmdb_procserver \
-      scene_server/event_server:cmdb_eventserver \
-      scene_server/task_server:cmdb_taskserver \
-      scene_server/datacollection:cmdb_datacollection \
-      scene_server/operation_server:cmdb_operationserver \
-      source_controller/coreservice:cmdb_coreservice \
-      source_controller/cacheservice:cmdb_cacheservice \
-    ; do \
+    targets="apiserver:cmdb_apiserver web_server:cmdb_webserver scene_server/admin_server:cmdb_adminserver scene_server/topo_server:cmdb_toposerver scene_server/host_server:cmdb_hostserver scene_server/proc_server:cmdb_procserver scene_server/event_server:cmdb_eventserver scene_server/task_server:cmdb_taskserver scene_server/datacollection:cmdb_datacollection scene_server/operation_server:cmdb_operationserver source_controller/coreservice:cmdb_coreservice source_controller/cacheservice:cmdb_cacheservice"; \
+    case "${STANDALONE_PROFILE}" in \
+      core) ;; \
+      cloud) targets="${targets} scene_server/cloud_server:cmdb_cloudserver" ;; \
+      sync) targets="${targets} scene_server/synchronize_server:cmdb_synchronizeserver" ;; \
+      transfer) targets="${targets} source_controller/transfer-service:cmdb_transferservice" ;; \
+      full) targets="${targets} scene_server/cloud_server:cmdb_cloudserver scene_server/synchronize_server:cmdb_synchronizeserver source_controller/transfer-service:cmdb_transferservice" ;; \
+      *) echo "unsupported STANDALONE_PROFILE: ${STANDALONE_PROFILE}" >&2; exit 1 ;; \
+    esac; \
+    for target in ${targets}; do \
       src="${target%%:*}"; bin="${target##*:}"; \
       mkdir -p "/out/${bin}"; \
       go build -tags=disable_crypto -o "/out/${bin}/${bin}" "configcenter/src/${src}"; \

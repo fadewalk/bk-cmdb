@@ -133,8 +133,15 @@ func parseBsonStringArrayValueToString(value bsoncore.Value) ([]byte, error) {
 			}
 		}
 		return buf.Bytes(), nil
+	case bsontype.String:
+		str, rem, ok := bsoncore.ReadString(value.Data)
+		if !ok {
+			return nil, bsoncore.NewInsufficientBytesError(value.Data, rem)
+		}
+		return []byte(str), nil
 	case bsontype.Null:
 		return []byte{}, nil
+
 	default:
 		return nil, fmt.Errorf("invalid BSON type %v", value.Type)
 	}

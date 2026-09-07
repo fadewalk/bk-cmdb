@@ -17,6 +17,8 @@
 package service
 
 import (
+	"os"
+
 	"configcenter/src/common"
 	"configcenter/src/common/metadata"
 	"configcenter/src/common/metric"
@@ -121,13 +123,27 @@ func (s *service) checkComponentHealthz() metric.HealthMeta {
 	}
 	meta.Items = append(meta.Items, taskSrv)
 
-	// cloud server
+	// cloud server is optional in the standalone core profile. Keep the
+	// component visible in the response, but do not make it fail the overall
+	// health result unless the cloud capability is explicitly enabled.
 	cloudSrv := metric.HealthItem{IsHealthy: true, Name: types.CC_MODULE_CLOUD}
-	if _, err := s.engine.CoreAPI.Healthz().HealthCheck(types.CC_MODULE_CLOUD); err != nil {
-		cloudSrv.IsHealthy = false
-		cloudSrv.Message = err.Error()
+	if standaloneCloudEnabled() {
+		if _, err := s.engine.CoreAPI.Healthz().HealthCheck(types.CC_MODULE_CLOUD); err != nil {
+			cloudSrv.IsHealthy = false
+			cloudSrv.Message = err.Error()
+		}
+	} else {
+		cloudSrv.Message = "optional component disabled"
 	}
 	meta.Items = append(meta.Items, cloudSrv)
 
 	return meta
+}
+
+func standaloneCloudEnabled() bool {
+	if os.Getenv("STANDALONE_PROFILE") == "" {
+		return true
+	}
+	profile := os.Getenv("STANDALONE_PROFILE")
+	return profile == "cloud" || profile == "full"
 }

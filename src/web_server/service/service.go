@@ -41,7 +41,6 @@ import (
 	webCommon "configcenter/src/web_server/common"
 	"configcenter/src/web_server/logics"
 	"configcenter/src/web_server/middleware"
-	apigwsvc "configcenter/src/web_server/service/apigw"
 	"configcenter/src/web_server/service/excel"
 	"configcenter/src/web_server/service/notice"
 
@@ -72,6 +71,9 @@ func (s *Service) WebService() *gin.Engine {
 
 	ws.Use(middleware.RequestIDMiddleware)
 	ws.Use(sessions.Sessions(s.Config.Session.Name, s.Session))
+	// Machine clients can authenticate with the standalone API key without a browser session.
+	// When no key is configured, the existing browser session/skip-login flow is unchanged.
+	ws.Use(middleware.StandaloneAPIKeyProxy(s.Discovery()))
 	ws.Use(middleware.ValidLogin(*s.Config, s.Discovery(), s.ApiCli))
 	ws.Use(func(c *gin.Context) {
 		defer func() {
@@ -114,9 +116,6 @@ func (s *Service) WebService() *gin.Engine {
 	}
 	// init excel func
 	excel.Init(c)
-
-	// init api gateway http handlers for saas
-	apigwsvc.Init(c)
 
 	// init notice func
 	notice.Init(c)

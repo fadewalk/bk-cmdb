@@ -22,19 +22,35 @@
 | redis:6.2 | 缓存/会话 |
 | cmdb 容器 | 12 个 Go 服务 + 前端静态资源,单容器多进程 |
 
-包含的服务(核心链路):
+包含的服务(独立版核心 profile):
 
 ```
-cmdb_apiserver      API 网关          cmdb_eventserver     事件服务
-cmdb_webserver      Web/前端托管      cmdb_taskserver      异步任务
-cmdb_adminserver    配置中心/DB初始化  cmdb_datacollection  数据采集(待机)
-cmdb_coreservice    核心原子层         cmdb_operationserver 运营统计
-cmdb_cacheservice   缓存原子层         cmdb_toposerver      拓扑/模型
-cmdb_hostserver     主机服务          cmdb_procserver      进程服务
+cmdb_apiserver      CMDB 自有 API 统一入口  cmdb_eventserver     事件服务
+cmdb_webserver      Web/前端托管          cmdb_taskserver      异步任务
+cmdb_adminserver    配置中心/DB初始化      cmdb_datacollection  数据采集
+cmdb_coreservice    核心原子层             cmdb_operationserver 运营统计
+cmdb_cacheservice   缓存原子层             cmdb_toposerver       拓扑/模型
+cmdb_hostserver     主机服务               cmdb_procserver       进程服务
 ```
 
-**裁剪掉的服务**(需要蓝鲸体系才有意义):synchronize(多集群同步)、cloud(云同步)、
-auth(权限中心对接)、transfer-service(跨云区域转移)。
+云同步、跨 CMDB 同步和数据传输服务的源码与业务能力保留，不在本计划中删除。默认 `STANDALONE_PROFILE=core` 只启动核心 12 个服务；可按需选择 `cloud`、`sync`、`transfer` 或 `full` profile 构建并启动对应可选服务。可选服务需要各自的业务配置，未配置时不会被默认 profile 静默启用。
+
+示例：
+
+```bash
+# 默认核心 profile
+docker compose -f deploy/standalone/docker-compose.yml up --build
+
+# 核心服务 + 云资源服务
+STANDALONE_PROFILE=cloud docker compose -f deploy/standalone/docker-compose.yml up --build
+
+# 核心服务 + 全部可选服务
+STANDALONE_PROFILE=full docker compose -f deploy/standalone/docker-compose.yml up --build
+```
+
+profile 只裁剪镜像构建目标和启动进程，不删除公共 API 契约、事件 Watch、coreservice 同步原子接口、主机转移能力或蓝鲸部署源码。
+
+旧版 `src/ui`、Vue2 和蓝鲸前端依赖也保留作为功能对照基线。standalone 当前使用 `src/ui-v3`，不代表旧前端已完成退役。
 
 ## 与原版的差异(独立化改造点)
 

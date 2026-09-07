@@ -17,6 +17,11 @@ set -e
 CMDB_HOME=/data/cmdb
 LOG_DIR=${CMDB_HOME}/logs
 ZK_ADDR=zookeeper:2181
+STANDALONE_PROFILE=${STANDALONE_PROFILE:-core}
+case "${STANDALONE_PROFILE}" in
+    core|cloud|sync|transfer|full) ;;
+    *) echo "unsupported STANDALONE_PROFILE: ${STANDALONE_PROFILE}" >&2; exit 1 ;;
+esac
 mkdir -p "${LOG_DIR}"
 
 wait_port() {
@@ -36,6 +41,10 @@ wait_port() {
 start_svc() {
     local name=$1 port=$2
     shift 2
+    if [ ! -x "${CMDB_HOME}/${name}/${name}" ]; then
+        echo "ERROR: ${name} is required by profile ${STANDALONE_PROFILE}, but its binary is missing" >&2
+        exit 1
+    fi
     cd "${CMDB_HOME}/${name}"
     mkdir -p logs
     nohup "./${name}" "$@" > logs/std.log 2>&1 &
@@ -78,6 +87,8 @@ fi
 # ---------- 4. 其余服务 ----------
 # 注意:--enable-auth 仅部分服务支持(与官方 init.py 生成的启动参数一致),
 #       webserver/taskserver/coreservice 不带该 flag。
+# 业务服务(cloud/synchronize/transfer/event/datacollection/operation)的源码保留;
+# 当前核心 profile 只启动下列 12 个进程,避免把部署裁剪误认为源码删除。
 AUTH_FLAG="--enable-auth=false"
 COMMON="--log-dir=${LOG_DIR} --v=3 --register-ip=127.0.0.1"
 
@@ -101,9 +112,23 @@ start_svc cmdb_operationserver 60011 \
     --addrport=127.0.0.1:60011 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
 start_svc cmdb_apiserver 8080 \
     --addrport=127.0.0.1:8080 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
+
+if [ "${STANDALONE_PROFILE}" = "cloud" ] || [ "${STANDALONE_PROFILE}" = "full" ]; then
+    start_svc cmdb_cloudserver 60013 \
+        --addrport=127.0.0.1:60013 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG} --enable-cryptor=false
+fi
+if [ "${STANDALONE_PROFILE}" = "sync" ] || [ "${STANDALONE_PROFILE}" = "full" ]; then
+    start_svc cmdb_synchronizeserver 60010 \
+        --addrport=127.0.0.1:60010 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
+fi
+if [ "${STANDALONE_PROFILE}" = "transfer" ] || [ "${STANDALONE_PROFILE}" = "full" ]; then
+    start_svc cmdb_transferservice 50011 \
+        --addrport=127.0.0.1:50011 --regdiscv=${ZK_ADDR} ${COMMON}
+fi
 # web_server:web.yaml 走本地文件,监听 0.0.0.0 以便端口映射到宿主机
 start_svc cmdb_webserver 8090 \
     --addrport=0.0.0.0:8090 --regdiscv=${ZK_ADDR} \
+    --deployment-method=open_source \
     --config=${CMDB_HOME}/cmdb_webserver/web.yaml ${COMMON}
 
 # ---------- 5. 状态检查并前台守护 ----------
@@ -114,20 +139,25 @@ pgrep -a cmdb_ || true
 echo "------------------------------------"
 
 dead=0
-for svc in cmdb_adminserver cmdb_coreservice cmdb_cacheservice cmdb_toposerver \
-           cmdb_hostserver cmdb_procserver cmdb_eventserver cmdb_taskserver \
-           cmdb_datacollection cmdb_operationserver cmdb_apiserver cmdb_webserver; do
+services="cmdb_adminserver cmdb_coreservice cmdb_cacheservice cmdb_toposerver cmdb_hostserver cmdb_procserver cmdb_eventserver cmdb_taskserver cmdb_datacollection cmdb_operationserver cmdb_apiserver cmdb_webserver"
+case "${STANDALONE_PROFILE}" in
+    cloud) services="${services} cmdb_cloudserver" ;;
+    sync) services="${services} cmdb_synchronizeserver" ;;
+    transfer) services="${services} cmdb_transferservice" ;;
+    full) services="${services} cmdb_cloudserver cmdb_synchronizeserver cmdb_transferservice" ;;
+esac
+for svc in ${services}; do
     if ! pgrep -f "${svc}" > /dev/null; then
         echo "WARNING: ${svc} is not running, check ${LOG_DIR}/${svc} logs"
         dead=$((dead + 1))
     fi
 done
 
-echo
+ echo
 if [ ${dead} -eq 0 ]; then
-    echo "all 12 services started. web ui: http://localhost:8090 (skip-login, admin)"
+    echo "standalone profile ${STANDALONE_PROFILE} started successfully. web ui: http://localhost:8090 (skip-login, admin)"
 else
-    echo "${dead} service(s) failed to start, see logs under ${LOG_DIR}"
+    echo "${dead} service(s) failed to start for profile ${STANDALONE_PROFILE}, see logs under ${LOG_DIR}"
 fi
 
 trap 'pkill -f "cmdb_" 2>/dev/null; exit 0' TERM INT

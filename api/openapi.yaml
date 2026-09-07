@@ -1,0 +1,4123 @@
+openapi: 3.0.3
+info:
+  title: CMDB Open API
+  version: 1.0.0
+  description: Independent CMDB compatibility API. The /api/v3 paths are the existing
+    CMDB business endpoints; BlueKing API Gateway publication extensions are intentionally
+    excluded.
+servers:
+- url: /
+  description: CMDB deployment
+tags:
+- name: models
+  description: Model and attribute operations
+- name: instances
+  description: Instance and association operations
+- name: hosts
+  description: Host, module and cloud-area operations
+- name: businesses
+  description: Business and topology operations
+- name: processes
+  description: Process and service-template operations
+- name: topology
+  description: Topology queries
+- name: system
+  description: Other CMDB operations
+security:
+- apiKey: []
+- bearerAuth: []
+paths:
+  /api/v3/biz/status/{flag}/{bk_supplier_account}/{bk_biz_id}:
+    put:
+      operationId: update_business_enable_status
+      summary: 修改业务启用状态
+      description: 修改业务启用状态
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: flag
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: flag'
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/set/{bk_biz_id}/batch:
+    delete:
+      operationId: batch_delete_set
+      summary: 批量删除集群
+      description: 批量删除集群
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/set/bk_biz_id/{bk_biz_id}:
+    post:
+      operationId: find_set_batch
+      summary: 批量查询某业务的集群详情
+      description: 批量查询某业务的集群详情
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/module/bk_biz_id/{bk_biz_id}:
+    post:
+      operationId: find_module_batch
+      summary: 批量查询某业务的模块详情
+      description: 批量查询某业务的模块详情
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/instance/object/{bk_obj_id}:
+    post:
+      operationId: create_inst
+      summary: 创建实例
+      description: 创建实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/instassociation/object/{bk_obj_id}:
+    post:
+      operationId: search_inst
+      summary: 根据关联关系实例查询模型实例
+      description: 根据关联关系实例查询模型实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/instance/object/{bk_obj_id}/inst/{bk_inst_id}:
+    put:
+      operationId: update_inst
+      summary: 更新对象实例
+      description: 更新对象实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      - name: bk_inst_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_inst_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/updatemany/instance/object/{bk_obj_id}:
+    put:
+      operationId: batch_update_inst
+      summary: 批量更新对象实例
+      description: 批量更新对象实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/instance/object/{bk_obj_id}/inst/{bk_inst_id}:
+    delete:
+      operationId: delete_inst
+      summary: 删除实例
+      description: 删除实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      - name: bk_inst_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_inst_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/instance/object/{bk_obj_id}:
+    delete:
+      operationId: batch_delete_inst
+      summary: 批量删除实例
+      description: 批量删除实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/insttopo/object/{bk_obj_id}/inst/{bk_inst_id}:
+    post:
+      operationId: search_inst_association_topo
+      summary: 查询实例关联拓扑
+      description: 查询实例关联拓扑
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      - name: bk_inst_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_inst_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/object:
+    post:
+      operationId: create_object
+      summary: 创建模型
+      description: 创建模型
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/object/{id}:
+    delete:
+      operationId: delete_object
+      summary: 删除模型
+      description: 删除模型
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/object/{id}:
+    put:
+      operationId: update_object
+      summary: 更新定义
+      description: 更新定义
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/object:
+    post:
+      operationId: search_objects
+      summary: 查询模型
+      description: 查询模型
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/objecttopology:
+    post:
+      operationId: search_object_topo
+      summary: 查询普通模型拓扑
+      description: 查询普通模型拓扑
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/objectclassification:
+    post:
+      operationId: create_classification
+      summary: 添加模型分类
+      description: 添加模型分类
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/objectclassification/{id}:
+    delete:
+      operationId: delete_classification
+      summary: 删除模型分类
+      description: 删除模型分类
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/objectclassification/{id}:
+    put:
+      operationId: update_classification
+      summary: 更新模型分类
+      description: 更新模型分类
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/objectclassification:
+    post:
+      operationId: search_classifications
+      summary: 查询模型分类
+      description: 查询模型分类
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/objectattr:
+    post:
+      operationId: create_object_attribute
+      summary: 创建模型属性
+      description: 创建模型属性
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/objectattr/{id}:
+    delete:
+      operationId: delete_object_attribute
+      summary: 删除对象模型属性
+      description: 删除对象模型属性
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/objectattr/{id}:
+    put:
+      operationId: update_object_attribute
+      summary: 更新对象模型属性
+      description: 更新对象模型属性
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/objectattr:
+    post:
+      operationId: search_object_attribute
+      summary: 查询对象模型属性
+      description: 查询对象模型属性
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/objectattr/biz/{bk_biz_id}:
+    post:
+      operationId: create_biz_custom_field
+      summary: 创建业务自定义模型属性
+      description: 创建业务自定义模型属性
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/objectattr/biz/{bk_biz_id}/id/{id}:
+    put:
+      operationId: update_biz_custom_field
+      summary: 更新业务自定义模型属性
+      description: 更新业务自定义模型属性
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/app/{bk_biz_id}/list_hosts:
+    post:
+      operationId: list_biz_hosts
+      summary: 查询业务下的主机
+      description: 查询业务下的主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/app/{bk_biz_id}/list_hosts_topo:
+    post:
+      operationId: list_biz_hosts_topo
+      summary: 查询业务下的主机和拓扑信息
+      description: 查询业务下的主机和拓扑信息
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/list_hosts_without_app:
+    post:
+      operationId: list_hosts_without_biz
+      summary: 没有业务ID的主机查询
+      description: 没有业务ID的主机查询
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/list_resource_pool_hosts:
+    post:
+      operationId: list_resource_pool_hosts
+      summary: 查询资源池中的主机
+      description: 查询资源池中的主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/idle/set:
+    post:
+      operationId: transfer_sethost_to_idle_module
+      summary: 清空业务下集群/模块中主机
+      description: 清空业务下集群/模块中主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/property/clone:
+    put:
+      operationId: clone_host_property
+      summary: 克隆主机属性
+      description: 克隆主机属性
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/property/batch:
+    put:
+      operationId: batch_update_host
+      summary: 批量更新主机属性
+      description: 批量更新主机属性
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/topomodelmainline:
+    post:
+      operationId: get_mainline_object_topo
+      summary: 查询主线模型的业务拓扑
+      description: 查询主线模型的业务拓扑
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/topo/internal/{bk_supplier_account}/{bk_biz_id}:
+    get:
+      operationId: get_biz_internal_module
+      summary: 查询业务的空闲机/故障机/待回收模块
+      description: 查询业务的空闲机/故障机/待回收模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+  /api/v3/findmany/module_relation/bk_biz_id/{bk_biz_id}:
+    post:
+      operationId: find_module_host_relation
+      summary: 根据模块ID查询主机和模块的关系
+      description: 根据模块ID查询主机和模块的关系
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/hosts/by_service_templates/biz/{bk_biz_id}:
+    post:
+      operationId: find_host_by_service_template
+      summary: 查询服务模板下的主机
+      description: 查询服务模板下的主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/hosts/by_set_templates/biz/{bk_biz_id}:
+    post:
+      operationId: find_host_by_set_template
+      summary: 查询集群模板下的主机
+      description: 查询集群模板下的主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/read:
+    post:
+      operationId: find_host_biz_relations
+      summary: 查询主机业务关系信息
+      description: 查询主机业务关系信息
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/objectassociation:
+    post:
+      operationId: find_object_association
+      summary: 查询模型之间的关联关系
+      description: 查询模型之间的关联关系
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/instassociation:
+    post:
+      operationId: find_instance_association
+      summary: 查询模型实例之间的关联关系
+      description: 查询模型实例之间的关联关系
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/instassociation:
+    post:
+      operationId: add_instance_association
+      summary: 新建模型实例之间的关联关系
+      description: 新建模型实例之间的关联关系
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/instassociation/{bk_obj_id}/{id}:
+    delete:
+      operationId: delete_instance_association
+      summary: 删除模型实例之间的关联关系
+      description: 删除模型实例之间的关联关系
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/host/topo/relation/read:
+    post:
+      operationId: find_host_topo_relation
+      summary: 获取主机与拓扑的关系
+      description: 获取主机与拓扑的关系
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/cloudarea:
+    post:
+      operationId: search_cloud_area
+      summary: 查询管控区域
+      description: 查询管控区域
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/cloudarea:
+    post:
+      operationId: create_cloud_area
+      summary: 创建管控区域
+      description: 创建管控区域
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/cloudarea/{bk_cloud_id}:
+    put:
+      operationId: update_cloud_area
+      summary: 更新管控区域
+      description: 更新管控区域
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_cloud_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_cloud_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/cloudarea/{bk_cloud_id}:
+    delete:
+      operationId: delete_cloud_area
+      summary: 删除管控区域
+      description: 删除管控区域
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_cloud_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_cloud_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/service_category:
+    post:
+      operationId: list_service_category
+      summary: 查询服务分类列表
+      description: 查询服务分类列表
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/proc/service_category:
+    post:
+      operationId: create_service_category
+      summary: 新建服务分类
+      description: 新建服务分类
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/proc/service_category:
+    put:
+      operationId: update_service_category
+      summary: 更新服务分类
+      description: 更新服务分类
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/proc/service_category:
+    delete:
+      operationId: delete_service_category
+      summary: 删除服务分类
+      description: 删除服务分类
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/proc/service_template:
+    post:
+      operationId: create_service_template
+      summary: 新建服务模板
+      description: 新建服务模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/proc/service_template:
+    put:
+      operationId: update_service_template
+      summary: 更新服务模板
+      description: 更新服务模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/proc/service_template/{service_template_id}:
+    get:
+      operationId: get_service_template
+      summary: 获取服务模板
+      description: 获取服务模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: service_template_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: service_template_id'
+  /api/v3/findmany/proc/service_template:
+    post:
+      operationId: list_service_template
+      summary: 服务模板列表查询
+      description: 服务模板列表查询
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/proc/service_template:
+    delete:
+      operationId: delete_service_template
+      summary: 删除服务模板
+      description: 删除服务模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/topo/set_template/{set_template_id}/bk_biz_id/{bk_biz_id}/service_templates:
+    get:
+      operationId: list_set_template_related_service_template
+      summary: 获取某集群模版下的服务模版列表
+      description: 获取某集群模版下的服务模版列表
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: set_template_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: set_template_id'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+  /api/v3/createmany/proc/proc_template:
+    post:
+      operationId: batch_create_proc_template
+      summary: 批量创建进程模板
+      description: 批量创建进程模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/proc/proc_template:
+    put:
+      operationId: update_proc_template
+      summary: 更新进程模板
+      description: 更新进程模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/proc/proc_template:
+    delete:
+      operationId: delete_proc_template
+      summary: 删除进程模板
+      description: 删除进程模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/proc/proc_template/id/{process_template_id}:
+    post:
+      operationId: get_proc_template
+      summary: 获取进程模板
+      description: 获取进程模板
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: process_template_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: process_template_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/proc_template:
+    post:
+      operationId: list_proc_template
+      summary: 查询进程模板列表
+      description: 查询进程模板列表
+      tags:
+      - processes
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/proc/service_instance:
+    post:
+      operationId: create_service_instance
+      summary: 创建服务实例
+      description: 创建服务实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/service_instance:
+    post:
+      operationId: list_service_instance
+      summary: 查询服务实例列表
+      description: 查询服务实例列表
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/service_instance/with_host:
+    post:
+      operationId: list_service_instance_by_host
+      summary: 通过主机查询关联的服务实例列表
+      description: 通过主机查询关联的服务实例列表
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/service/set_template/list_service_instance/biz/{bk_biz_id}:
+    post:
+      operationId: list_service_instance_by_set_template
+      summary: 通过集群模版查询关联的服务实例列表
+      description: 通过集群模版查询关联的服务实例列表
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/service_instance/details:
+    post:
+      operationId: list_service_instance_detail
+      summary: 获取服务实例详细信息
+      description: 获取服务实例详细信息
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/proc/service_instance:
+    delete:
+      operationId: delete_service_instance
+      summary: 删除服务实例
+      description: 删除服务实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/createmany/proc/service_instance/labels:
+    post:
+      operationId: add_label_for_service_instance
+      summary: 为服务实例添加标签
+      description: 为服务实例添加标签
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/proc/service_instance/labels:
+    delete:
+      operationId: remove_label_from_service_instance
+      summary: 从服务实例移除标签
+      description: 从服务实例移除标签
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/proc/process_instance:
+    post:
+      operationId: create_process_instance
+      summary: 创建进程实例
+      description: 创建进程实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/proc/process_instance:
+    put:
+      operationId: update_process_instance
+      summary: 更新进程实例
+      description: 更新进程实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/proc/process_instance:
+    delete:
+      operationId: delete_process_instance
+      summary: 删除进程实例
+      description: 删除进程实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/process_instance:
+    post:
+      operationId: list_process_instance
+      summary: 查询进程实例列表
+      description: 查询进程实例列表
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/proc/process_instance/detail/biz/{bk_biz_id}:
+    post:
+      operationId: list_process_detail_by_ids
+      summary: 查询某业务下进程ID对应的进程详情
+      description: 查询某业务下进程ID对应的进程详情
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/inst/association/association_object/inst_base_info:
+    post:
+      operationId: search_inst_asst_object_inst_base_info
+      summary: 查询实例关联模型实例基本信息
+      description: 查询实例关联模型实例基本信息
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/updatemany/hosts/cloudarea_field:
+    put:
+      operationId: update_host_cloud_area_field
+      summary: 更新主机的管控区域字段
+      description: 更新主机的管控区域字段
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/topo/set_template/bk_biz_id/{bk_biz_id}:
+    post:
+      operationId: create_set_template
+      summary: 新建集群模板
+      description: 新建集群模板
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/topo/set_template/bk_biz_id/{bk_biz_id}:
+    post:
+      operationId: list_set_template
+      summary: 查询集群模板
+      description: 查询集群模板
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/update/topo/set_template/{set_template_id}/bk_biz_id/{bk_biz_id}:
+    put:
+      operationId: update_set_template
+      summary: 编辑集群模板
+      description: 编辑集群模板
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: set_template_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: set_template_id'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/topo/set_template/bk_biz_id/{bk_biz_id}:
+    delete:
+      operationId: delete_set_template
+      summary: 删除集群模板
+      description: 删除集群模板
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/updatemany/topo/set_template/{set_template_id}/bk_biz_id/{bk_biz_id}/sync_to_instances:
+    post:
+      operationId: sync_set_template_to_set
+      summary: 集群模板同步
+      description: 集群模板同步
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: set_template_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: set_template_id'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/event/watch/resource/{bk_resource}:
+    post:
+      operationId: resource_watch
+      summary: 监听资源变化事件
+      description: 监听资源变化事件
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_resource
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_resource'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/host/lock:
+    post:
+      operationId: add_host_lock
+      summary: 新加主机锁
+      description: 新加主机锁
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+    delete:
+      operationId: delete_host_lock
+      summary: 删除主机锁
+      description: 删除主机锁
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/host/lock/search:
+    post:
+      operationId: search_host_lock
+      summary: 查询主机锁
+      description: 查询主机锁
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/cache/find/cache/topo/node_path/biz/{bk_biz_id}:
+    post:
+      operationId: find_topo_node_paths
+      summary: 查询业务拓扑节点的拓扑路径
+      description: 查询业务拓扑节点的拓扑路径
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/hosts/by_topo/biz/{bk_biz_id}:
+    post:
+      operationId: find_host_by_topo
+      summary: 查询拓扑节点下的主机
+      description: 查询拓扑节点下的主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/delete/instassociation/batch:
+    delete:
+      operationId: delete_related_inst_asso
+      summary: 删除某实例所有的关联关系（包含其作为关联关系原模型和关联关系目标模型的情况）
+      description: 删除某实例所有的关联关系（包含其作为关联关系原模型和关联关系目标模型的情况）
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/instassociation/related:
+    post:
+      operationId: search_related_inst_asso
+      summary: 查询某实例所有的关联关系（包含其作为关联关系原模型和关联关系目标模型的情况）
+      description: 查询某实例所有的关联关系（包含其作为关联关系原模型和关联关系目标模型的情况）
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/dynamicgroup:
+    post:
+      operationId: create_dynamic_group
+      summary: 创建动态分组
+      description: 创建动态分组
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/dynamicgroup/{bk_biz_id}/{id}:
+    put:
+      operationId: update_dynamic_group
+      summary: 更新动态分组
+      description: 更新动态分组
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+    get:
+      operationId: get_dynamic_group
+      summary: 查询指定动态分组
+      description: 查询指定动态分组
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+    delete:
+      operationId: delete_dynamic_group
+      summary: 删除动态分组
+      description: 删除动态分组
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/dynamicgroup/search/{bk_biz_id}:
+    post:
+      operationId: search_dynamic_group
+      summary: 搜索动态分组
+      description: 搜索动态分组
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/dynamicgroup/data/{bk_biz_id}/{id}:
+    post:
+      operationId: execute_dynamic_group
+      summary: 执行动态分组
+      description: 执行动态分组
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/module/with_relation/biz/{bk_biz_id}:
+    post:
+      operationId: find_module_with_relation
+      summary: 根据条件查询业务下的模块
+      description: 根据条件查询业务下的模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/recycle:
+    post:
+      operationId: transfer_host_to_recyclemodule
+      summary: 上交主机到业务的待回收模块
+      description: 上交主机到业务的待回收模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/hosts/relation/with_topo:
+    post:
+      operationId: find_host_relations_with_topo
+      summary: 根据业务拓扑中的实例节点查询其下的主机关系信息
+      description: 根据业务拓扑中的实例节点查询其下的主机关系信息
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/search/instances/object/{bk_obj_id}:
+    post:
+      operationId: search_object_instances
+      summary: 查询模型实例
+      description: 查询模型实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/count/instances/object/{bk_obj_id}:
+    post:
+      operationId: count_object_instances
+      summary: 查询模型实例数量
+      description: 查询模型实例数量
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/search/instance_associations/object/{bk_obj_id}:
+    post:
+      operationId: search_instance_associations
+      summary: 查询模型实例关系
+      description: 查询模型实例关系
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/count/instance_associations/object/{bk_obj_id}:
+    post:
+      operationId: count_instance_associations
+      summary: 查询模型实例关系数量
+      description: 查询模型实例关系数量
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/topo/biz/brief_node_relation:
+    post:
+      operationId: find_brief_biz_topo_node_relation
+      summary: 查询业务主线实例拓扑源与目标节点的关系信息
+      description: 查询业务主线实例拓扑源与目标节点的关系信息
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/createmany/instance/object/{bk_obj_id}:
+    post:
+      operationId: batch_create_inst
+      summary: 批量创建通用模型实例
+      description: 批量创建通用模型实例
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/createmany/instassociation:
+    post:
+      operationId: batch_create_instance_association
+      summary: 批量创建模型实例关联关系
+      description: 批量创建模型实例关联关系
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/create/biz_set:
+    post:
+      operationId: create_business_set
+      summary: 创建业务集
+      description: 创建业务集
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/biz_set:
+    post:
+      operationId: batch_delete_business_set
+      summary: 批量删除业务集
+      description: 批量删除业务集
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/biz_set/biz_list:
+    post:
+      operationId: list_business_in_business_set
+      summary: 查询业务集中的业务列表
+      description: 查询业务集中的业务列表
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/biz_set:
+    post:
+      operationId: list_business_set
+      summary: 查询业务集
+      description: 查询业务集
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/biz_set/topo_path:
+    post:
+      operationId: list_business_set_topo
+      summary: 查询业务集拓扑
+      description: 查询业务集拓扑
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/updatemany/biz_set:
+    put:
+      operationId: batch_update_business_set
+      summary: 批量更新业务集信息
+      description: 批量更新业务集信息
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/find/instassociation/object/{bk_obj_id}/inst/detail:
+    post:
+      operationId: find_instassociation_with_inst
+      summary: 查询模型实例的关联关系及可选返回原模型或目标模型的实例详情
+      description: 查询模型实例的关联关系及可选返回原模型或目标模型的实例详情
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/add/resource:
+    post:
+      operationId: add_host_to_resource_pool
+      summary: 添加主机到资源池
+      description: 添加主机到资源池
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/hosts/total_mainline_topo/biz/{bk_biz_id}:
+    post:
+      operationId: list_host_total_mainline_topo
+      summary: 查询主机及其对应topo
+      description: 查询主机及其对应topo
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/add/business_idle:
+    post:
+      operationId: add_host_to_business_idle
+      summary: 添加主机到业务空闲机
+      description: 添加主机到业务空闲机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/host/bind/agent:
+    post:
+      operationId: bind_host_agent
+      summary: 将agent绑定到主机上
+      description: 将agent绑定到主机上
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/host/unbind/agent:
+    post:
+      operationId: unbind_host_agent
+      summary: 将agent和主机解绑
+      description: 将agent和主机解绑
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/createmany/project:
+    post:
+      operationId: batch_create_project
+      summary: 批量创建项目
+      description: 批量创建项目
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/updatemany/project:
+    put:
+      operationId: batch_update_project
+      summary: 批量更新项目
+      description: 批量更新项目
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/project:
+    delete:
+      operationId: batch_delete_project
+      summary: 批量删除项目
+      description: 批量删除项目
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/project:
+    post:
+      operationId: list_project
+      summary: 查询项目
+      description: 查询项目
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/across/biz:
+    post:
+      operationId: transfer_host_across_biz
+      summary: 跨业务转移主机
+      description: 跨业务转移主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/createmany/quoted/instance:
+    post:
+      operationId: batch_create_quoted_inst
+      summary: 批量创建被引用的模型的实例
+      description: 批量创建被引用的模型的实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/quoted/instance:
+    post:
+      operationId: list_quoted_inst
+      summary: 查询被引用的模型的实例列表
+      description: 查询被引用的模型的实例列表
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/updatemany/quoted/instance:
+    put:
+      operationId: batch_update_quoted_inst
+      summary: 批量更新被引用的模型的实例
+      description: 批量更新被引用的模型的实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/deletemany/quoted/instance:
+    delete:
+      operationId: batch_delete_quoted_inst
+      summary: 批量删除被引用的模型的实例
+      description: 批量删除被引用的模型的实例
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/kube/cluster:
+    post:
+      operationId: list_kube_cluster
+      summary: 查询容器集群
+      description: 查询容器集群
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/kube/node:
+    post:
+      operationId: list_kube_node
+      summary: 查询容器节点
+      description: 查询容器节点
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/kube/pod:
+    post:
+      operationId: list_kube_pod
+      summary: 查询Pod列表
+      description: 查询Pod列表
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/kube/container:
+    post:
+      operationId: list_kube_container
+      summary: 查询Container列表
+      description: 查询Container列表
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/kube/namespace:
+    post:
+      operationId: list_kube_namespace
+      summary: 查询namespace
+      description: 查询namespace
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/findmany/kube/workload/{kind}:
+    post:
+      operationId: list_kube_workload
+      summary: 查询workload
+      description: 查询workload
+      tags:
+      - system
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: kind'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/add:
+    post:
+      operationId: add_host_to_resource
+      summary: 新增主机到资源池
+      description: 新增主机到资源池
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/biz/{bk_supplier_account}:
+    post:
+      operationId: create_business
+      summary: 新建业务
+      description: 新建业务
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/module/{bk_biz_id}/{bk_set_id}:
+    post:
+      operationId: create_module
+      summary: 创建模块
+      description: 创建模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: bk_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_set_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/set/{bk_biz_id}:
+    post:
+      operationId: create_set
+      summary: 创建集群
+      description: 创建集群
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/biz/{bk_supplier_account}/{bk_biz_id}:
+    put:
+      operationId: update_business
+      summary: 修改业务
+      description: 修改业务
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/batch:
+    put:
+      operationId: update_host
+      summary: 更新主机属性
+      description: 更新主机属性
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+    delete:
+      operationId: delete_host
+      summary: 删除主机
+      description: 删除主机
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/module/{bk_biz_id}/{bk_set_id}/{bk_module_id}:
+    put:
+      operationId: update_module
+      summary: 更新模块
+      description: 更新模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: bk_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_set_id'
+      - name: bk_module_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_module_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+    delete:
+      operationId: delete_module
+      summary: 删除模块
+      description: 删除模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: bk_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_set_id'
+      - name: bk_module_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_module_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/set/{bk_biz_id}/{bk_set_id}:
+    put:
+      operationId: update_set
+      summary: 更新集群
+      description: 更新集群
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: bk_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_set_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+    delete:
+      operationId: delete_set
+      summary: 删除集群
+      description: 删除集群
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: bk_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_set_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/{bk_supplier_account}/{bk_host_id}:
+    get:
+      operationId: get_host_base_info
+      summary: 获取主机详情
+      description: 获取主机详情
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_host_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_host_id'
+  /api/v3/find/topoinst/biz/{bk_biz_id}:
+    post:
+      operationId: search_biz_inst_topo
+      summary: 查询业务实例拓扑
+      description: 查询业务实例拓扑
+      tags:
+      - instances
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/biz/search/{bk_supplier_account}:
+    post:
+      operationId: search_business
+      summary: 查询业务
+      description: 查询业务
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/inst/search/owner/{bk_supplier_account}/object/{bk_obj_id}:
+    post:
+      operationId: search_inst_by_object
+      summary: 查询实例详情
+      description: 查询实例详情
+      tags:
+      - models
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_obj_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_obj_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/module/search/{bk_supplier_account}/{bk_biz_id}/{bk_set_id}:
+    post:
+      operationId: search_module
+      summary: 查询模块
+      description: 查询模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      - name: bk_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_set_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/set/search/{bk_supplier_account}/{bk_biz_id}:
+    post:
+      operationId: search_set
+      summary: 查询集群
+      description: 查询集群
+      tags:
+      - businesses
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      parameters:
+      - name: bk_supplier_account
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_supplier_account'
+      - name: bk_biz_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 'Path parameter: bk_biz_id'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules:
+    post:
+      operationId: transfer_host_module
+      summary: 业务内主机转移模块
+      description: 业务内主机转移模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/fault:
+    post:
+      operationId: transfer_host_to_faultmodule
+      summary: 上交主机到业务的故障机模块
+      description: 上交主机到业务的故障机模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/idle:
+    post:
+      operationId: transfer_host_to_idlemodule
+      summary: 上交主机到业务的空闲机模块
+      description: 上交主机到业务的空闲机模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/resource:
+    post:
+      operationId: transfer_host_to_resourcemodule
+      summary: 上交主机至资源池
+      description: 上交主机至资源池
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+  /api/v3/hosts/modules/resource/idle:
+    post:
+      operationId: transfer_resourcehost_to_idlemodule
+      summary: 资源池主机分配至业务的空闲机模块
+      description: 资源池主机分配至业务的空闲机模块
+      tags:
+      - hosts
+      responses:
+        '200':
+          description: CMDB response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CmdbResponse'
+      requestBody:
+        required: false
+        description: Request payload. Endpoint-specific fields are documented by the
+          corresponding API guide.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Independent API credential. X-API-Key is supported now; Bearer
+        is accepted as a compatibility alias.
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Reserved for the standalone API-key provider rollout.
+  schemas:
+    JsonObject:
+      type: object
+      additionalProperties: true
+      description: Compatibility payload. Endpoint-specific schemas are tightened
+        incrementally.
+    CmdbResponse:
+      type: object
+      required:
+      - result
+      - code
+      - message
+      properties:
+        result:
+          type: boolean
+        code:
+          type: integer
+        message:
+          type: string
+        data: {}
+        permissions:
+          type: array
+          items:
+            type: object
+      additionalProperties: true
+      description: Current CMDB response envelope; data is endpoint-specific.
+    ErrorResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          example: false
+        code:
+          type: integer
+        message:
+          type: string
+      additionalProperties: true
+x-cmdb-contract:
+  source: docs/apidoc/apigw/open/bk_apigw_resources_bk-cmdb.yaml
+  sourceFormat: swagger-2.0-blueking-gateway-catalog
+  pathCount: 150
+  operationCount: 156
+  compatibility: /api/v3 is preserved; use api/changelog.md for changes
+  schemaPolicy: compatibility-first; tighten schemas with contract tests
