@@ -49,7 +49,7 @@
 | 管控区域 | `src/ui/src/views/cloud-area/` | `/resource/cloud-area` | 核心流程 | 表格内编辑、新增、区域选择和错误处理 |
 | 云账户 | `src/ui/src/views/cloud-account/` | `/resource/cloud-account` | 部分迁移 | 新增/编辑/删除、详情侧滑和任务关联 |
 | 云资源发现 | `src/ui/src/views/cloud-resource/` | `/resource/cloud-discover` | 依赖阻塞 | 云账户/VPC/资源选择、任务详情/历史；需云供应商数据 |
-| 跨业务主机转移 | 业务/主机操作旧版流程 | 新版提示资源池中转 | 部分迁移 | 跨业务模块选择、非法列表和确认流程 |
+| 跨业务主机转移 | 业务/主机操作旧版流程 | 业务拓扑「跨业务转移」对话框 | 核心流程 | 目标业务/模块级联选择+确认(/hosts/modules/across/biz);资源池主机走 /hosts/resource/cross/biz 待接 |
 
 ## 模型上下文
 
@@ -61,7 +61,7 @@
 | 关联类型 | `src/ui/src/views/model-association/` | `/model/association` | 核心流程 | 类型 CRUD、使用统计和模型关联列表 |
 | 字段组合模板 | `src/ui/src/views/field-template/` | `/model/field-template` | 核心流程 | 多步创建/编辑/绑定、差异、同步结果、深链 |
 | 字段分组 | 模型详情/通用 field-group 组件 | 模型详情内 | 部分迁移 | 分组 CRUD、移动字段和排序 |
-| 模型实例 | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 实例列表/搜索/分页、新建/编辑/删除/批量删除、详情抽屉、变更历史(/find/inst_audit,resource_type=model_instance);旧版深链已兼容;导入/列配置未迁移 |
+| 模型实例 | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 实例列表/搜索/分页、新建/编辑/删除/批量删除、详情抽屉、变更历史、列配置(localStorage)、Excel 导入(模板下载+上传,真实闭环验证);旧版深链已兼容;导出未迁移 |
 
 ## 运营与平台
 
@@ -86,6 +86,7 @@
 3. **第三批（已完成）**：通用模型实例页(`/resource/instance/:objId`,列表/搜索/分页/新建/编辑/删除/批量删除/详情,必填校验,CRUD 真实回读验证);模型详情关联 tab 修复双向查询并支持编辑/删除(内置保护);旧版实例详情深链兼容。
 4. **第四批（已完成）**：服务模板 create/details/edit 深链与 operational 旧链重定向;进程模板动态全量字段编辑(21 属性,必填校验,覆盖式更新真实回读);修复服务模板/集群模板删除请求体契约与叶子分类过滤。
 5. **第五批（已完成）**：全局配置交互语义补齐(未保存确认/tab query/旧路径重定向)并修复保存契约为全量读-改-写(真实回读验证);模型实例变更历史(/find/inst_audit)。
-6. **第六批（进行中）**：模型实例导入/列配置、主机自动应用完整向导、业务同步完整流程、集群模板同步、跨业务转移;云资源/Pod/正式 IAM 依赖不足时明确阻塞。
+6. **第六批（已完成）**：模型实例列配置与 Excel 导入(模板下载+上传真实闭环);业务拓扑跨业务转移对话框(替换"暂未支持"占位);修复主机导入走错前缀(/api/v3→根路径)的历史 bug。
+7. **第七批（进行中）**：主机自动应用完整向导、业务同步完整差异流程、集群模板同步(set-sync)深链;云资源/Pod/正式 IAM 依赖不足时明确阻塞。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。

@@ -6,6 +6,16 @@
       <div class="spacer" />
       <el-button type="primary" :icon="'Plus'" @click="openForm()">新建</el-button>
       <el-button :disabled="!selected.length" @click="batchRemove">删除</el-button>
+      <el-button :icon="'Upload'" @click="importVisible = true">导入</el-button>
+      <el-dropdown trigger="click" @command="onColCmd">
+        <el-button :icon="'Setting'">列配置</el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="config">配置显示字段</el-dropdown-item>
+            <el-dropdown-item command="reset">恢复默认</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
 
     <div class="inst-toolbar">
@@ -111,6 +121,40 @@
       </template>
     </el-dialog>
 
+    <!-- 列配置 -->
+    <el-dialog v-model="colPickerVisible" title="配置显示字段" width="420px">
+      <el-checkbox-group v-model="colDraft">
+        <div class="col-grid">
+          <el-checkbox v-for="c in colPool" :key="c.bk_property_id" :value="c.bk_property_id">
+            {{ c.bk_property_name }}
+          </el-checkbox>
+        </div>
+      </el-checkbox-group>
+      <template #footer>
+        <el-button @click="colPickerVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="colDraft.length === 0"
+          @click="pickedColIds = [...colDraft]; savePickedCols(); colPickerVisible = false"
+        >确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 实例导入 -->
+    <el-dialog v-model="importVisible" title="导入实例" width="520px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px" title="下载模板并按格式填写后上传(支持 .xlsx)" />
+      <div class="import-toolbar">
+        <el-upload :auto-upload="false" :limit="1" accept=".xlsx,.xls" :on-change="onImportFile">
+          <el-button :icon="'Upload'">选择文件</el-button>
+        </el-upload>
+        <el-button :icon="'Download'" :loading="tplDownloading" @click="fetchTemplate">下载模板</el-button>
+      </div>
+      <template #footer>
+        <el-button @click="importVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importFile" @click="submitImport">导入</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 实例详情 -->
     <el-drawer v-model="detailVisible" :title="detailRow ? (detailRow.bk_inst_name || `实例 ${detailInstId}`) : '实例详情'" size="520px">
       <el-tabs v-model="detailTab">
@@ -149,7 +193,7 @@ import {
   searchModels, searchModelAttributes,
   searchInstances, countInstances,
   createInstance, updateInstance, deleteInstance, deleteInstances,
-  searchInstAudit
+  searchInstAudit, importInstances, downloadInstTemplate
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -206,11 +250,44 @@ watch(detailTab, (v) => {
   if (v === 'history' && !auditRows.value.length && !auditLoading.value) loadAudit()
 })
 
-// 展示列:跳过系统字段,最多展示 6 个,长字符排后
-const displayCols = computed(() => attrs.value
+// 展示列:候选为全部非系统字段,按用户勾选(默认前 6 个,localStorage 持久化)
+const colPool = computed(() => attrs.value
   .filter((f) => !SYSTEM_FIELDS.includes(f.bk_property_id))
-  .sort((a, b) => (a.bk_property_type === 'longchar' ? 1 : 0) - (b.bk_property_type === 'longchar' ? 1 : 0))
-  .slice(0, 6))
+  .sort((a, b) => (a.bk_property_type === 'longchar' ? 1 : 0) - (b.bk_property_type === 'longchar' ? 1 : 0)))
+
+const PICK_KEY = computed(() => `instance.columns.${objId.value}`)
+const pickedColIds = ref([])
+const colPickerVisible = ref(false)
+const colDraft = ref([])
+
+const displayCols = computed(() => {
+  const map = new Map(colPool.value.map((c) => [c.bk_property_id, c]))
+  return pickedColIds.value.map((id) => map.get(id)).filter(Boolean)
+})
+
+function loadPickedCols() {
+  let saved = null
+  try { saved = JSON.parse(localStorage.getItem(PICK_KEY.value) || 'null') } catch { saved = null }
+  if (Array.isArray(saved) && saved.length) {
+    pickedColIds.value = saved
+  } else {
+    pickedColIds.value = colPool.value.slice(0, 6).map((c) => c.bk_property_id)
+  }
+}
+function savePickedCols() {
+  try { localStorage.setItem(PICK_KEY.value, JSON.stringify(pickedColIds.value)) } catch { /* ignore */ }
+}
+function openColPicker() {
+  colDraft.value = [...pickedColIds.value]
+  colPickerVisible.value = true
+}
+function onColCmd(cmd) {
+  if (cmd === 'config') openColPicker()
+  else if (cmd === 'reset') {
+    pickedColIds.value = colPool.value.slice(0, 6).map((c) => c.bk_property_id)
+    savePickedCols()
+  }
+}
 
 const editableAttrs = computed(() => attrs.value
   .filter((f) => !SYSTEM_FIELDS.includes(f.bk_property_id) && !f.ispre && f.bk_property_id !== 'bk_inst_name'))
@@ -276,6 +353,38 @@ async function loadModel() {
 
 async function loadAttrs() {
   attrs.value = (await searchModelAttributes(objId.value).catch(() => [])) || []
+  loadPickedCols()
+}
+
+// ---------- 导入 ----------
+const importVisible = ref(false)
+const importFile = ref(null)
+const importing = ref(false)
+
+function onImportFile(file) {
+  importFile.value = file.raw
+}
+const tplDownloading = ref(false)
+async function fetchTemplate() {
+  tplDownloading.value = true
+  try {
+    await downloadInstTemplate(objId.value)
+  } catch (e) {
+    ElMessage.error('模板下载失败: ' + (e?.message || '后端异常'))
+  } finally { tplDownloading.value = false }
+}
+async function submitImport() {
+  if (!importFile.value) { ElMessage.warning('请选择文件'); return }
+  importing.value = true
+  try {
+    await importInstances(objId.value, importFile.value, {})
+    ElMessage.success('导入成功')
+    importVisible.value = false
+    importFile.value = null
+    await load()
+  } catch (e) {
+    ElMessage.error('导入失败: ' + (e?.message || '后端异常'))
+  } finally { importing.value = false }
 }
 
 async function load() {
@@ -431,4 +540,6 @@ onMounted(async () => {
 }
 .inst-footer .spacer { flex: 1; }
 .selected-info { color: #979BA5; }
+.import-toolbar { display: flex; align-items: center; gap: 8px; }
+.col-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; }
 </style>

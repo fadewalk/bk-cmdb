@@ -335,6 +335,42 @@
       </template>
     </el-dialog>
 
+    <!-- 跨业务转移 -->
+    <el-dialog v-model="acrossVisible" title="跨业务转移" width="520px">
+      <el-form label-width="110px">
+        <el-form-item label="转移主机">
+          <span>已选择 {{ selectedHosts.length }} 台</span>
+        </el-form-item>
+        <el-form-item label="目标业务" required>
+          <el-select
+            v-model="acrossForm.dstBiz"
+            filterable
+            style="width: 100%"
+            placeholder="请选择目标业务"
+            @change="loadAcrossModuleOptions"
+          >
+            <el-option v-for="b in acrossBizOptions" :key="b.bk_biz_id" :label="`[${b.bk_biz_id}] ${b.bk_biz_name}`" :value="b.bk_biz_id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标模块" required>
+          <el-cascader
+            v-model="acrossForm.modulePath"
+            :options="acrossModules"
+            :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
+            placeholder="选择集群 / 模块"
+            style="width: 100%"
+            :disabled="!acrossForm.dstBiz"
+            v-loading="acrossLoading"
+          />
+        </el-form-item>
+      </el-form>
+      <div class="field-tip" style="padding-left: 110px">转移后主机将从当前业务模块移除,归属目标业务的所选模块</div>
+      <template #footer>
+        <el-button @click="acrossVisible = false">取消</el-button>
+        <el-button type="primary" :loading="acrossSubmitting" @click="submitAcrossTransfer">确认转移</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 服务实例进程抽屉(从实例列表 / 向导完成后跳入) -->
     <el-drawer v-model="procDrawer" :title="`「${procInstName}」进程实例`" size="55%">
       <div class="table-toolbar">
@@ -383,7 +419,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, createModule, deleteModule,
-  transferHostModule, transferHostToResource,
+  transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   http
@@ -690,8 +726,62 @@ async function onHostMore(cmd) {
     loadHosts()
     load()
   } else if (cmd === 'across') {
-    ElMessage.info('跨业务转移需要跨业务选择对话框,B3 简化版暂未支持,可用资源池中转')
+    acrossForm.value = { dstBiz: null, modulePath: null }
+    acrossVisible.value = true
+    loadAcrossModuleOptions()
   }
+}
+
+// ---------- 跨业务转移 ----------
+const acrossVisible = ref(false)
+const acrossForm = ref({ dstBiz: null, modulePath: null })
+const acrossModules = ref([])
+const acrossLoading = ref(false)
+const acrossSubmitting = ref(false)
+const acrossBizOptions = computed(() => bizStore.bizList.filter((b) => b.bk_biz_id !== bizId.value))
+
+async function loadAcrossModuleOptions() {
+  acrossModules.value = []
+  if (!acrossForm.value.dstBiz) return
+  acrossLoading.value = true
+  try {
+    const options = []
+    const [mainTree, idleTopo] = await Promise.allSettled([getBizTopoTree(acrossForm.value.dstBiz), getBizInternalTopo(acrossForm.value.dstBiz)])
+    const mapSet = (node) => ({
+      value: node.bk_inst_id, label: node.bk_inst_name,
+      children: (node.child || []).filter((c) => c.bk_obj_id === 'module' || c.child).map((c) => (c.bk_obj_id === 'module'
+        ? { value: c.bk_inst_id, label: c.bk_inst_name } : mapSet(c)))
+    })
+    if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
+      for (const bizNode of mainTree.value) options.push(...(bizNode.child || []).map(mapSet))
+    }
+    if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
+      const s = idleTopo.value
+      options.push({ value: s.bk_set_id, label: s.bk_set_name, children: (s.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name })) })
+    }
+    acrossModules.value = options
+  } finally { acrossLoading.value = false }
+}
+
+async function submitAcrossTransfer() {
+  const hostIds = selectedHosts.value.map((h) => h.bk_host_id)
+  if (!acrossForm.value.dstBiz || !acrossForm.value.modulePath) {
+    ElMessage.warning('请选择目标业务与模块')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`将所选 ${hostIds.length} 台主机转移至目标业务的所选模块?`, '跨业务转移确认', { type: 'warning' })
+  } catch { return }
+  acrossSubmitting.value = true
+  try {
+    await transferBizHostAcrossBiz(bizId.value, acrossForm.value.dstBiz, hostIds, acrossForm.value.modulePath)
+    ElMessage.success('跨业务转移成功')
+    acrossVisible.value = false
+    loadHosts()
+    load()
+  } catch (e) {
+    ElMessage.error('跨业务转移失败: ' + (e?.message || '后端异常'))
+  } finally { acrossSubmitting.value = false }
 }
 
 async function onInstMore(cmd) {

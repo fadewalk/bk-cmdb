@@ -107,6 +107,14 @@ export const transferHostToResource = (bizId, hostIds) =>
 // 跨业务转移
 export const transferHostAcrossBiz = (params) =>
   http.post('/hosts/resource/cross/biz', params)
+// 业务内主机跨业务转移(删除原业务模块关系)
+export const transferBizHostAcrossBiz = (srcBizId, dstBizId, hostIds, moduleId) =>
+  http.post('/hosts/modules/across/biz', {
+    src_bk_biz_id: srcBizId,
+    dst_bk_biz_id: dstBizId,
+    bk_host_id: hostIds,
+    bk_module_id: moduleId
+  })
 // 转移到空闲机
 export const transferHostToIdle = (bizId, hostIds) =>
   http.post('/hosts/modules/resource/idle', { bk_biz_id: bizId, bk_host_id: hostIds })
@@ -150,11 +158,13 @@ export const listHostsInIdle = (bizId, data) =>
   http.post(`/hosts/app/${bizId}/list_hosts`, data)
 
 // 批量导入主机(走 multipart/form-data,file + params)
+// 注意: web_server 的 excel 路由挂在根路径(/hosts/import),不在 /api/v3 下,需覆盖 baseURL
 export const importHosts = (file, params) => {
   const form = new FormData()
   form.append('file', file)
   form.append('params', JSON.stringify(params))
   return http.post('/hosts/import', form, {
+    baseURL: '',
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000
   })
@@ -357,6 +367,32 @@ export const deleteInstances = (objId, ids) =>
 
 // 实例变更历史
 export const searchInstAudit = (data) => http.post('/find/inst_audit', data)
+
+// 实例导入(multipart,file + params,走 web_server excel 解析;根路径,不在 /api/v3 下)
+export const importInstances = (objId, file, params = {}) => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('params', JSON.stringify(params))
+  return http.post(`/insts/object/${objId}/import`, form, {
+    baseURL: '',
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000
+  })
+}
+
+// 下载实例导入模板(web_server 生成真实 xlsx;根路径)
+export const downloadInstTemplate = async (objId) => {
+  const res = await http.post(`/importtemplate/${objId}`, {}, {
+    baseURL: '',
+    responseType: 'blob'
+  })
+  const url = URL.createObjectURL(res)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `bk_cmdb_inst_${objId}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // ---------- 集群模板 ----------
 export const searchSetTemplates = (bizId, page) =>
