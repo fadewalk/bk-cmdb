@@ -95,12 +95,12 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     // 验证按钮
     const editBtn = await page.locator('button:has-text("编辑")').count()
     const bindBtn = await page.locator('button:has-text("绑定模型")').count()
-    const newBtn = await page.locator('button:has-text("新建模板")').count()
+    const newBtn = await page.locator('button:has-text("新建")').count()
     if (newBtn > 0) ok('"新建模板"按钮')
     if (editBtn > 0) ok(`"编辑"按钮: ${editBtn}`)
     if (bindBtn > 0) ok(`"绑定模型"按钮: ${bindBtn}`)
     // 新建对话框
-    await page.locator('button:has-text("新建模板")').click()
+    await page.locator('button:has-text("新建")').click()
     await page.waitForTimeout(500)
     const ftDlg = await page.locator('.el-dialog:has-text("新建字段组合模板")').isVisible().catch(() => false)
     if (ftDlg) ok('FieldTemplate 新建对话框打开')

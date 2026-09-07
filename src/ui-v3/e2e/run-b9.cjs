@@ -48,7 +48,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     const dirTree = await page.locator('.dir-tree .el-tree-node').count()
     if (dirTree > 0) ok(`资源目录树: ${dirTree} 节点`)
     // 目录操作按钮
-    const createDirBtn = await page.locator('button:has-text("新建目录")').count()
+    const createDirBtn = await page.locator('.dir-add').count()
     const renameBtn = await page.locator('button:has-text("重命名")').count()
     const delDirBtn = await page.locator('button:has-text("删除")').first().count()
     if (createDirBtn > 0) ok('"新建目录"按钮')
@@ -56,7 +56,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     if (delDirBtn > 0) ok('"删除"按钮')
 
     // 新建目录对话框
-    await page.locator('button:has-text("新建目录")').click()
+    await page.locator('.dir-add').click()
     await page.waitForTimeout(500)
     const newDirDlg = await page.locator('.el-dialog:has-text("新建资源目录")').isVisible().catch(() => false)
     if (newDirDlg) ok('资源目录新建对话框打开')

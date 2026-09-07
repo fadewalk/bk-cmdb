@@ -140,13 +140,15 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.goto('http://localhost:8090/#/resource/index', { waitUntil: 'load' })
     await page.waitForTimeout(2500)
     ok('资源目录加载')
-    // 点 bk_switch 分类 → 跳 /resource/catalog/bk_switch
+    // 点 bk_switch 分类 → 跳模型实例页 /resource/instance/bk_switch(对齐老版 general-model)
     await page.locator('.res-item:has(.res-name:has-text("交换机"))').click()
     await page.waitForTimeout(1500)
-    if (page.url().includes('/resource/catalog/bk_switch')) ok(`点击"交换机"跳到: ${page.url()}`)
+    if (page.url().includes('/resource/instance/bk_switch')) ok(`点击"交换机"跳到: ${page.url()}`)
     else fail('资源目录路由', page.url())
-    const catTitle = await page.locator('.page-title').textContent()
-    if (catTitle.includes('交换机')) ok(`ResourceCatalog 标题: ${catTitle.trim()}`)
+    const instTitle = await page.locator('.inst-title').textContent({ timeout: 8000 }).catch(() => '')
+    if (instTitle.includes('交换机')) ok(`实例页标题: ${instTitle.trim()}`)
+    const instTable = await page.locator('.el-table').count()
+    if (instTable > 0) ok('实例页表格渲染')
     await page.screenshot({ path: path.join(SHOTS, 'B6-resource-catalog.png'), fullPage: true })
 
     // === 4. 视觉基础验证 ===
