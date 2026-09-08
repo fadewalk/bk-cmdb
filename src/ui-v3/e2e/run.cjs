@@ -95,6 +95,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.waitForSelector('.res-index', { timeout: 10000 })
     ok('资源目录加载')
 
+    await page.waitForSelector('.classify-name-text', { timeout: 15000 })
     const groupNames = await page.locator('.classify-name-text').allTextContents()
     ok(`资源分类卡片: ${groupNames.join(' / ')}`)
     if (!groupNames.includes('主机管理')) fail('资源目录', '缺少"主机管理"分组')
