@@ -39,8 +39,10 @@
         <el-table-column label="修改时间" width="170">
           <template #default="{ row }">{{ fmtTime(row.last_time) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
+            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" size="small" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -90,7 +92,7 @@
           <el-input v-model="form.bk_secret_key" type="password" show-password placeholder="云账户访问密钥 Key" />
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="form.bk_desc" type="textarea" :rows="2" />
+          <el-input v-model="form.bk_description" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -98,6 +100,61 @@
         <el-button type="primary" :loading="saving" @click="submitCreate">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑云账户(契约: PUT /update/cloud/account/{id};密钥留空则不修改) -->
+    <el-dialog v-model="editVisible" title="编辑云账户" width="480px">
+      <el-form label-width="100px">
+        <el-form-item label="账户名称" required>
+          <el-input v-model="editForm.bk_account_name" />
+        </el-form-item>
+        <el-form-item label="云厂商">
+          <el-input :model-value="vendorName(editForm.bk_cloud_vendor)" disabled />
+        </el-form-item>
+        <el-form-item label="SecretId">
+          <el-input v-model="editForm.bk_secret_id" placeholder="留空则不修改" />
+        </el-form-item>
+        <el-form-item label="SecretKey">
+          <el-input v-model="editForm.bk_secret_key" type="password" show-password placeholder="留空则不修改" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="editForm.bk_description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 账户详情(字段 + 关联的同步任务) -->
+    <el-drawer v-model="detailVisible" :title="`账户详情 【${detailRow?.bk_account_name || ''}】`" size="560px">
+      <template v-if="detailRow">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="账户名称">{{ detailRow.bk_account_name || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="云厂商">{{ vendorName(detailRow.bk_cloud_vendor) }}</el-descriptions-item>
+          <el-descriptions-item label="认证类型">密钥认证</el-descriptions-item>
+          <el-descriptions-item label="SecretId">{{ detailRow.bk_secret_id || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detailRow.bk_description || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="创建人">{{ detailRow.bk_creator || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ fmtTime(detailRow.create_time) }}</el-descriptions-item>
+          <el-descriptions-item label="修改人">{{ detailRow.bk_last_editor || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="修改时间">{{ fmtTime(detailRow.last_time) }}</el-descriptions-item>
+        </el-descriptions>
+        <div class="detail-task-title">关联的同步任务</div>
+        <el-table :data="detailTasks" v-loading="detailTasksLoading" size="small">
+          <el-table-column label="任务名称" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.bk_task_name || row.bk_name || `#${row.bk_task_id ?? row.id}` }}</template>
+          </el-table-column>
+          <el-table-column label="资源" width="100">
+            <template #default="{ row }">{{ row.bk_resource_type === 'host' ? '主机' : (row.bk_resource_type || '--') }}</template>
+          </el-table-column>
+          <el-table-column label="最近同步时间" width="160">
+            <template #default="{ row }">{{ fmtTime(row.last_sync_time || row.last_time) }}</template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!detailTasksLoading && detailTasks.length === 0" description="该账户暂未创建同步任务" :image-size="60" />
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -105,7 +162,10 @@
 // 云账户:独立页面对齐老版 resource/cloud-account(空态/新建/删除)
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { searchCloudAccounts, createCloudAccount, deleteCloudAccount } from '../../api/cmdb'
+import {
+  searchCloudAccounts, createCloudAccount, deleteCloudAccount,
+  updateCloudAccount, searchCloudTasks
+} from '../../api/cmdb'
 
 const keyword = ref('')
 const rows = ref([])
@@ -114,7 +174,15 @@ const page = ref(1)
 const loading = ref(false)
 const saving = ref(false)
 const formVisible = ref(false)
-const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_account_type: 'api_secret_key', bk_secret_id: '', bk_secret_key: '', bk_desc: '' })
+const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_account_type: 'api_secret_key', bk_secret_id: '', bk_secret_key: '', bk_description: '' })
+
+const editVisible = ref(false)
+const editForm = ref({ id: null, bk_account_name: '', bk_cloud_vendor: '', bk_secret_id: '', bk_secret_key: '', bk_description: '' })
+
+const detailVisible = ref(false)
+const detailRow = ref(null)
+const detailTasks = ref([])
+const detailTasksLoading = ref(false)
 
 const VENDORS = { '1': 'AWS', '2': '腾讯云', '4': '阿里云' }
 function vendorName(v) { return VENDORS[String(v)] || '--' }
@@ -145,11 +213,51 @@ async function submitCreate() {
     await createCloudAccount({ ...form.value })
     ElMessage.success('云账户已创建')
     formVisible.value = false
-    
+
     await load()
   } catch (e) {
     ElMessage.error('创建失败: ' + (e?.message || '后端异常'))
   } finally { saving.value = false }
+}
+
+function openEdit(row) {
+  editForm.value = {
+    id: row.bk_account_id,
+    bk_account_name: row.bk_account_name || '',
+    bk_cloud_vendor: row.bk_cloud_vendor || '',
+    bk_secret_id: '',
+    bk_secret_key: '',
+    bk_description: row.bk_description || ''
+  }
+  editVisible.value = true
+}
+
+async function submitEdit() {
+  if (!String(editForm.value.bk_account_name || '').trim()) { ElMessage.warning('请填写账户名称'); return }
+  saving.value = true
+  try {
+    const data = { bk_account_name: editForm.value.bk_account_name, bk_description: editForm.value.bk_description }
+    if (String(editForm.value.bk_secret_id || '').trim()) data.bk_secret_id = editForm.value.bk_secret_id
+    if (String(editForm.value.bk_secret_key || '').trim()) data.bk_secret_key = editForm.value.bk_secret_key
+    await updateCloudAccount(editForm.value.id, data)
+    ElMessage.success('云账户已更新')
+    editVisible.value = false
+    await load()
+  } catch (e) {
+    ElMessage.error('更新失败: ' + (e?.message || '后端异常'))
+  } finally { saving.value = false }
+}
+
+async function openDetail(row) {
+  detailRow.value = row
+  detailTasks.value = []
+  detailVisible.value = true
+  detailTasksLoading.value = true
+  try {
+    // 契约: mongo 风格条件按账户过滤任务
+    const data = await searchCloudTasks({ bk_account_id: { $eq: [row.bk_account_id] } })
+    detailTasks.value = data?.info || []
+  } catch { detailTasks.value = [] } finally { detailTasksLoading.value = false }
 }
 
 async function remove(row) {
@@ -188,4 +296,5 @@ onMounted(load)
   padding: 12px 0 0; font-size: 12px; color: #63656E;
 }
 .table-footer .spacer { flex: 1; }
+.detail-task-title { font-size: 13px; font-weight: 600; color: #313238; margin: 16px 0 8px; }
 </style>

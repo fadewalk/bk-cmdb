@@ -612,3 +612,21 @@ export const getServiceTemplateDiff = (data) =>
   http.post('/find/proc/service_template/general_difference', data)
 export const syncServiceInstances = (data) =>
   http.put('/update/proc/service_instance/sync', data)
+// ---------- 动态分组(契约对齐老版 dynamicGroup store) ----------
+export const createDynamicGroup = (bizId, name, objId, condition) =>
+  http.post('/dynamicgroup', { bk_biz_id: bizId, bk_obj_id: objId, name, info: { condition } })
+export const updateDynamicGroup = (bizId, id, name, objId, condition) =>
+  http.put(`/dynamicgroup/${bizId}/${id}`, { bk_biz_id: bizId, bk_obj_id: objId, name, info: { condition } })
+export const getDynamicGroupDetail = (bizId, id) =>
+  http.get(`/dynamicgroup/${bizId}/${id}`)
+export const previewHostsByCondition = (condition, page = { start: 0, limit: 20 }) =>
+  // 契约: host_server HostCommonSearch(资源池视角,UI 专用)
+  http.post('/findmany/hosts/search/resource', { condition, page })
+export const searchSetsByFilter = (bizId, filter, page = { start: 0, limit: 20 }) =>
+  // 契约: topo set/search,filter 为通用模型条件规则
+  http.post(`/set/search/0/${bizId}`, { page, filter })
+
+// ---------- 云账户(契约对齐老版 cloud store) ----------
+export const updateCloudAccount = (id, data) => http.put(`/update/cloud/account/${id}`, data)
+export const searchCloudTasks = (condition, page = { start: 0, limit: 50 }) =>
+  http.post('/findmany/cloud/sync/task', { page, ...(condition ? { condition } : {}) })
