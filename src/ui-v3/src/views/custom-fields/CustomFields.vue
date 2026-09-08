@@ -2,7 +2,7 @@
   <div class="custom-fields-page" v-bkloading="{ isLoading: loading }">
     <!-- 顶部功能提示(对齐原版 cmdb-tips) -->
     <div class="cmdb-tips" v-if="featureTips">
-      <span>自定义字段用于为主线模型扩展专属属性;在字段分组中可拖动排序</span>
+      <span>自定义字段：创建的业务专有字段，仅在业务内生效 <i class="req-star">*</i>为必填字段</span>
       <i class="bk-icon icon-close close-x" @click="featureTips = false" />
     </div>
 
@@ -259,8 +259,8 @@ async function loadMainLine() {
   try {
     const data = await searchModels()
     mainLine.value = (data || [])
-      .filter((m) => ['biz', 'set', 'module', 'host', 'process'].includes(m.bk_obj_id))
-      .sort((a, b) => ['biz', 'set', 'module', 'host', 'process'].indexOf(a.bk_obj_id) - ['biz', 'set', 'module', 'host', 'process'].indexOf(b.bk_obj_id))
+      .filter((m) => ['set', 'module', 'host'].includes(m.bk_obj_id))
+      .sort((a, b) => ['set', 'module', 'host'].indexOf(a.bk_obj_id) - ['set', 'module', 'host'].indexOf(b.bk_obj_id))
     if (!mainLine.value.find((m) => m.bk_obj_id === tab.value) && mainLine.value[0]) {
       tab.value = mainLine.value[0].bk_obj_id
     }
@@ -272,7 +272,7 @@ async function loadMainLine() {
 async function loadGroups() {
   if (!tab.value) return
   try {
-    const data = await searchFieldGroups(tab.value)
+    const data = await searchFieldGroups(tab.value, bizStore.bizId ? { bk_biz_id: bizStore.bizId } : {})
     groups.value = (data?.info || []).map((g) => ({ info: g, properties: [] }))
   } catch (e) {
     groups.value = []
@@ -283,8 +283,9 @@ async function loadProperties() {
   if (!tab.value) return
   loading.value = true
   try {
-    const data = await searchModelAttributes(tab.value)
-    properties.value = (data || []).filter((a) => !a.ispre || ['bk_inst_id', 'bk_inst_name', 'bk_obj_id'].includes(a.bk_property_id))
+    // 业务维度字段(带 bk_biz_id,对齐老版自定义字段视图)
+    const data = await searchModelAttributes(tab.value, bizStore.bizId)
+    properties.value = data || []
     const byGroup = new Map()
     for (const g of groups.value) byGroup.set(g.info.bk_group_id, g)
     for (const p of properties.value) {

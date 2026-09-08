@@ -267,9 +267,9 @@ export const searchModels = (condition = {}) =>
 export const searchClassificationWithObjects = () =>
   http.post('/find/classificationobject', {})
 
-// 模型属性列表
-export const searchModelAttributes = (objId) =>
-  http.post('/find/objectattr', { bk_obj_id: objId, bk_supplier_account: '0' })
+// 模型属性列表(bizId 传业务 ID 时查询业务维度自定义字段)
+export const searchModelAttributes = (objId, bizId = null) =>
+  http.post('/find/objectattr', { bk_obj_id: objId, bk_supplier_account: '0', ...(bizId ? { bk_biz_id: bizId } : {}) })
 
 // 模型实例统计(仪表盘)
 export const getModelStatistics = () =>
