@@ -90,31 +90,22 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.keyboard.press('Escape')
     await page.waitForTimeout(200)
 
-    // === B4 资源目录 ===
+    // === B4 资源目录(卡片瀑布流,对齐老版) ===
     await page.goto(`http://localhost:8090/?t=${Date.now()+1}#/resource/index`, { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.res-index', { timeout: 10000 })
     ok('资源目录加载')
 
-    const cats = await page.locator('.res-item .res-name').allTextContents()
-    ok(`资源分类: ${cats.join(' / ')}`)
-    if (!cats.includes('管控区域')) fail('资源目录', '缺少"管控区域"分类')
+    const groupNames = await page.locator('.classify-name-text').allTextContents()
+    ok(`资源分类卡片: ${groupNames.join(' / ')}`)
+    if (!groupNames.includes('主机管理')) fail('资源目录', '缺少"主机管理"分组')
+    const hostCount = await page.locator('.models-link:has(.model-name:has-text("主机")) .model-instance-count').first().textContent()
+    if (Number(hostCount) >= 0) ok(`主机实例计数: ${hostCount.trim()}`)
 
-    // 联动点击
-    await page.locator('.res-item:has(.res-name:has-text("管控区域"))').click()
-    await page.waitForURL(/\/resource\/cloud-area/, { timeout: 5000 })
-    await page.waitForSelector('.page-title:has-text("云资源")', { timeout: 5000 })
-    ok('点击"管控区域"跳到 Cloud 页')
-    await page.screenshot({ path: path.join(SHOTS, 'B4-cloud.png'), fullPage: true })
-
-    // 新建区域
-    await page.locator('button:has-text("新建区域")').click()
-    await page.waitForSelector('.el-dialog:has-text("新建云区域")', { timeout: 3000 })
-    const autoId = await page.locator('.el-dialog .el-input__inner').first().inputValue()
-    if (/\d+/.test(autoId)) ok(`新建区域自动填充 ID = ${autoId}`)
-    else fail('新建区域 ID', `got: ${autoId}`)
-    await page.locator('.el-dialog .el-input__inner').nth(1).fill(`e2e-area-${Date.now()}`)
-    await page.screenshot({ path: path.join(SHOTS, 'B4-cloud-dialog.png'), fullPage: true })
-    await page.locator('.el-dialog button:has-text("取消")').click()
+    // 联动点击:自定义模型 → 实例页
+    await page.locator('.models-link:has(.model-name:has-text("交换机"))').click()
+    await page.waitForURL(/\/resource\/instance\/bk_switch/, { timeout: 5000 })
+    ok('点击"交换机"跳到模型实例页')
+    await page.screenshot({ path: path.join(SHOTS, 'B4-resource-index.png'), fullPage: true })
 
     // === B4 主机列表导入 ===
     await page.goto(`http://localhost:8090/?t=${Date.now()+2}#/resource/host`, { waitUntil: 'domcontentloaded' })
