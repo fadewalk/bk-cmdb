@@ -21,7 +21,7 @@
 
 | 旧版能力/入口 | 旧版实现 | 新版入口 | 当前状态 | 替代门禁重点 |
 |---|---|---|---|---|
-| 业务拓扑 | `src/ui/src/views/business-topology/` | `/business/topo` | 核心流程 | 业务上下文刷新、主机/服务实例/Pod tab、节点创建和操作 |
+| 业务拓扑 | `src/ui/src/views/business-topology/` | `/business/topo` | 核心流程 | 拓扑树(根业务节点+计数徽标+空闲机池在前,计数前端统计)、工具栏(新增/编辑/转移至▾/追加至▾/复制▾/更多▾导出/收藏星/筛选漏斗)、主机列表 with_biz 四对象关联(模块名/集群名真实值)、列排序与字段设置 |
 | 业务拓扑主机详情 | `business-topology` + `host-details` | `/host-detail?id=...` | 部分迁移 | 旧版多上下文深链兼容、属性/服务/Pod/关联/历史 tabs |
 | 主机操作 | `src/ui/src/views/host-operation/` | 业务拓扑/主机列表内操作 | 部分迁移 | 新增、编辑、批量编辑、转移、导入导出、自动应用 |
 | 服务实例与进程 | `business-topology/service-instance/` | `/business/service-instance` + 业务拓扑抽屉 | 核心流程 | 创建、克隆、标签、批量删除、进程 CRUD、真实回读 |

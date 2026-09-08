@@ -22,7 +22,7 @@
             <span class="tree-node">
               <i :class="['bk-cmdb-icon', 'node-icon', nodeIconClass(data)]" />
               <span class="node-label">{{ data.label }}</span>
-              <span v-if="data.hostCount ?? data.instCount" class="node-count">{{ data.hostCount ?? data.instCount }}</span>
+              <span v-if="data.hostCount != null" class="node-count">{{ data.hostCount }}</span>
               <el-button v-if="canCreate(data)" link size="small" type="primary" class="node-add"
                 @click.stop="openCreateFromNode(data)">+</el-button>
             </span>
@@ -42,15 +42,35 @@
         <div class="toolbar" v-if="rightTab !== 'node'">
           <template v-if="rightTab === 'host'">
             <el-button size="small" type="primary" :disabled="!bizId" @click="openCreateSet">新增</el-button>
-            <el-button size="small" :disabled="!selectedHosts.length" @click="transferVisible = true">转移至</el-button>
-            <el-button size="small" :disabled="!selectedHosts.length" @click="appendVisible = true">追加至</el-button>
-            <el-button size="small" :disabled="!selectedHosts.length">复制</el-button>
-            <el-dropdown trigger="click" @command="onHostMore">
-              <el-button size="small">更多</el-button>
+            <el-button size="small" :disabled="!selectedHosts.length" @click="openTopoBatchEdit">编辑</el-button>
+            <el-dropdown trigger="click" @command="onTransferCmd">
+              <el-button size="small" :disabled="!selectedHosts.length">转移至<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item :disabled="!selectedHosts.length" command="resource">转移到资源池</el-dropdown-item>
-                  <el-dropdown-item :disabled="!selectedHosts.length" command="across">跨业务转移</el-dropdown-item>
+                  <el-dropdown-item command="idle">转移至空闲机池</el-dropdown-item>
+                  <el-dropdown-item command="resource">转移到资源池</el-dropdown-item>
+                  <el-dropdown-item command="across">跨业务转移</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-dropdown trigger="click">
+              <el-button size="small" :disabled="!selectedHosts.length" @click="appendVisible = true">追加至<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            </el-dropdown>
+            <el-dropdown trigger="click" @command="onCopyCmd">
+              <el-button size="small" :disabled="!selectedHosts.length">复制<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="ip">复制IP</el-dropdown-item>
+                  <el-dropdown-item command="name">复制主机名称</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-dropdown trigger="click" @command="onMoreCmd">
+              <el-button size="small" :disabled="!selectedHosts.length">更多<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="exportSelected">导出选中</el-dropdown-item>
+                  <el-dropdown-item command="exportAll">导出全部</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -68,6 +88,26 @@
             </el-dropdown>
           </template>
           <div class="spacer" />
+          <template v-if="rightTab === 'host'">
+            <el-tooltip content="收藏当前筛选条件" placement="top">
+              <el-button size="small" :icon="'Star'" class="square-btn" @click="saveFavorite" />
+            </el-tooltip>
+            <el-popover placement="bottom-end" :width="260" trigger="click">
+              <template #reference>
+                <el-button size="small" :icon="'Filter'" class="square-btn" />
+              </template>
+              <div class="filter-pop">
+                <div class="filter-row-label">集群</div>
+                <el-select v-model="filterSetId" placeholder="全部集群" clearable size="small" style="width: 100%" @change="onFilterChange">
+                  <el-option v-for="n in setNodes" :key="n.id" :label="n.label" :value="n.id" />
+                </el-select>
+                <div class="filter-row-label">模块</div>
+                <el-select v-model="filterModuleId" placeholder="全部模块" clearable size="small" style="width: 100%" @change="onFilterChange">
+                  <el-option v-for="n in moduleNodes" :key="n.id" :label="n.label" :value="n.id" />
+                </el-select>
+              </div>
+            </el-popover>
+          </template>
           <el-button size="small" :icon="'Refresh'" @click="load">刷新</el-button>
           <span class="refresh-time">{{ refreshText }}</span>
           <el-input
@@ -102,7 +142,7 @@
               :prop="col.bk_property_id"
               :label="col.bk_property_name"
               :min-width="col.minWidth || 120"
-              :sortable="col.sortable || false"
+              sortable
               show-overflow-tooltip
             >
               <template #default="{ row }">
@@ -111,10 +151,10 @@
                 <span v-else>{{ hostCell(row, col.bk_property_id) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="模块名 (模块)" min-width="120">
+            <el-table-column prop="__moduleName" label="模块名 (模块)" min-width="130" sortable>
               <template #default="{ row }">{{ row.__moduleName || '--' }}</template>
             </el-table-column>
-            <el-table-column label="集群名 (集群)" min-width="120">
+            <el-table-column prop="__setName" label="集群名 (集群)" min-width="130" sortable>
               <template #default="{ row }">{{ row.__setName || '--' }}</template>
             </el-table-column>
           </el-table>
@@ -378,6 +418,24 @@
       </template>
     </el-dialog>
 
+    <!-- 批量编辑主机属性(契约 PUT /hosts/batch) -->
+    <el-drawer v-model="topoBatchVisible" title="编辑主机属性" size="480px">
+      <el-form label-width="120px">
+        <el-form-item v-for="f in topoBatchAttrs" :key="f.bk_property_id" :label="f.bk_property_name">
+          <el-select v-if="topoEnumOptions(f).length" v-model="topoBatchMap[f.bk_property_id]" clearable filterable style="width: 100%">
+            <el-option v-for="o in topoEnumOptions(f)" :key="o.id" :label="o.name" :value="o.id" />
+          </el-select>
+          <el-switch v-else-if="f.bk_property_type === 'bool'" v-model="topoBatchMap[f.bk_property_id]" />
+          <el-input-number v-else-if="f.bk_property_type === 'int'" v-model="topoBatchMap[f.bk_property_id]" :controls="false" style="width: 100%" />
+          <el-input v-else v-model="topoBatchMap[f.bk_property_id]" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="topoBatchVisible = false">取消</el-button>
+        <el-button type="primary" :loading="topoBatchSaving" @click="submitTopoBatchEdit">保存</el-button>
+      </template>
+    </el-drawer>
+
     <!-- 服务实例克隆 -->
     <el-dialog v-model="cloneVisible" :title="`克隆服务实例「${cloneSource?.name || ''}」`" width="480px">
       <el-form label-width="100px">
@@ -460,12 +518,14 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, createModule, deleteModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, createInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
+  searchModelAttributes, exportHosts,
   http
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
@@ -535,7 +595,8 @@ const activeHostColumns = computed(() => {
 
 function hostCell(row, key) {
   if (key === 'bk_cloud_id') return cloudName(row[key])
-  return row[key] ?? '--'
+  const v = row[key]
+  return v === '' || v === null || v === undefined ? '--' : v
 }
 function loadPickedColumns() {
   try {
@@ -571,6 +632,12 @@ function canCreate(data) {
 }
 const cloudNames = { 0: 'Default Area' }
 function cloudName(id) {
+  // with_biz 返回云区域关联对象数组;普通数值走内置映射
+  if (Array.isArray(id)) {
+    const c = id[0]
+    if (!c) return '--'
+    return `${c.bk_inst_name || 'Default Area'}[${c.bk_inst_id ?? 0}]`
+  }
   const n = cloudNames[id]
   return n ? `${n}[${id}]` : '--'
 }
@@ -588,7 +655,7 @@ const filteredTree = computed(() => {
   return filter(treeData.value)
 })
 
-function mapTopoNode(node, parentSetId) {
+function mapTopoNode(node, parentSetId, moduleCount = {}, setCount = {}) {
   const setId = node.bk_obj_id === 'set' ? node.bk_inst_id : parentSetId
   return {
     type: node.bk_obj_id,
@@ -596,7 +663,10 @@ function mapTopoNode(node, parentSetId) {
     setId,
     moduleId: node.bk_obj_id === 'module' ? node.bk_inst_id : undefined,
     label: node.bk_inst_name,
-    children: (node.child || []).map((c) => mapTopoNode(c, setId))
+    hostCount: node.bk_obj_id === 'module'
+      ? (moduleCount[node.bk_inst_id] || 0)
+      : (node.bk_obj_id === 'set' ? (setCount[node.bk_inst_id] || 0) : undefined),
+    children: (node.child || []).map((c) => mapTopoNode(c, setId, moduleCount, setCount))
   }
 }
 
@@ -605,32 +675,69 @@ async function load() {
   loading.value = true
   currentNode.value = null
   try {
-    const [mainTree, idleTopo] = await Promise.allSettled([getBizTopoTree(bizId.value), getBizInternalTopo(bizId.value)])
-    const nodes = []
-    if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
-      for (const bizNode of mainTree.value) {
-        nodes.push(...(bizNode.child || []).map((c) => mapTopoNode(c, undefined)))
+    const [mainTree, idleTopo, statRes] = await Promise.allSettled([
+      getBizTopoTree(bizId.value),
+      getBizInternalTopo(bizId.value),
+      http.post('/findmany/hosts/search/with_biz', {
+        bk_biz_id: bizId.value,
+        condition: [
+          { bk_obj_id: 'biz', fields: [] },
+          { bk_obj_id: 'set', fields: [] },
+          { bk_obj_id: 'module', fields: [] },
+          { bk_obj_id: 'host', fields: [] }
+        ],
+        page: { start: 0, limit: 500 }
+      })
+    ])
+    // 老版树计数为前端统计:按集群/模块归组
+    let moduleCount = {}
+    let setCount = {}
+    let totalStat = 0
+    if (statRes.status === 'fulfilled') {
+      const rows = statRes.value?.info || []
+      totalStat = statRes.value?.count ?? rows.length
+      for (const r of rows) {
+        for (const m of r.module || []) moduleCount[m.bk_module_id] = (moduleCount[m.bk_module_id] || 0) + 1
+        for (const x of r.set || []) setCount[x.bk_set_id] = (setCount[x.bk_set_id] || 0) + 1
       }
     }
+    // 对齐老版: 根业务节点 → 空闲机池在前 → 自定义集群
+    let idleNode = null
     if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
       const s = idleTopo.value
-      nodes.push({
+      idleNode = {
         type: 'set',
         id: `set-${s.bk_set_id}`,
         setId: s.bk_set_id,
         label: s.bk_set_name,
         isIdle: true,
-        hostCount: (s.module || []).reduce((a, m) => a + (m.host_count || 0), 0),
+        hostCount: (s.module || []).reduce((a, m) => a + (moduleCount[m.bk_module_id] || 0), 0),
         children: (s.module || []).map((m) => ({
           type: 'module',
           id: `module-${m.bk_module_id}`,
           moduleId: m.bk_module_id,
           setId: s.bk_set_id,
           label: m.bk_module_name,
-          hostCount: m.host_count
+          hostCount: moduleCount[m.bk_module_id] || 0
         }))
-      })
+      }
     }
+    const customSets = []
+    if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
+      for (const bizNode of mainTree.value) {
+        customSets.push(...(bizNode.child || []).map((c) => mapTopoNode(c, undefined, moduleCount, setCount)))
+      }
+    }
+    const children = [...(idleNode ? [idleNode] : []), ...customSets]
+    const totalHosts = totalStat || children.reduce((a, n) => a + (n.hostCount || 0), 0)
+    const bizName = bizStore.bizList.find((b) => b.bk_biz_id === bizId.value)?.bk_biz_name || `业务 ${bizId.value}`
+    const nodes = [{
+      type: 'biz',
+      id: `biz-${bizId.value}`,
+      label: bizName,
+      hostCount: totalHosts,
+      children
+    }]
     treeData.value = nodes
     await Promise.all([loadHosts(), loadInstances()])
   } finally {
@@ -642,23 +749,34 @@ async function loadHosts() {
   if (!bizId.value) return
   hostLoading.value = true
   try {
-    const allFields = activeHostColumns.value.map((c) => c.bk_property_id).filter((k) => k !== 'bk_host_innerip')
-    const fields = ['bk_host_id', 'bk_host_innerip', ...allFields]
-    const filter = ipKeyword.value
-      ? { condition: 'AND', rules: [{ field: 'bk_host_innerip', operator: 'contains', value: ipKeyword.value }] }
-      : undefined
-    const body = {
-      page: { start: (hostPage.value - 1) * hostPageSize.value, limit: hostPageSize.value, sort: 'bk_host_id' },
-      fields: [...new Set(fields)]
-    }
-    if (filter) body.host_property_filter = filter
-    const data = await http.post(`/hosts/app/${bizId.value}/list_hosts`, body)
+    // 契约: HostCommonSearch 四对象关联查询,返回 host/set/module 关联数组(模块名/集群名列数据源)
+    const node = currentNode.value
+    const condition = [
+      { bk_obj_id: 'biz', fields: [] },
+      {
+        bk_obj_id: 'set', fields: [],
+        ...(node?.type === 'set' ? { condition: [{ field: 'bk_set_id', operator: '$eq', value: node.setId }] } : {})
+      },
+      {
+        bk_obj_id: 'module', fields: [],
+        ...(node?.type === 'module' ? { condition: [{ field: 'bk_module_id', operator: '$eq', value: node.moduleId }] } : {})
+      },
+      {
+        bk_obj_id: 'host', fields: [],
+        ...(ipKeyword.value ? { condition: [{ field: 'bk_host_innerip', operator: '$regex', value: ipKeyword.value }] } : {})
+      }
+    ]
+    const data = await http.post(`/findmany/hosts/search/with_biz`, {
+      bk_biz_id: bizId.value,
+      condition,
+      page: { start: (hostPage.value - 1) * hostPageSize.value, limit: hostPageSize.value, sort: 'bk_host_id' }
+    })
     const list = (data?.info || []).map((h) => {
-      const host = h.host || h
-      const mod = (h.module || [])[0] || {}
-      const set = (h.set || [])[0] || {}
-      host.__moduleName = mod.bk_module_name || '--'
-      host.__setName = set.bk_set_name || '--'
+      const host = h.host || {}
+      const mods = (h.module || []).map((m) => m.bk_module_name).filter(Boolean)
+      const sets = (h.set || []).map((x) => x.bk_set_name).filter(Boolean)
+      host.__moduleName = mods.length ? mods.join(',') : '--'
+      host.__setName = sets.length ? sets.join(',') : '--'
       return host
     })
     hosts.value = list
@@ -759,6 +877,114 @@ async function doAppend() {
   } finally {
     transferring.value = false
   }
+}
+
+// ---------- 工具栏下拉/筛选/收藏/批量编辑 ----------
+function onTransferCmd(cmd) {
+  if (!selectedHosts.value.length) return
+  if (cmd === 'idle') {
+    transferVisible.value = true
+  } else {
+    onHostMore(cmd)
+  }
+}
+
+async function onCopyCmd(cmd) {
+  const hostsSel = selectedHosts.value
+  const text = cmd === 'ip'
+    ? hostsSel.map((h) => h.bk_host_innerip).filter(Boolean).join('\n')
+    : hostsSel.map((h) => h.bk_host_name).filter(Boolean).join('\n')
+  if (!text) { ElMessage.warning('所选主机无可复制内容'); return }
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('复制成功')
+  } catch { ElMessage.error('复制失败') }
+}
+
+async function onMoreCmd(cmd) {
+  const ids = selectedHosts.value.map((h) => h.bk_host_id)
+  try {
+    await exportHosts(cmd === 'exportAll' ? [] : ids)
+    ElMessage.success(cmd === 'exportAll' ? '已导出全部' : '已导出选中')
+  } catch (e) {
+    let msg = e?.message || '后端异常'
+    if (e?.response?.data instanceof Blob) {
+      try { msg = JSON.parse(await e.response.data.text()).bk_error_msg || msg } catch { /* 保留 */ }
+    }
+    ElMessage.error('导出失败: ' + msg)
+  }
+}
+
+function saveFavorite() {
+  const kw = ipKeyword.value.trim()
+  if (!kw) { ElMessage.warning('请先输入筛选条件再收藏'); return }
+  let favs = []
+  try { favs = JSON.parse(localStorage.getItem('topo.hostFavorites') || '[]') } catch { favs = [] }
+  if (!favs.includes(kw)) favs.push(kw)
+  try { localStorage.setItem('topo.hostFavorites', JSON.stringify(favs)) } catch { /* ignore */ }
+  ElMessage.success(`已收藏筛选条件「${kw}」`)
+}
+
+// 漏斗筛选: 树节点级联(集群/模块)
+const filterSetId = ref(null)
+const filterModuleId = ref(null)
+const setNodes = computed(() => treeData.value.flatMap((r) => (r.children || []).filter((n) => n.type === 'set')))
+const moduleNodes = computed(() => treeData.value.flatMap((r) => (r.children || []).flatMap((n) => n.type === 'set' ? (n.children || []).filter((c) => c.type === 'module') : [])))
+function onFilterChange() {
+  if (filterModuleId.value) {
+    const mod = moduleNodes.value.find((n) => n.id === filterModuleId.value)
+    if (mod) { onNodeClick(mod); return }
+  }
+  if (filterSetId.value) {
+    const set = setNodes.value.find((n) => n.id === filterSetId.value)
+    if (set) { onNodeClick(set); return }
+  }
+  const root = treeData.value[0]
+  if (root) onNodeClick(root)
+}
+
+// 批量编辑主机属性(契约 PUT /hosts/batch,只提交变更字段)
+const TOPO_BATCH_EXCLUDED = ['bk_host_id', 'bk_host_innerip', 'bk_host_outerip', 'bk_host_innerip_v6', 'bk_host_outerip_v6', 'bk_cloud_id', 'bk_biz_id', 'bk_supplier_account', 'bk_created_by', 'bk_created_at', 'bk_updated_by', 'bk_updated_at', 'create_time', 'last_time']
+const topoBatchAttrs = ref([])
+const topoBatchVisible = ref(false)
+const topoBatchSaving = ref(false)
+const topoBatchMap = ref({})
+const topoBatchInit = ref({})
+
+function topoEnumOptions(f) {
+  return Array.isArray(f.option) ? f.option.filter((o) => o && o.id !== undefined) : []
+}
+
+async function openTopoBatchEdit() {
+  if (!topoBatchAttrs.value.length) {
+    const attrs = (await searchModelAttributes('host').catch(() => [])) || []
+    topoBatchAttrs.value = attrs.filter((f) => !TOPO_BATCH_EXCLUDED.includes(f.bk_property_id))
+  }
+  const init = {}
+  for (const f of topoBatchAttrs.value) {
+    init[f.bk_property_id] = f.bk_property_type === 'bool' ? false : (['int', 'float'].includes(f.bk_property_type) ? undefined : '')
+  }
+  topoBatchInit.value = init
+  topoBatchMap.value = { ...init }
+  topoBatchVisible.value = true
+}
+
+async function submitTopoBatchEdit() {
+  const isBlank = (v) => v === '' || v === null || v === undefined
+  const changed = {}
+  for (const [k, v] of Object.entries(topoBatchMap.value)) {
+    if (!isBlank(v) && String(v) !== String(topoBatchInit.value[k] ?? '')) changed[k] = v
+  }
+  if (!Object.keys(changed).length) { ElMessage.warning('请先修改字段后再保存'); return }
+  topoBatchSaving.value = true
+  try {
+    await http.put('/hosts/batch', { ...changed, bk_host_id: selectedHosts.value.map((h) => h.bk_host_id).join(',') })
+    ElMessage.success(`已批量更新 ${selectedHosts.value.length} 台主机`)
+    topoBatchVisible.value = false
+    loadHosts()
+  } catch (e) {
+    ElMessage.error('批量编辑失败: ' + (e?.message || '后端异常'))
+  } finally { topoBatchSaving.value = false }
 }
 
 async function onHostMore(cmd) {
@@ -1236,6 +1462,8 @@ onBeforeUnmount(() => {
 .right-tabs { margin-bottom: 4px; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toolbar .spacer { flex: 1; }
+.square-btn { padding: 5px 8px; }
+.filter-pop .filter-row-label { font-size: 12px; color: #979BA5; margin: 6px 0 4px; }
 .refresh-time { color: #979BA5; font-size: 12px; margin: 0 4px; }
 .table-footer {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
