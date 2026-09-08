@@ -299,6 +299,10 @@ export const searchClassificationWithObjects = () =>
 export const searchModelAttributes = (objId, bizId = null) =>
   http.post('/find/objectattr', { bk_obj_id: objId, bk_supplier_account: '0', ...(bizId ? { bk_biz_id: bizId } : {}) })
 
+// 业务集模型属性(老版契约:属性挂在 bk_biz_set_obj 下,走 web 路由;普通 /find/objectattr 查 biz_set 返回空)
+export const searchBizSetAttributes = () =>
+  http.post('/find/objectattr/web', { bk_obj_id: 'bk_biz_set_obj', bk_supplier_account: '0' })
+
 // 模型实例统计(仪表盘)
 export const getModelStatistics = () =>
   http.get('/object/statistics')

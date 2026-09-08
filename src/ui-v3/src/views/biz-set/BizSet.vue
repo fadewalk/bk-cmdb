@@ -21,22 +21,22 @@
           @keyup.enter="load"
           @clear="load"
         />
+        <el-tooltip content="列表显示属性配置" placement="top">
+          <el-button text circle :icon="'Setting'" @click="openColPicker" />
+        </el-tooltip>
       </div>
 
       <el-table :data="filtered" v-loading="loading" stripe>
         <el-table-column prop="bk_biz_set_id" label="ID" width="100" sortable />
         <el-table-column prop="bk_biz_set_name" label="业务集名" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="bk_biz_set_desc" label="业务集描述" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.bk_biz_set_desc || '--' }}</template>
-        </el-table-column>
-        <el-table-column prop="bk_biz_maintainer" label="运维人员" width="140">
-          <template #default="{ row }">{{ row.bk_biz_maintainer || '--' }}</template>
-        </el-table-column>
-        <el-table-column label="创建时间" width="170">
-          <template #default="{ row }">{{ fmtTime(row.create_time) }}</template>
-        </el-table-column>
-        <el-table-column label="创建人" width="120">
-          <template #default="{ row }">{{ row.bk_created_by || '--' }}</template>
+        <el-table-column
+          v-for="col in displayCols"
+          :key="col.bk_property_id"
+          :label="headerName(col)"
+          min-width="140"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">{{ cellText(row[col.bk_property_id], col) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
@@ -84,6 +84,22 @@
         <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 列配置(对齐老版 biz_set_custom_table_columns,固定列 ID/业务集名不可配) -->
+    <el-drawer v-model="colPickerVisible" title="列表显示属性配置" size="420px">
+      <el-checkbox-group v-model="colDraft">
+        <div class="col-grid">
+          <el-checkbox v-for="c in colPool" :key="c.bk_property_id" :value="c.bk_property_id">
+            {{ c.bk_property_name }}
+          </el-checkbox>
+        </div>
+      </el-checkbox-group>
+      <template #footer>
+        <el-button @click="resetCols">恢复默认</el-button>
+        <el-button @click="colPickerVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!colDraft.length" @click="applyCols">确定</el-button>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -92,7 +108,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { http, searchBusiness } from '../../api/cmdb'
+import { http, searchBusiness, searchBizSetAttributes } from '../../api/cmdb'
 
 const router = useRouter()
 const keyword = ref('')
@@ -114,6 +130,86 @@ const filtered = computed(() =>
 )
 
 function fmtTime(t) { return t ? String(t).replace('T', ' ').slice(0, 19) : '--' }
+
+// ---------- 列配置(候选为业务集模型属性 bk_biz_set_obj,固定 ID/业务集名) ----------
+// 默认表头与老版可见列一致(描述/运维人员/创建时间/创建人);更新时间/更新人可通过列配置加入
+const COL_KEY = 'biz_set_custom_table_columns'
+const DISABLED_COLS = ['bk_biz_set_id', 'bk_biz_set_name']
+const DEFAULT_COLS = ['bk_biz_set_desc', 'bk_biz_maintainer', 'bk_created_at', 'bk_created_by']
+const attrs = ref([])
+const colPickerVisible = ref(false)
+const colDraft = ref([])
+
+const colPool = computed(() => attrs.value.filter((f) => !DISABLED_COLS.includes(f.bk_property_id)))
+
+function propPriority(p) {
+  return (p.bk_property_index ?? 0) - (p.isonly ? 1 : 0) - (p.isrequired ? 1 : 0)
+}
+function defaultCols() {
+  const ids = colPool.value.map((c) => c.bk_property_id)
+  const preset = DEFAULT_COLS.filter((id) => ids.includes(id))
+  return preset.length ? preset : [...colPool.value].sort((a, b) => propPriority(a) - propPriority(b)).slice(0, 6).map((c) => c.bk_property_id)
+}
+
+const pickedColIds = ref([])
+const displayCols = computed(() => {
+  const map = new Map(attrs.value.map((c) => [c.bk_property_id, c]))
+  return pickedColIds.value.map((id) => map.get(id)).filter(Boolean)
+})
+
+function loadPickedCols() {
+  let saved = null
+  try { saved = JSON.parse(localStorage.getItem(COL_KEY) || 'null') } catch { saved = null }
+  pickedColIds.value = Array.isArray(saved)
+    ? saved.filter((id) => colPool.value.some((c) => c.bk_property_id === id))
+    : defaultCols()
+}
+function savePickedCols() {
+  try { localStorage.setItem(COL_KEY, JSON.stringify(pickedColIds.value)) } catch { /* ignore */ }
+}
+function openColPicker() {
+  colDraft.value = [...pickedColIds.value]
+  colPickerVisible.value = true
+}
+function applyCols() {
+  pickedColIds.value = [...colDraft.value]
+  savePickedCols()
+  colPickerVisible.value = false
+}
+function resetCols() {
+  pickedColIds.value = defaultCols()
+  savePickedCols()
+  colPickerVisible.value = false
+}
+
+function headerName(p) {
+  return p.unit && !String(p.bk_property_name).endsWith(`(${p.unit})`)
+    ? `${p.bk_property_name}(${p.unit})`
+    : p.bk_property_name
+}
+function enumOptionName(option, value) {
+  const flat = []
+  const walk = (node) => {
+    if (Array.isArray(node)) {
+      node.forEach((o) => {
+        if (o && o.id !== undefined) flat.push(o)
+        else if (o && typeof o === 'object') walk(o)
+      })
+    } else if (node && typeof node === 'object') {
+      Object.values(node).forEach(walk)
+    }
+  }
+  walk(option)
+  return flat.find((o) => o.id === value)?.name ?? String(value)
+}
+function cellText(value, p) {
+  if (value === null || value === undefined || value === '') return '--'
+  if (p.bk_property_type === 'bool') return value ? '是' : '否'
+  if (p.bk_property_type === 'enum') return enumOptionName(p.option, value)
+  if (p.bk_property_type === 'date' || p.bk_property_type === 'time') return fmtTime(value)
+  return String(value)
+}
+
 function goDetail(row) {
   router.push({ path: `/resource/biz-set/details/${row.bk_biz_set_id}` })
 }
@@ -198,6 +294,8 @@ onMounted(async () => {
     const data = await searchBusiness({ start: 0, limit: 200 })
     bizList.value = data?.info || []
   } catch { bizList.value = [] }
+  attrs.value = (await searchBizSetAttributes().catch(() => [])) || []
+  loadPickedCols()
 })
 </script>
 
@@ -219,4 +317,5 @@ onMounted(async () => {
   padding: 12px 0 0; font-size: 12px; color: #63656E;
 }
 .table-footer .spacer { flex: 1; }
+.col-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; }
 </style>

@@ -43,8 +43,8 @@
 | 资源池主机 | `resource/index`、`host-details` | `/resource/host` | 核心流程 | 目录筛选、收藏、导入导出、转移、列配置、历史 |
 | 通用模型实例 | `src/ui/src/views/general-model/` | 无等价深度实例路由 | 未迁移 | 新建/批量编辑/删除、属性/关联/历史、导入 |
 | 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 核心流程 | 列表正常/已归档双 tab;新建(web_server table 入口,根路径)/编辑/归档/恢复/彻底删除(CRUD 全闭环真实验证);详情页(属性/变更历史)+旧版 `/business/details/:bizId` 深链;批量修改未迁移 |
-| 业务集管理/详情 | `src/ui/src/views/business-set/` | `/resource/biz-set` | 部分迁移 | 详情页(属性/变更历史)+旧版 `/resource/business-set/details/:bizSetId` 深链;新建编辑、列配置未迁移 |
-| 项目管理/详情 | `src/ui/src/views/project/` | `/resource/project` | 部分迁移 | 列表修正为专用接口 /findmany/project;详情页(属性/变更历史);新建编辑、批量修改、列配置未迁移 |
+| 业务集管理/详情 | `src/ui/src/views/business-set/` | `/resource/biz-set` | 核心流程 | 详情页(属性/变更历史)+旧版 `/resource/business-set/details/:bizSetId` 深链;新建/编辑/删除;列配置(候选=业务集模型属性,契约:属性挂在 `bk_biz_set_obj` 下走 `/find/objectattr/web`,普通 find/objectattr 查 biz_set 返回空;默认列=老版可见列;注意 findmany/biz_set 行不含 bk_created_by,创建人列恒为 -- 属接口数据限制) |
+| 项目管理/详情 | `src/ui/src/views/project/` | `/resource/project` | 核心流程 | 列表专用接口 /findmany/project;详情页(属性/变更历史,深链参数兼容数字 id/hash);新建/编辑/批量编辑/删除全闭环验证;列配置(候选=bk_project 模型属性,默认表头=getHeaderProperties 算法前 6 列)。**契约陷阱**: `/updatemany/project`、`/deletemany/project` 的 ids 必须是数字 `id` 字段,传 bk_project_id hash 会被后端以"反序列化JSON数据失败"拒绝;描述字段是 `bk_project_desc`(旧实现用 project_desc 被后端静默丢弃,已修) |
 | 主机历史 | `src/ui/src/views/history/` | 无等价深链 | 未迁移 | 变更记录展示、筛选和详情 |
 | 管控区域 | `src/ui/src/views/cloud-area/` | `/resource/cloud-area` | 核心流程 | 表格内编辑、新增、区域选择和错误处理 |
 | 云账户 | `src/ui/src/views/cloud-account/` | `/resource/cloud-account` | 部分迁移 | 新增/编辑/删除、详情侧滑和任务关联 |

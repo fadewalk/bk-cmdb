@@ -66,7 +66,9 @@ async function loadDetail() {
   loading.value = true
   try {
     const data = await http.post('/findmany/project', { page: { start: 0, limit: 200 } })
-    detail.value = ((data?.info || []).find((p) => p.bk_project_id === id.value)) || null
+    // 深链参数兼容数字 id 与 bk_project_id hash
+    const raw = String(route.params.projectId || '')
+    detail.value = ((data?.info || []).find((p) => String(p.id) === raw || p.bk_project_id === raw)) || null
   } finally { loading.value = false }
 }
 
