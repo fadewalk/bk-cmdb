@@ -48,13 +48,24 @@
 
 ## 剩余事项（按优先级）
 
-1. **服务实例标签批量编辑**：API 已有 `updateInstanceLabels`(`POST /updatemany/proc/service_instance/labels`)，差 UI（在业务拓扑服务实例列表加批量标签编辑对话框）
-2. **业务集/项目列配置**：老版有列配置齿轮，新版未做（可复用 BusinessTopo 的 localStorage 列配置模式）
+1. ~~服务实例标签批量编辑~~ ✅ 已完成（BusinessTopo 更多→编辑标签，契约 /createmany/proc/service_instance/labels）
+2. **业务集/项目列配置**：老版有列配置齿轮，新版未做（可复用 BusinessTopo 的 localStorage 列配置模式，工作量小）
 3. **首页全文检索**：依赖 ES；前端 tab 已有禁用态+提示，ES 部署后需实现结果页
 4. **Pod/容器**：依赖 K8s 数据链路（kube），矩阵标依赖阻塞
-5. **Docker 镜像重建**：固化 cloudserver 二进制 + webserver 导出修复（当前容器内是手工替换）
+5. **Docker 镜像重建**：固化 cloudserver 二进制 + webserver 导出修复（当前容器内是手工替换，重建镜像即固化）
 6. **IAM 开源方案立项**（用户已定方向）：OIDC/OAuth2 IdP + Casbin；现有 `web_server/middleware/api_key.go`（StandaloneAPIKeyProxy）独立于蓝鲸可复用；替换旧前端前的最后一道门
 7. **旧前端下线**：满足矩阵"完整替代"门禁 + 观察期后执行
+
+## 最新提交（本会话增量，截至 cbd7c3289a）
+
+- 24f27b1405 资源目录页 1:1 卡片瀑布流重做
+- a5a19f4040 六个菜单页(业务集/项目/管控区域/云账户/动态分组/集群模板)布局列对齐
+- 8199bbcecc 自定义字段 3-tab 业务维度对齐
+- 1b29f35a68 主机/云资源发现页对齐
+- e2b420e115 主机/业务拓扑 ID 列位修正(首列蓝色链接——注意 Playwright 抓 fixed 列 DOM 顺序有欺骗性,以截图为准)
+- 94168aa96b 云功能纳入 core profile(cloudserver 部署+云账户 CRUD+降级提示移除)
+- 948c9da14c 服务模板同步红点(双 tab)/实例克隆/关联契约修正(findmany/inst/association 裸路径是 404)
+- cbd7c3289a 服务实例批量标签编辑
 
 ## 环境注意事项
 
