@@ -61,7 +61,8 @@
               <el-button size="small">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item :disabled="!selectedInstances.length" command="delete">批量删除</el-dropdown-item>
+                  <el-dropdown-item :disabled="!selectedInstances.length" command="editLabels">编辑标签</el-dropdown-item>
+                  <el-dropdown-item :disabled="!selectedInstances.length" command="delete" divided>批量删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -399,6 +400,21 @@
       </template>
     </el-dialog>
 
+    <!-- 批量编辑标签 -->
+    <el-dialog v-model="labelVisible" :title="`编辑标签(${selectedInstances.length} 个实例)`" width="520px">
+      <div v-for="(row, idx) in labelRows" :key="idx" class="label-row">
+        <el-input v-model="row.key" placeholder="标签键" style="width: 200px" />
+        <span class="label-eq">=</span>
+        <el-input v-model="row.value" placeholder="标签值" style="width: 200px" />
+        <el-button link type="danger" :icon="'Delete'" @click="labelRows.splice(idx, 1)" />
+      </div>
+      <el-button text type="primary" :icon="'Plus'" @click="labelRows.push({ key: '', value: '' })">添加标签</el-button>
+      <template #footer>
+        <el-button @click="labelVisible = false">取消</el-button>
+        <el-button type="primary" :loading="labelSaving" @click="submitLabels">应用</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 服务实例进程抽屉(从实例列表 / 向导完成后跳入) -->
     <el-drawer v-model="procDrawer" :title="`「${procInstName}」进程实例`" size="55%">
       <div class="table-toolbar">
@@ -448,7 +464,7 @@ import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, createModule, deleteModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
-  searchServiceInstances, deleteServiceInstances, searchProcessInstances,
+  searchServiceInstances, deleteServiceInstances, searchProcessInstances, createInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   http
 } from '../api/cmdb'
@@ -813,6 +829,12 @@ async function submitAcrossTransfer() {
 }
 
 async function onInstMore(cmd) {
+  if (cmd === 'editLabels') {
+    if (!selectedInstances.value.length) return
+    labelRows.value = [{ key: '', value: '' }]
+    labelVisible.value = true
+    return
+  }
   if (cmd !== 'delete') return
   if (!selectedInstances.value.length) return
   await ElMessageBox.confirm(`确定删除选中的 ${selectedInstances.value.length} 个服务实例?`, '删除确认', { type: 'warning' })
@@ -1131,6 +1153,32 @@ async function submitClone() {
   } finally { cloneSubmitting.value = false }
 }
 
+// ---------- 批量编辑标签(老版 label-batch-dialog 语义) ----------
+const labelVisible = ref(false)
+const labelRows = ref([{ key: '', value: '' }])
+const labelSaving = ref(false)
+
+async function submitLabels() {
+  const labelSet = {}
+  for (const r of labelRows.value) {
+    if (r.key.trim()) labelSet[r.key.trim()] = r.value.trim()
+  }
+  if (!Object.keys(labelSet).length) { ElMessage.warning('请至少填写一个标签'); return }
+  labelSaving.value = true
+  try {
+    await createInstanceLabels({
+      bk_biz_id: bizId.value,
+      instance_ids: selectedInstances.value.map((i) => i.id),
+      labels: labelSet
+    })
+    ElMessage.success('标签已应用')
+    labelVisible.value = false
+    loadInstances()
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
+  } finally { labelSaving.value = false }
+}
+
 async function removeInstance(row) {
   await ElMessageBox.confirm(`确定删除服务实例「${row.name || row.id}」?`, '删除确认', { type: 'warning' })
   await deleteServiceInstances(bizId.value, [row.id])
@@ -1215,4 +1263,6 @@ onBeforeUnmount(() => {
 .ctx-item.ctx-danger:hover { background: #FFEEEE; color: #EA3636; }
 .hint { font-size: 12px; color: #979BA5; padding: 8px 0; }
 .proc-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.label-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.label-eq { color: #979BA5; }
 </style>
