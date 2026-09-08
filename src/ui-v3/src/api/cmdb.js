@@ -184,6 +184,31 @@ export const importHosts = (file, params) => {
   })
 }
 
+// 删除资源池主机(契约: {data:{bk_host_id:"1,2",bk_supplier_account:"0"}})
+export const deleteHostsBatch = (hostIds) =>
+  http.delete('/hosts/batch', {
+    data: { data: { bk_host_id: hostIds.join(','), bk_supplier_account: '0' } }
+  })
+
+// 导出主机(web_server 生成真实 xlsx;根路径)
+export const exportHosts = async (hostIds, customFields = []) => {
+  const res = await http.post('/hosts/export', {
+    export_custom_fields: customFields,
+    bk_host_ids: hostIds,
+    export_condition: { page: { start: 0, limit: Math.max(hostIds.length, 500) } }
+  }, {
+    baseURL: '',
+    responseType: 'blob',
+    timeout: 120000
+  })
+  const url = URL.createObjectURL(res)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `bk_cmdb_host_${Date.now()}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ---------- 主机自动应用(host-apply) ----------
 // 模块模式规则查询
 export const searchHostApplyRules = (bizId, data) =>

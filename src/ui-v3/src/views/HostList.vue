@@ -52,6 +52,7 @@
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="edit">编辑属性</el-dropdown-item>
+            <el-dropdown-item command="importEdit">导入编辑</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -72,6 +73,9 @@
           <el-dropdown-menu>
             <el-dropdown-item command="toResource">转移到资源池</el-dropdown-item>
             <el-dropdown-item command="toDir" :disabled="!currentDirId">转移到目录…</el-dropdown-item>
+            <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+            <el-dropdown-item command="exportSelected">导出选中</el-dropdown-item>
+            <el-dropdown-item command="exportAll">导出全部</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -120,11 +124,6 @@
           @selection-change="onSelect"
         >
           <el-table-column type="selection" width="36" />
-          <el-table-column label="ID" width="70" sortable>
-            <template #default="{ row }">
-              <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_id }}</el-link>
-            </template>
-          </el-table-column>
           <el-table-column label="内网IPv4" min-width="130">
             <template #default="{ row }">
               <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
@@ -142,8 +141,8 @@
           <el-table-column label="主机名称" min-width="150" show-overflow-tooltip>
             <template #default="{ row }">{{ row.bk_host_name || '--' }}</template>
           </el-table-column>
-          <el-table-column label="操作系统" min-width="100">
-            <template #default="{ row }">{{ row.bk_os_name || '--' }}</template>
+          <el-table-column label="ID" width="80" fixed="right" class-name="id-col">
+            <template #default="{ row }">{{ row.bk_host_id }}</template>
           </el-table-column>
         </el-table>
 
@@ -331,7 +330,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
 import {
   http, listHostsWithoutApp, transferHostModule, transferHostToResource,
-  transferHostsToDirectory, importHosts, listResourceDirectory,
+  transferHostsToDirectory, importHosts, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
   getBizTopoTree, getBizInternalTopo
@@ -709,6 +708,21 @@ async function onMore(cmd) {
     } catch (e) {
       ElMessage.error('复制失败')
     }
+  } else if (cmd === 'delete') {
+    try {
+      await ElMessageBox.confirm(`确定删除选中的 ${selectedHosts.value.length} 台主机?仅可删除资源池主机`, '删除确认', { type: 'warning' })
+    } catch { return }
+    try {
+      await deleteHostsBatch(selectedHosts.value.map((h) => h.bk_host_id))
+      ElMessage.success('已删除')
+      reload()
+    } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
+  } else if (cmd === 'exportSelected' || cmd === 'exportAll') {
+    const ids = cmd === 'exportSelected' ? selectedHosts.value.map((h) => h.bk_host_id) : []
+    try {
+      await exportHosts(ids, ["bk_host_innerip", "bk_host_innerip_v6", "bk_cloud_id", "bk_host_name"])
+      ElMessage.success('已导出')
+    } catch (e) { ElMessage.error('导出失败: ' + (e?.message || '后端异常')) }
   } else if (cmd === 'toResource') {
     await ElMessageBox.confirm(`将 ${selectedHosts.value.length} 台主机转移到资源池?`, '确认', { type: 'warning' })
     await transferHostToResource(bizStore.bizId || 0, selectedHosts.value.map((h) => h.bk_host_id))

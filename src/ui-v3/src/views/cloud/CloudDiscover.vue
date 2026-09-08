@@ -10,15 +10,27 @@
       <el-button :icon="'Refresh'" size="small" @click="load">刷新</el-button>
     </div>
     <el-table :data="tasks" v-loading="loading" stripe>
-      <el-table-column prop="task_id" label="任务 ID" width="120" />
-      <el-table-column prop="bk_task_name" label="任务名" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="bk_account_name" label="云账户" min-width="140" />
-      <el-table-column prop="bk_status" label="状态" width="100">
+      <el-table-column prop="bk_task_name" label="任务名称" min-width="160" show-overflow-tooltip />
+      <el-table-column label="资源" width="110">
+        <template #default>--</template>
+      </el-table-column>
+      <el-table-column prop="bk_account_name" label="账户名称" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.bk_account_name || '--' }}</template>
+      </el-table-column>
+      <el-table-column label="账户类型" width="120">
+        <template #default="{ row }">{{ ({ '1': 'AWS', '2': '腾讯云', '4': '阿里云' })[row.bk_cloud_vendor] || '--' }}</template>
+      </el-table-column>
+      <el-table-column label="最近同步状态" width="130">
         <template #default="{ row }">
           <el-tag size="small" :type="statusTag(row.bk_status)">{{ statusText(row.bk_status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="last_time" label="最近执行" min-width="160" />
+      <el-table-column prop="last_time" label="最近同步时间" min-width="170">
+        <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
+      </el-table-column>
+      <el-table-column label="编辑人" width="120">
+        <template #default="{ row }">{{ row.bk_last_editor || row.bk_creator || '--' }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="showTaskDetail(row)">详情</el-button>
