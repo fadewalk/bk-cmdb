@@ -90,6 +90,11 @@
             @selection-change="onHostSelect"
           >
             <el-table-column type="selection" width="36" />
+            <el-table-column label="ID" width="80">
+              <template #default="{ row }">
+                <el-link type="primary" :underline="false" @click="goHostDetail(row)">{{ row.bk_host_id }}</el-link>
+              </template>
+            </el-table-column>
             <el-table-column
               v-for="col in activeHostColumns"
               :key="col.bk_property_id"
@@ -105,10 +110,10 @@
                 <span v-else>{{ hostCell(row, col.bk_property_id) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="模块名" min-width="120">
+            <el-table-column label="模块名 (模块)" min-width="120">
               <template #default="{ row }">{{ row.__moduleName || '--' }}</template>
             </el-table-column>
-            <el-table-column label="集群名" min-width="120">
+            <el-table-column label="集群名 (集群)" min-width="120">
               <template #default="{ row }">{{ row.__setName || '--' }}</template>
             </el-table-column>
           </el-table>

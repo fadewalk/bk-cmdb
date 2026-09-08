@@ -124,6 +124,11 @@
           @selection-change="onSelect"
         >
           <el-table-column type="selection" width="36" />
+          <el-table-column label="ID" width="80" sortable>
+            <template #default="{ row }">
+              <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_id }}</el-link>
+            </template>
+          </el-table-column>
           <el-table-column label="内网IPv4" min-width="130">
             <template #default="{ row }">
               <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
@@ -140,9 +145,6 @@
           </el-table-column>
           <el-table-column label="主机名称" min-width="150" show-overflow-tooltip>
             <template #default="{ row }">{{ row.bk_host_name || '--' }}</template>
-          </el-table-column>
-          <el-table-column label="ID" width="80" fixed="right" class-name="id-col">
-            <template #default="{ row }">{{ row.bk_host_id }}</template>
           </el-table-column>
         </el-table>
 
