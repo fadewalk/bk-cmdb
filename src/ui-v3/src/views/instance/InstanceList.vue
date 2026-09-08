@@ -8,6 +8,7 @@
       <el-button :disabled="!selected.length" @click="batchRemove">删除</el-button>
       <el-button :icon="'Upload'" @click="importVisible = true">导入</el-button>
       <el-button :icon="'Download'" :loading="exporting" @click="submitExport">导出</el-button>
+      <el-button :icon="'Clock'" @click="$router.push(`/resource/history/instance/${objId}`)">删除历史</el-button>
       <el-dropdown trigger="click" @command="onColCmd">
         <el-button :icon="'Setting'">列配置</el-button>
         <template #dropdown>

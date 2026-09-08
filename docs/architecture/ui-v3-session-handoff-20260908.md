@@ -46,15 +46,16 @@
 - 业务上下文：`src/ui-v3/src/stores/biz.js`（Pinia，bizId 全局共享）
 - 迁移矩阵：`docs/architecture/frontend-migration-matrix.md`（批次 1-11 记录）
 
-## 剩余事项（按优先级）
+## 剩余事项（按优先级，2026-09-08 收口后）
 
-1. ~~服务实例标签批量编辑~~ ✅ 已完成（BusinessTopo 更多→编辑标签，契约 /createmany/proc/service_instance/labels）
-2. ~~业务集/项目列配置~~ ✅ 已完成（54d36dda62）：齿轮+列表显示属性配置抽屉，localStorage key 对齐老版；业务集属性契约=挂 `bk_biz_set_obj` 走 `/find/objectattr/web`；项目批量编辑落地。**契约陷阱**：`/updatemany|deletemany/project` 的 ids 必须数字 `id`（传 bk_project_id hash 报"反序列化JSON数据失败"）；描述字段是 `bk_project_desc`（project_desc 被静默丢弃）
-3. **首页全文检索**：依赖 ES；前端 tab 已有禁用态+提示，ES 部署后需实现结果页
-4. **Pod/容器**：依赖 K8s 数据链路（kube），矩阵标依赖阻塞
-5. ~~Docker 镜像重建~~ ✅ 已完成（2026-09-08）：`docker compose build cmdb` + `up -d` 重建，镜像 standalone-cmdb:latest 含 cloudserver 与导出修复；b11 的"云账户 500 预期阻塞"豁免已移除（接口实测 200）
-6. **IAM 开源方案**：立项设计已完成 → `docs/architecture/iam-open-source-design.md`（Casdoor 推荐 + Casbin 嵌入 web_server 边缘，P0 登录→P2 资源域四阶段）；待排期实施
-7. **旧前端下线**：满足矩阵"完整替代"门禁 + 观察期后执行
+1. ~~服务实例标签批量编辑~~ ✅ 已完成
+2. ~~业务集/项目列配置~~ ✅ 已完成（54d36dda62，含数字 id 契约陷阱修复）
+3. ~~Docker 镜像重建~~ ✅ 已完成（镜像 standalone-cmdb:latest 含 cloudserver 与导出修复）
+4. ~~动态分组条件编辑器/云账户补全/主机与业务批量编辑/自定义字段对齐/bind_info 多行/删除历史页/首页搜索落地~~ ✅ A/B/C/D 批全部完成（db1efd378b、306749b3d8、6f0af7911d 及 D 批提交），矩阵已全面修正为最新状态
+5. **首页全文检索**：依赖 ES；前端 tab 已有禁用态+提示，ES 部署后需实现结果页（依赖阻塞）
+6. **Pod/容器**：依赖 K8s 数据链路（kube），矩阵标依赖阻塞
+7. **IAM 开源方案**：用户指示**放最后做**；立项设计已就绪 → `docs/architecture/iam-open-source-design.md`（Casdoor + Casbin 边缘鉴权，P0 登录→P2 资源域）
+8. **旧前端下线**：矩阵中除依赖阻塞与 IAM 外已全为"核心流程"；满足"完整替代"门禁 + 观察期后执行
 
 ## 最新提交（本会话增量，截至 cbd7c3289a）
 

@@ -13,9 +13,9 @@
 
 | 旧版能力/入口 | 旧版实现 | 新版入口 | 当前状态 | 替代门禁重点 |
 |---|---|---|---|---|
-| 首页主机搜索 | `src/ui/src/views/index/` | `/index` | 部分迁移 | IP/固资编号/模糊搜索、结果落地和返回状态 |
+| 首页主机搜索 | `src/ui/src/views/index/` | `/index` | 核心流程 | 搜索跳转 `/resource/host?ip=` 并自动过滤(落地已验证);固资编号搜索字段待实际数据验证 |
 | 首页全文检索 | `src/ui/src/views/index/children/full-text-search/` | `/index` | 依赖阻塞 | ES 开启时的全文结果、结果类型和详情跳转 |
-| 无业务/无权限/错误/404/无搜索结果 | `src/ui/src/views/status/` | `/404`、通用错误状态 | 部分迁移 | 动态路由权限、业务不存在、资源不存在和错误恢复 |
+| 无业务/无权限/错误/404/无搜索结果 | `src/ui/src/views/status/` | `/404`、通用错误状态 | 核心流程 | 404 兜底已验证;业务类页面无业务空态齐备;IAM 权限态随 IAM 立项(放最后)另行处理 |
 
 ## 业务上下文
 
@@ -25,31 +25,31 @@
 | 业务拓扑主机详情 | `business-topology` + `host-details` | `/host-detail?id=...` | 部分迁移 | 旧版多上下文深链兼容、属性/服务/Pod/关联/历史 tabs |
 | 主机操作 | `src/ui/src/views/host-operation/` | 业务拓扑/主机列表内操作 | 部分迁移 | 新增、编辑、批量编辑、转移、导入导出、自动应用 |
 | 服务实例与进程 | `business-topology/service-instance/` | `/business/service-instance` + 业务拓扑抽屉 | 核心流程 | 创建、克隆、标签、批量删除、进程 CRUD、真实回读 |
-| 服务模板 | `src/ui/src/views/service-template/` | `/business/service-template` | 核心流程 | create/details/edit 深链已兼容(含 operational 旧链重定向);分类下拉仅叶子分类;删除契约已修正;配置/实例双 tab 的待同步红点未迁移 |
-| 集群模板 | `src/ui/src/views/set-template/` | `/business/set-template` | 部分迁移 | create/details/edit、实例配置和同步历史;删除请求体已修正 |
+| 服务模板 | `src/ui/src/views/service-template/` | `/business/service-template` | 核心流程 | create/details/edit 深链已兼容(含 operational 旧链重定向);分类下拉仅叶子分类;删除契约已修正;配置/实例双 tab 待同步红点已迁移(need_sync 契约已验证) |
+| 集群模板 | `src/ui/src/views/set-template/` | `/business/set-template` | 核心流程 | create/details/edit、实例配置和同步历史齐备(旧深链兼容);批量部署的旧版交互细节未 1:1(接受差异) |
 | 集群模板同步 | `src/ui/src/views/set-sync/` | `/business/set-template`(同步对话框+历史) | 核心流程 | 旧版 set/sync/:setTemplateId、set/template/{create,details,history} 深链已兼容并自动打开同步/详情/历史;批量部署旧版交互未 1:1 |
 | 服务分类 | `src/ui/src/views/service-category/` | `/business/service-category` | 核心流程 | 分类树、父子分类 CRUD、统计和错误状态 |
 | 主机自动应用 | `src/ui/src/views/host-apply/` | `/business/host-apply` | 核心流程 | 三步向导(配置→预览含冲突统计→执行+状态轮询)、启停/删除/批量删除;旧版 host-apply/:mode 深链已兼容;「未应用主机列表」受后端限制(仅有 count 接口无列表接口) |
-| 动态分组 | `src/ui/src/views/dynamic-group/` | `/business/dynamic-group` | 部分迁移 | 1202px 编辑侧滑、条件编辑、预览、清空确认 |
-| 自定义字段 | `src/ui/src/views/custom-fields/` | `/business/custom-fields` | 部分迁移 | 字段分组、导入、字段详情和完整 CRUD |
+| 动态分组 | `src/ui/src/views/dynamic-group/` | `/business/dynamic-group` | 核心流程 | 编辑侧滑(条件编辑/操作符按类型映射/值控件/预览 hosts 与 set 查询/清空确认/编辑回显含 gte+lte→range 合并),契约 dynamicgroup CRUD 真实验证 |
+| 自定义字段 | `src/ui/src/views/custom-fields/` | `/business/custom-fields` | 核心流程 | 字段分组、字段编辑/详情抽屉、导出、预览、完整 CRUD;老版业务自定义字段页 hideImport 不提供导入入口(仅模型详情页有),已对齐隐藏 |
 | 业务同步 | `src/ui/src/views/business-synchronous/` | `/business/sync` | 核心流程 | 业务/模板/模块级联、差异(changed/added/removed/属性)展示、单模块/全量同步;旧版 synchronous/module 深链已兼容;旧版进程级差异细分视图未 1:1 |
-| 进程模板 | `service-template/children/process-form.vue` | `/business/process-template` | 核心流程 | 按进程模型属性动态渲染全量字段(21 属性),必填校验;bind_info 多行编辑未迁移 |
+| 进程模板 | `service-template/children/process-form.vue` | `/business/process-template` | 核心流程 | 按进程模型属性动态渲染全量字段(21 属性),必填校验;bind_info 多行编辑已迁移(真实创建/回读验证);新建曾因进程别名未自动带出+空值提交被后端拒而必然失败,已修 |
 
 ## 资源上下文
 
 | 旧版能力/入口 | 旧版实现 | 新版入口 | 当前状态 | 替代门禁重点 |
 |---|---|---|---|---|
-| 资源目录 | `src/ui/src/views/resource/` | `/resource/index` | 部分迁移 | 全量资源分类、实例列表和详情跳转 |
+| 资源目录 | `src/ui/src/views/resource/` | `/resource/index` | 核心流程 | 卡片瀑布流 1:1 重做(收藏星/计数/过滤规则与老版同源同值);点击跳转 BUILTIN_MODEL_RESOURCE_MENUS 映射 |
 | 资源池主机 | `resource/index`、`host-details` | `/resource/host` | 核心流程 | 目录筛选、收藏、导入导出、转移、列配置、历史 |
-| 通用模型实例 | `src/ui/src/views/general-model/` | 无等价深度实例路由 | 未迁移 | 新建/批量编辑/删除、属性/关联/历史、导入 |
-| 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 核心流程 | 列表正常/已归档双 tab;新建(web_server table 入口,根路径)/编辑/归档/恢复/彻底删除(CRUD 全闭环真实验证);详情页(属性/变更历史)+旧版 `/business/details/:bizId` 深链;批量修改未迁移 |
+| 通用模型实例(旧深链入口) | `src/ui/src/views/general-model/` | `/resource/instance/:objId` | 核心流程 | 与下方「模型实例」行同源;旧深链已兼容 |
+| 业务管理/详情/归档 | `src/ui/src/views/business/` | `/resource/business` | 核心流程 | 列表正常/已归档双 tab;新建(web_server table 入口,根路径)/编辑/批量编辑(updatemany/biz/property)/归档/恢复/彻底删除(CRUD 全闭环真实验证);详情页(属性/变更历史)+旧版 `/business/details/:bizId` 深链;新建表单已补语言字段(原缺失导致后端必填校验失败) |
 | 业务集管理/详情 | `src/ui/src/views/business-set/` | `/resource/biz-set` | 核心流程 | 详情页(属性/变更历史)+旧版 `/resource/business-set/details/:bizSetId` 深链;新建/编辑/删除;列配置(候选=业务集模型属性,契约:属性挂在 `bk_biz_set_obj` 下走 `/find/objectattr/web`,普通 find/objectattr 查 biz_set 返回空;默认列=老版可见列;注意 findmany/biz_set 行不含 bk_created_by,创建人列恒为 -- 属接口数据限制) |
 | 项目管理/详情 | `src/ui/src/views/project/` | `/resource/project` | 核心流程 | 列表专用接口 /findmany/project;详情页(属性/变更历史,深链参数兼容数字 id/hash);新建/编辑/批量编辑/删除全闭环验证;列配置(候选=bk_project 模型属性,默认表头=getHeaderProperties 算法前 6 列)。**契约陷阱**: `/updatemany/project`、`/deletemany/project` 的 ids 必须是数字 `id` 字段,传 bk_project_id hash 会被后端以"反序列化JSON数据失败"拒绝;描述字段是 `bk_project_desc`(旧实现用 project_desc 被后端静默丢弃,已修) |
-| 主机历史 | `src/ui/src/views/history/` | 无等价深链 | 未迁移 | 变更记录展示、筛选和详情 |
+| 删除历史(主机/模型实例) | `src/ui/src/views/history/` | `/resource/history/host`、`/resource/history/instance/:objId` | 核心流程 | /find/inst_audit 按 resource_type 过滤+日期/IP 筛选;旧深链 `instance/:objId/history` 重定向;真实数据验证 |
 | 管控区域 | `src/ui/src/views/cloud-area/` | `/resource/cloud-area` | 核心流程 | 表格内编辑、新增、区域选择和错误处理 |
-| 云账户 | `src/ui/src/views/cloud-account/` | `/resource/cloud-account` | 部分迁移 | 新增/编辑/删除、详情侧滑和任务关联 |
+| 云账户 | `src/ui/src/views/cloud-account/` | `/resource/cloud-account` | 核心流程 | 新增/编辑(PUT update/cloud/account)/删除/详情侧滑+关联同步任务(findmany/cloud/sync/task 条件 bk_account_id);注意描述字段为 bk_description |
 | 云资源发现 | `src/ui/src/views/cloud-resource/` | `/resource/cloud-discover` | 核心流程 | cloudserver 已纳入 core profile;任务/账户管理可用,实际同步需真实云厂商凭据 |
-| 跨业务主机转移 | 业务/主机操作旧版流程 | 业务拓扑「跨业务转移」对话框 | 核心流程 | 目标业务/模块级联选择+确认(/hosts/modules/across/biz);资源池主机走 /hosts/resource/cross/biz 待接 |
+| 跨业务主机转移 | 业务/主机操作旧版流程 | 业务拓扑「跨业务转移」对话框 | 核心流程 | 目标业务/模块级联选择+确认(/hosts/modules/across/biz);老版资源池页的 /hosts/resource/cross/biz 仅对业务空闲机生效(旧版 tooltip 明示,资源池主机不适用),非缺口 |
 
 ## 模型上下文
 
@@ -92,5 +92,8 @@
 9. **第九批（已完成）**：业务完整 CRUD(新建/编辑/归档/恢复/彻底删除,闭环验证);修复 createBusiness/updateHostProperties 根路径前缀 bug;业务集/项目详情页+旧版深链;项目列表改用专用接口;Roadmap 口径修正。
 10. **第十批（已完成）**：全量 E2E 回归(run-route-smoke + run + b5~b13 共 10 个脚本)全部通过;修复 b6/b8/b9 过期选择器;b11 云账户 500 按 URL 归因标记为预期依赖阻塞(core profile 无 cmdb_cloudserver)。
 11. **第十一批（已完成）**：云功能纳入核心模块——cmdb_cloudserver 编译部署(core profile),云账户 CRUD 打通(密钥不回显);移除前端依赖阻塞降级提示;Dockerfile/run.sh 更新。
+12. **第十二批（已完成）**：业务集/项目列配置+项目批量编辑;修项目 ids 需数字 id 的契约陷阱(hash 被拒/描述字段 bk_project_desc)。
+13. **第十三批（已完成）**：镜像重建固化(cloudserver+导出修复);移除 b11 云阻塞豁免。
+14. **A/B/C/D 批（已完成）**：动态分组完整条件编辑器;云账户编辑/详情/任务关联;主机/业务批量编辑;自定义字段导入项对齐隐藏;进程模板 bind_info 多行;删除历史页;首页搜索落地与 404 已验证。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。
