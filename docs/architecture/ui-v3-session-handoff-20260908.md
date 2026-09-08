@@ -49,11 +49,11 @@
 ## 剩余事项（按优先级）
 
 1. ~~服务实例标签批量编辑~~ ✅ 已完成（BusinessTopo 更多→编辑标签，契约 /createmany/proc/service_instance/labels）
-2. **业务集/项目列配置**：老版有列配置齿轮，新版未做（可复用 BusinessTopo 的 localStorage 列配置模式，工作量小）
+2. ~~业务集/项目列配置~~ ✅ 已完成（54d36dda62）：齿轮+列表显示属性配置抽屉，localStorage key 对齐老版；业务集属性契约=挂 `bk_biz_set_obj` 走 `/find/objectattr/web`；项目批量编辑落地。**契约陷阱**：`/updatemany|deletemany/project` 的 ids 必须数字 `id`（传 bk_project_id hash 报"反序列化JSON数据失败"）；描述字段是 `bk_project_desc`（project_desc 被静默丢弃）
 3. **首页全文检索**：依赖 ES；前端 tab 已有禁用态+提示，ES 部署后需实现结果页
 4. **Pod/容器**：依赖 K8s 数据链路（kube），矩阵标依赖阻塞
-5. **Docker 镜像重建**：固化 cloudserver 二进制 + webserver 导出修复（当前容器内是手工替换，重建镜像即固化）
-6. **IAM 开源方案立项**（用户已定方向）：OIDC/OAuth2 IdP + Casbin；现有 `web_server/middleware/api_key.go`（StandaloneAPIKeyProxy）独立于蓝鲸可复用；替换旧前端前的最后一道门
+5. **Docker 镜像重建**：固化 cloudserver 二进制 + webserver 导出修复（当前容器内是手工替换，重建镜像即固化）——时机待用户确认
+6. **IAM 开源方案**：立项设计已完成 → `docs/architecture/iam-open-source-design.md`（Casdoor 推荐 + Casbin 嵌入 web_server 边缘，P0 登录→P2 资源域四阶段）；待排期实施
 7. **旧前端下线**：满足矩阵"完整替代"门禁 + 观察期后执行
 
 ## 最新提交（本会话增量，截至 cbd7c3289a）
@@ -69,7 +69,13 @@
 
 ## 环境注意事项
 
-- 重启 webserver：容器内 `kill $(pgrep -f "cmdb_webserver --addrport")` 后等 5s 再启动（Docker 端口代理竞态）
+- 重启 webserver（**完整命令，flag 缺一不可**）：
+  ```bash
+  docker exec cmdb sh -c 'kill $(pgrep -f "cmdb_webserver --addrport")'
+  sleep 5
+  docker exec -d cmdb sh -c 'cd /data/cmdb/cmdb_webserver && nohup ./cmdb_webserver --addrport=0.0.0.0:8090 --regdiscv=zookeeper:2181 --deployment-method=open_source --config=/data/cmdb/cmdb_webserver/web.yaml --log-dir=/data/cmdb/logs/webserver --v=3 --register-ip=127.0.0.1 > web.log 2>&1 &'
+  ```
+  （`--addrport` 必须是 `0.0.0.0:8090` 完整 host:port 形式，只给端口会报 "wrap server info failed"；与容器 /run.sh 第 129-132 行一致）
 - 容器内禁止 `kill $(ps|grep cmdb_webserver)`——grep 会匹配到自身 shell 导致自杀（exit 143）
 - 部署：`docker cp src/ui-v3/dist/. cmdb:/data/cmdb/cmdb_webserver/web/` + 重启 webserver
 - Go 交叉编译：`CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags=disable_crypto -o out configcenter/src/<server>`
