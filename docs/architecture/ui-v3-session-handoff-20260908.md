@@ -37,7 +37,7 @@
 9. **修复的系统性 bug**（老版同类问题全部排查）：
    - web_server excel/table 路由挂**根路径**而非 /api/v3：hosts/import、hosts/export、insts/object/*/export、importtemplate/*、table/biz/*、table/update/instance/*（axios 需 `{baseURL:''}`）
    - 关联实例裸路径 `/findmany/inst/association` 是 404，正确契约 `/findmany/inst/association/object/{obj}/inst_id/{id}/offset/{start}/limit/{limit}/web`
-   - web_server 导出"导出全部"空 `$in` 条件 bug 已修（param.go），**webserver 二进制是手工替换的（.bak 备份在容器内），重建镜像才会固化**
+   - web_server 导出"导出全部"空 `$in` 条件 bug 已修（param.go），**已随 2026-09-08 镜像重建固化**（镜像 standalone-cmdb:latest，13 服务含 cloudserver；导出全部空条件闭环已在新镜像验证）
    - 资源目录页重做为老版卡片瀑布流；主机/业务拓扑 ID 列在**首位**蓝色链接（Playwright 抓表格列时 fixed 列 DOM 顺序有欺骗性，以截图为准）
 
 ## 关键实现文件
@@ -52,7 +52,7 @@
 2. ~~业务集/项目列配置~~ ✅ 已完成（54d36dda62）：齿轮+列表显示属性配置抽屉，localStorage key 对齐老版；业务集属性契约=挂 `bk_biz_set_obj` 走 `/find/objectattr/web`；项目批量编辑落地。**契约陷阱**：`/updatemany|deletemany/project` 的 ids 必须数字 `id`（传 bk_project_id hash 报"反序列化JSON数据失败"）；描述字段是 `bk_project_desc`（project_desc 被静默丢弃）
 3. **首页全文检索**：依赖 ES；前端 tab 已有禁用态+提示，ES 部署后需实现结果页
 4. **Pod/容器**：依赖 K8s 数据链路（kube），矩阵标依赖阻塞
-5. **Docker 镜像重建**：固化 cloudserver 二进制 + webserver 导出修复（当前容器内是手工替换，重建镜像即固化）——时机待用户确认
+5. ~~Docker 镜像重建~~ ✅ 已完成（2026-09-08）：`docker compose build cmdb` + `up -d` 重建，镜像 standalone-cmdb:latest 含 cloudserver 与导出修复；b11 的"云账户 500 预期阻塞"豁免已移除（接口实测 200）
 6. **IAM 开源方案**：立项设计已完成 → `docs/architecture/iam-open-source-design.md`（Casdoor 推荐 + Casbin 嵌入 web_server 边缘，P0 登录→P2 资源域四阶段）；待排期实施
 7. **旧前端下线**：满足矩阵"完整替代"门禁 + 观察期后执行
 

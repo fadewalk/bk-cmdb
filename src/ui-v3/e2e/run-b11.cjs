@@ -67,17 +67,14 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.screenshot({ path: path.join(SHOTS, 'B11-cloud-discover.png'), fullPage: true })
 
     console.log('')
-    // core profile 无 cmdb_cloudserver,云账户接口 500 属预期的依赖阻塞(见迁移矩阵),按 URL 归因不计为失败
-    const cloudFailures = failedUrls.filter((u) => /cloud|account/i.test(u))
-    const unexpected = failedUrls.filter((u) => !/cloud|account/i.test(u))
-    if (cloudFailures.length) ok(`云账户/云发现接口失败 ${cloudFailures.length} 个(预期依赖阻塞: ${new Set(cloudFailures.map((u) => new URL(u).pathname)).size} 条路由)`)
-    if (unexpected.length || errors.length) {
-      console.log(`浏览器错误 (请求 ${unexpected.length} / 脚本 ${errors.length}):`)
+    // 2026-09-08 起 cloudserver 已入 core 镜像,云账户/云发现接口失败一律计为真实失败
+    if (failedUrls.length || errors.length) {
+      console.log(`浏览器错误 (请求 ${failedUrls.length} / 脚本 ${errors.length}):`)
       for (const e of errors.slice(0, 6)) console.log('  ' + e)
-      for (const u of unexpected.slice(0, 6)) console.log('  ' + u)
+      for (const u of failedUrls.slice(0, 6)) console.log('  ' + u)
       process.exitCode = 1
     } else {
-      ok('无浏览器 page/console error(云账户 500 为预期依赖阻塞)')
+      ok('无浏览器 page/console error')
     }
   } catch (e) {
     fail('E2E 流程', e.message)
