@@ -324,7 +324,7 @@ function openForm(row) {
     }
   } else {
     formId.value = null
-    form.value = { bk_project_name: '', bk_project_code: '', bk_project_owner: 'admin', bk_project_type: typeOptions.value[0]?.id || '', bk_project_desc: '' }
+    form.value = { bk_project_name: '', bk_project_code: '', bk_project_owner: 'admin', bk_project_type: projectTypeOptions.value[0]?.id || '', bk_project_desc: '' }
   }
   formVisible.value = true
 }
