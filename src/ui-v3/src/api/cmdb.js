@@ -187,10 +187,10 @@ export const importHosts = (file, params) => {
   })
 }
 
-// 删除资源池主机(契约: {data:{bk_host_id:"1,2",bk_supplier_account:"0"}})
+// 删除资源池主机(契约: DeleteHostBatchOpt 顶层 {bk_host_id:"1,2",bk_supplier_account:"0"},不要 data 包装)
 export const deleteHostsBatch = (hostIds) =>
   http.delete('/hosts/batch', {
-    data: { data: { bk_host_id: hostIds.join(','), bk_supplier_account: '0' } }
+    data: { bk_host_id: hostIds.join(','), bk_supplier_account: '0' }
   })
 
 // 导出主机(web_server 生成真实 xlsx;根路径)

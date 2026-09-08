@@ -27,7 +27,7 @@
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="import">导入字段</el-dropdown-item>
+            <!-- 老版业务自定义字段页 hideImport=false,不提供导入字段入口(仅模型详情页有) -->
             <el-dropdown-item command="export">导出字段</el-dropdown-item>
           </el-dropdown-menu>
         </template>

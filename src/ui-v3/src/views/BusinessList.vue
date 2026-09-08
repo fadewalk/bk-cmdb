@@ -15,10 +15,12 @@
         :prefix-icon="'Search'"
       />
       <el-button v-if="scope === 'normal'" type="primary" :icon="'Plus'" @click="openForm()">新建</el-button>
+      <el-button v-if="scope === 'normal'" :disabled="!selectedRows.length" @click="openBatchEdit">批量编辑</el-button>
       <el-button :icon="'Refresh'" @click="load">刷新</el-button>
     </div>
 
-    <el-table :data="filtered" v-loading="loading" stripe>
+    <el-table :data="filtered" v-loading="loading" stripe @selection-change="onSelect">
+      <el-table-column type="selection" width="40" :selectable="() => scope === 'normal'" />
       <el-table-column prop="bk_biz_id" label="ID" width="100" sortable />
       <el-table-column prop="bk_biz_name" label="业务名" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">
@@ -91,6 +93,12 @@
             <el-option v-for="tz in timeZones" :key="tz" :label="tz" :value="tz" />
           </el-select>
         </el-form-item>
+        <el-form-item label="语言" required>
+          <el-select v-model="form.language" style="width: 100%">
+            <el-option label="中文" value="1" />
+            <el-option label="English" value="2" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="2" />
         </el-form-item>
@@ -100,6 +108,38 @@
         <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量编辑业务(契约: PUT /updatemany/biz/property {properties, condition};只提交修改字段) -->
+    <el-drawer v-model="batchVisible" title="批量编辑" size="460px">
+      <el-form label-width="100px">
+        <el-form-item label="运维人员">
+          <el-input v-model="batchMap.bk_biz_maintainer" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="开发人员">
+          <el-input v-model="batchMap.bk_biz_developer" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="测试人员">
+          <el-input v-model="batchMap.bk_biz_tester" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="产品人员">
+          <el-input v-model="batchMap.bk_biz_productor" placeholder="多个用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="生命周期">
+          <el-select v-model="batchMap.life_cycle" clearable style="width: 100%">
+            <el-option label="测试中" value="1" />
+            <el-option label="已上线" value="2" />
+            <el-option label="停运" value="3" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="操作人员">
+          <el-input v-model="batchMap.operator" placeholder="多个用逗号分隔" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchSaving" @click="submitBatch">保存</el-button>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -109,7 +149,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchBusiness, createBusiness, updateBusiness,
-  archiveBusiness, recoverBusiness, deleteArchivedBiz
+  archiveBusiness, recoverBusiness, deleteArchivedBiz, http
 } from '../api/cmdb'
 
 const router = useRouter()
@@ -183,6 +223,7 @@ function openForm(row) {
       bk_biz_productor: row.bk_biz_productor || '',
       life_cycle: row.life_cycle || '2',
       time_zone: row.time_zone || 'Asia/Shanghai',
+      language: row.language || '1',
       description: row.description || ''
     }
   } else {
@@ -190,7 +231,7 @@ function openForm(row) {
     form.value = {
       bk_biz_name: '', bk_biz_maintainer: 'admin', bk_biz_developer: '',
       bk_biz_tester: '', bk_biz_productor: '', life_cycle: '2',
-      time_zone: 'Asia/Shanghai', description: ''
+      time_zone: 'Asia/Shanghai', language: '1', description: ''
     }
   }
   formVisible.value = true
@@ -215,8 +256,47 @@ async function submitForm() {
   } finally { saving.value = false }
 }
 
-async function archive(row) {
+// ---------- 批量编辑 ----------
+const selectedRows = ref([])
+const batchVisible = ref(false)
+const batchSaving = ref(false)
+const batchMap = ref({})
+const batchInit = ref({})
+const BATCH_FIELDS = ['bk_biz_maintainer', 'bk_biz_developer', 'bk_biz_tester', 'bk_biz_productor', 'life_cycle', 'operator']
+
+function onSelect(rows) { selectedRows.value = rows }
+
+function openBatchEdit() {
+  const init = {}
+  for (const f of BATCH_FIELDS) init[f] = ''
+  batchInit.value = init
+  batchMap.value = { ...init }
+  batchVisible.value = true
+}
+
+async function submitBatch() {
+  const changed = {}
+  for (const [k, v] of Object.entries(batchMap.value)) {
+    if (String(v ?? '') !== String(batchInit.value[k] ?? '')) changed[k] = v
+  }
+  if (!Object.keys(changed).length) { ElMessage.warning('请先修改字段后再保存'); return }
+  batchSaving.value = true
   try {
+    // 老版契约: properties=变更字段, condition 限定所选业务
+    await http.put('/updatemany/biz/property', {
+      properties: changed,
+      condition: { bk_biz_id: { $in: selectedRows.value.map((r) => r.bk_biz_id) } }
+    })
+    ElMessage.success(`已批量更新 ${selectedRows.value.length} 个业务`)
+    batchVisible.value = false
+    selectedRows.value = []
+    await load()
+  } catch (e) {
+    ElMessage.error('批量编辑失败: ' + (e?.message || '后端异常'))
+  } finally { batchSaving.value = false }
+}
+
+async function archive(row) {  try {
     await ElMessageBox.confirm(`确定归档业务「${row.bk_biz_name}」?归档后业务默认不可见,可在「已归档」中恢复或彻底删除。`, '归档确认', { type: 'warning' })
   } catch { return }
   try {

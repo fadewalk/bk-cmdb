@@ -322,6 +322,24 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <!-- 批量编辑主机属性(契约: PUT /hosts/batch {...changed, bk_host_id:"1,2"}) -->
+    <el-drawer v-model="batchEditVisible" title="编辑主机属性" size="480px">
+      <el-form label-width="120px">
+        <el-form-item v-for="f in batchAttrs" :key="f.bk_property_id" :label="f.bk_property_name">
+          <el-select v-if="enumOptions(f).length" v-model="batchMap[f.bk_property_id]" clearable filterable style="width: 100%">
+            <el-option v-for="o in enumOptions(f)" :key="o.id" :label="o.name" :value="o.id" />
+          </el-select>
+          <el-switch v-else-if="f.bk_property_type === 'bool'" v-model="batchMap[f.bk_property_id]" />
+          <el-input-number v-else-if="f.bk_property_type === 'int'" v-model="batchMap[f.bk_property_id]" :controls="false" style="width: 100%" />
+          <el-input v-else v-model="batchMap[f.bk_property_id]" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchEditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchSaving" @click="submitBatchEdit">保存</el-button>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -335,7 +353,7 @@ import {
   transferHostsToDirectory, importHosts, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
-  getBizTopoTree, getBizInternalTopo
+  getBizTopoTree, getBizInternalTopo, searchModelAttributes
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
 
@@ -697,8 +715,57 @@ async function onCopy(cmd) {
   }
 }
 
-function onBatchEdit() {
-  ElMessage.info(`批量编辑 ${selectedHosts.value.length} 台主机属性(请在主机详情中逐台编辑)`)
+function onBatchEdit(cmd) {
+  if (cmd === 'edit') openHostBatchEdit()
+  // importEdit 已有独立入口
+}
+
+// ---------- 批量编辑主机属性(老版 form-multiple 语义:只提交修改字段) ----------
+const HOST_BATCH_EXCLUDED = ['bk_host_id', 'bk_host_innerip', 'bk_host_outerip', 'bk_host_innerip_v6', 'bk_host_outerip_v6', 'bk_cloud_id', 'bk_biz_id', 'bk_supplier_account', 'bk_created_by', 'bk_created_at', 'bk_updated_by', 'bk_updated_at', 'create_time', 'last_time']
+const batchAttrs = ref([])
+const batchEditVisible = ref(false)
+const batchSaving = ref(false)
+const batchMap = ref({})
+const batchInit = ref({})
+
+function enumOptions(f) {
+  const opt = f.option
+  if (Array.isArray(opt)) return opt.filter((o) => o && o.id !== undefined)
+  return []
+}
+
+async function openHostBatchEdit() {
+  if (!batchAttrs.value.length) {
+    const attrs = (await searchModelAttributes('host').catch(() => [])) || []
+    batchAttrs.value = attrs.filter((f) => !HOST_BATCH_EXCLUDED.includes(f.bk_property_id))
+  }
+  const init = {}
+  for (const f of batchAttrs.value) {
+    // 数值控件初始值用 undefined:el-input-number 会把 '' 规整为 0,导致 0 值被误提交
+    init[f.bk_property_id] = f.bk_property_type === 'bool' ? false : (['int', 'float'].includes(f.bk_property_type) ? undefined : '')
+  }
+  batchInit.value = init
+  batchMap.value = { ...init }
+  batchEditVisible.value = true
+}
+
+async function submitBatchEdit() {
+  const isBlank = (v) => v === '' || v === null || v === undefined
+  const changed = {}
+  for (const [k, v] of Object.entries(batchMap.value)) {
+    // 数值控件会把空值规整为 null,只提交非空且确有变化的字段
+    if (!isBlank(v) && String(v) !== String(batchInit.value[k] ?? '')) changed[k] = v
+  }
+  if (!Object.keys(changed).length) { ElMessage.warning('请先修改字段后再保存'); return }
+  batchSaving.value = true
+  try {
+    await http.put('/hosts/batch', { ...changed, bk_host_id: selectedHosts.value.map((h) => h.bk_host_id).join(',') })
+    ElMessage.success(`已批量更新 ${selectedHosts.value.length} 台主机`)
+    batchEditVisible.value = false
+    await load()
+  } catch (e) {
+    ElMessage.error('批量编辑失败: ' + (e?.message || '后端异常'))
+  } finally { batchSaving.value = false }
 }
 
 async function onMore(cmd) {
