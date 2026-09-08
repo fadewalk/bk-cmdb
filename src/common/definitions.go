@@ -1405,6 +1405,8 @@ const (
 	BKBluekingLoginPluginVersion = "blueking"
 	// BKOpenSourceLoginPluginVersion TODO
 	BKOpenSourceLoginPluginVersion = "opensource"
+	// BKOIDCLoginPluginVersion is the standalone OpenID Connect login plugin.
+	BKOIDCLoginPluginVersion = "oidc"
 	// BKSkipLoginPluginVersion TODO
 	BKSkipLoginPluginVersion = "skip-login"
 

@@ -81,7 +81,21 @@ standalone-docker 分支已实现去蓝鲸部署：登录走 skip-login（自动
 - 不引入新组件（standalone 核心原则）；policy 存 MongoDB（已有）或 redis（已有），adapter 现成
 - OPA/SpiceDB 适合多服务共享策略或海量关系场景，当前规模是杀鸡用牛刀
 
-## 4. 总体架构
+## 4. 当前实现状态
+
+本轮已落地第一版可回滚骨架：
+
+- `webServer.oidc` 配置结构与环境变量 `CMDB_OIDC_CLIENT_SECRET` 覆盖；默认 `enabled: false`
+- 新增 OIDC 插件：`src/web_server/middleware/user/plugins/method/oidc/`
+- 新增回调入口：`GET /login/oidc/start`、`GET /login/oidc/callback`
+- 使用 Authorization Code + PKCE、服务端 Redis session 保存 state/nonce/verifier，回调校验 issuer/audience/signature/nonce，并用随机应用 session token 兼容现有 `bk_token` 校验
+- 新增 Casbin 边缘授权骨架：`src/web_server/middleware/authorization/`；默认关闭，`webServer.auth.enabled: true` 才挂载
+- 现阶段 Casbin 为内存策略，bootstrap 用户通过 `webServer.auth.bootstrapUsers` 配置；尚未实现策略持久化、资源级实例过滤和权限管理 UI
+- `skip-login`、API-Key、原有蓝鲸 IAM 适配链路保持不变
+
+当前实现的验收边界：OIDC/Casbin 默认关闭时 standalone 行为与之前一致；启用 OIDC 需要外部兼容 OIDC 的 IdP（Casdoor/Keycloak 等），启用 Casbin 目前提供边缘接口级 RBAC，不宣称已替换所有原有资源级 IAM 语义。
+
+## 5. 总体架构
 
 ```
                      ┌────────────┐

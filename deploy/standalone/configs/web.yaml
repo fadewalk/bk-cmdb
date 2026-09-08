@@ -43,6 +43,32 @@ webServer:
     authscheme: internal
   login:
     version: skip-login
+  oidc:
+    enabled: false
+    issuerUrl:
+    clientId:
+    clientSecret:
+    redirectUrl: http://localhost:8090/login/oidc/callback
+    scopes:
+      - openid
+      - profile
+      - email
+    stateTTL: 600
+  oidc:
+    enabled: false
+    issuerUrl:
+    clientId:
+    clientSecret:
+    redirectUrl: http://localhost:8090/login/oidc/callback
+    scopes:
+      - openid
+      - profile
+      - email
+    stateTTL: 600
+  auth:
+    enabled: false
+    bootstrapUsers:
+      - admin
   changelogPath:
     ch: /data/cmdb/changelog_user/ch
     en: /data/cmdb/changelog_user/en

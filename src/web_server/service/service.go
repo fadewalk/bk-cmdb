@@ -41,6 +41,8 @@ import (
 	webCommon "configcenter/src/web_server/common"
 	"configcenter/src/web_server/logics"
 	"configcenter/src/web_server/middleware"
+	"configcenter/src/web_server/middleware/authorization"
+	"configcenter/src/web_server/middleware/user/plugins/method/oidc"
 	"configcenter/src/web_server/service/excel"
 	"configcenter/src/web_server/service/notice"
 
@@ -75,6 +77,13 @@ func (s *Service) WebService() *gin.Engine {
 	// When no key is configured, the existing browser session/skip-login flow is unchanged.
 	ws.Use(middleware.StandaloneAPIKeyProxy(s.Discovery()))
 	ws.Use(middleware.ValidLogin(*s.Config, s.Discovery(), s.ApiCli))
+	if s.Config.Authorization.Enabled {
+		policy, err := authorization.New(s.Config.Authorization)
+		if err != nil {
+			blog.Fatalf("initialize standalone authorization failed: %v", err)
+		}
+		ws.Use(authorization.Middleware(policy, true))
+	}
 	ws.Use(func(c *gin.Context) {
 		defer func() {
 			// suppresses logging of a stack when err is ErrAbortHandler, same as net/http
@@ -136,6 +145,8 @@ func (s *Service) initService(ws *gin.Engine) {
 	ws.GET("/hosts/:bk_host_id/listen_ip_options", s.ListenIPOptions)
 	ws.POST("/logout", s.LogOutUser)
 	ws.GET("/login", s.Login)
+	ws.GET("/login/oidc/start", s.OIDCStart)
+	ws.GET("/login/oidc/callback", s.OIDCCallback)
 	ws.GET("/is_login", s.IsLogin)
 	ws.POST("/login", s.LoginUser)
 	ws.POST("/object/exportmany", s.BatchExportObject)
@@ -177,6 +188,16 @@ func setGinMode() {
 		return
 	}
 	gin.SetMode(mode)
+}
+
+// OIDCStart begins the optional standalone OIDC login flow.
+func (s *Service) OIDCStart(c *gin.Context) {
+	oidc.Start(c, s.Config.OIDC)
+}
+
+// OIDCCallback completes the optional standalone OIDC login flow.
+func (s *Service) OIDCCallback(c *gin.Context) {
+	oidc.Callback(c, s.Config.OIDC)
 }
 
 // Healthz TODO

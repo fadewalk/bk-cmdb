@@ -59,7 +59,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, op *options.ServerOptio
 	input := &backbone.BackboneParameter{
 		ConfigUpdate: webSvr.onServerConfigUpdate,
 		ConfigPath:   op.ServConf.ExConfig,
-		SrvRegdiscv: backbone.SrvRegdiscv{Zk: op.ServConf.Zk},
+		SrvRegdiscv:  backbone.SrvRegdiscv{Zk: op.ServConf.Zk},
 		SrvInfo:      svrInfo,
 	}
 	if op.DeploymentMethod == common.BluekingDeployment {
@@ -214,6 +214,17 @@ func (w *WebServer) onServerConfigUpdate(previous, current cc.ProcessConfig) {
 	w.Config.Session.MultipleOwner, _ = cc.String("webServer.session.multipleOwner")
 	w.Config.Session.DefaultLanguage, _ = cc.String("webServer.session.defaultlanguage")
 	w.Config.LoginVersion, _ = cc.String("webServer.login.version")
+	_ = cc.UnmarshalKey("webServer.oidc", &w.Config.OIDC)
+	_ = cc.UnmarshalKey("webServer.auth", &w.Config.Authorization)
+	if envSecret := os.Getenv("CMDB_OIDC_CLIENT_SECRET"); envSecret != "" {
+		w.Config.OIDC.ClientSecret = envSecret
+	}
+	if w.Config.OIDC.StateTTL <= 0 {
+		w.Config.OIDC.StateTTL = 600
+	}
+	if len(w.Config.OIDC.Scopes) == 0 {
+		w.Config.OIDC.Scopes = []string{"openid", "profile", "email"}
+	}
 	if "" == w.Config.Session.DefaultLanguage {
 		w.Config.Session.DefaultLanguage = "zh-cn"
 	}

@@ -94,11 +94,31 @@ type Config struct {
 	AgentAppUrl               string
 	LoginUrl                  string
 	LoginVersion              string
+	OIDC                      OIDC
+	Authorization             Authorization
 	ConfigMap                 map[string]string
 	AuthCenter                AppInfo
 	DisableOperationStatistic bool
 	DeploymentMethod          common.DeploymentMethod
 	EnableNotification        bool
+}
+
+// OIDC contains the optional standalone OpenID Connect login configuration.
+// It is disabled by default so existing skip-login/opensource deployments are unchanged.
+type OIDC struct {
+	Enabled      bool     `mapstructure:"enabled" json:"enabled"`
+	IssuerURL    string   `mapstructure:"issuerUrl" json:"issuerUrl"`
+	ClientID     string   `mapstructure:"clientId" json:"clientId"`
+	ClientSecret string   `mapstructure:"clientSecret" json:"clientSecret"`
+	RedirectURL  string   `mapstructure:"redirectUrl" json:"redirectUrl"`
+	Scopes       []string `mapstructure:"scopes" json:"scopes"`
+	StateTTL     int      `mapstructure:"stateTTL" json:"stateTTL"`
+}
+
+// Authorization contains the optional standalone edge authorization settings.
+type Authorization struct {
+	Enabled        bool     `mapstructure:"enabled" json:"enabled"`
+	BootstrapUsers []string `mapstructure:"bootstrapUsers" json:"bootstrapUsers"`
 }
 
 // AppInfo TODO
