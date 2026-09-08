@@ -40,23 +40,46 @@
           />
           <el-input v-else v-model="form[f.bk_property_id]" />
         </el-form-item>
-        <!-- bind_info(端口绑定,模板模式单独渲染) -->
-        <el-form-item label="绑定端口">
-          <el-input v-model="form.__bind_port" placeholder="如 8080(留空则不绑定端口)" />
-        </el-form-item>
-        <el-form-item label="监听类型">
-          <el-select v-model="form.__bind_ip" style="width: 100%">
-            <el-option label="本机" value="1" />
-            <el-option label="全部" value="2" />
-            <el-option label="内网" value="3" />
-            <el-option label="外网" value="4" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="协议">
-          <el-select v-model="form.__bind_protocol" style="width: 100%">
-            <el-option label="TCP" value="1" />
-            <el-option label="UDP" value="2" />
-          </el-select>
+        <!-- bind_info(端口绑定,多行编辑,对齐老版 process-form-property-table) -->
+        <el-form-item label="端口绑定">
+          <div style="width: 100%">
+            <el-table :data="form.__bind_rows" size="small" border style="width: 100%">
+              <el-table-column label="监听类型" width="110">
+                <template #default="{ row }">
+                  <el-select v-model="row.ip" size="small">
+                    <el-option label="本机" value="1" />
+                    <el-option label="全部" value="2" />
+                    <el-option label="内网" value="3" />
+                    <el-option label="外网" value="4" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="协议" width="100">
+                <template #default="{ row }">
+                  <el-select v-model="row.protocol" size="small">
+                    <el-option label="TCP" value="1" />
+                    <el-option label="UDP" value="2" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="端口" min-width="110">
+                <template #default="{ row }">
+                  <el-input v-model="row.port" size="small" placeholder="如 8080" />
+                </template>
+              </el-table-column>
+              <el-table-column label="启用" width="70">
+                <template #default="{ row }">
+                  <el-switch v-model="row.enable" size="small" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="60">
+                <template #default="{ $index }">
+                  <el-button link type="danger" size="small" @click="removeBindRow($index)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-button size="small" :icon="'Plus'" style="margin-top: 6px" @click="addBindRow">添加绑定</el-button>
+          </div>
         </el-form-item>
       </template>
 
@@ -154,5 +177,12 @@ function enumOptions(f) {
   const opt = f.option
   if (Array.isArray(opt)) return opt.filter((o) => o && o.id !== undefined)
   return []
+}
+
+function addBindRow() {
+  props.form.__bind_rows.push({ ip: '1', protocol: '1', port: '', enable: true })
+}
+function removeBindRow(idx) {
+  props.form.__bind_rows.splice(idx, 1)
 }
 </script>

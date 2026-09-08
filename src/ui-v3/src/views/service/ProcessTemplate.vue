@@ -80,10 +80,7 @@ const editing = ref(null)
 const processAttrs = ref([])
 
 const form = reactive({
-  __bind_port: '',
-  __bind_ip: '1',
-  __bind_protocol: '1',
-  __bind_row_id: undefined
+  __bind_rows: []
 })
 
 const filteredTemplates = computed(() => {
@@ -131,13 +128,18 @@ function flattenTemplate(item) {
 }
 
 function propertyForForm(row) {
-  const next = { __bind_port: '', __bind_ip: '1', __bind_protocol: '1', __bind_row_id: undefined }
+  const next = { __bind_rows: [] }
   for (const f of processAttrs.value) {
     if (f.bk_property_id === 'bind_info') continue
     const v = row?.[f.bk_property_id]
-    next[f.bk_property_id] = f.bk_property_type === 'bool'
-      ? (v === undefined ? false : Boolean(v))
-      : (v === undefined || v === null ? '' : v)
+    if (f.bk_property_type === 'bool') {
+      next[f.bk_property_id] = v === undefined ? false : Boolean(v)
+    } else if (['int', 'float'].includes(f.bk_property_type)) {
+      // 数值控件初始 undefined:el-input-number 会把 '' 规整为 0,导致 0 被误提交
+      next[f.bk_property_id] = v === undefined || v === null || v === '' ? undefined : v
+    } else {
+      next[f.bk_property_id] = v === undefined || v === null ? '' : v
+    }
   }
   if (!processAttrs.value.length) {
     next.bk_func_name = row?.bk_func_name === '-' ? '' : row?.bk_func_name || ''
@@ -149,10 +151,17 @@ function propertyForForm(row) {
     next.description = row?.description || ''
   }
   if (next.bk_func_name === '-') next.bk_func_name = ''
-  next.__bind_port = row?.port === '-' ? '' : row?.port || ''
-  next.__bind_ip = row?.bindIp || '1'
-  next.__bind_protocol = row?.bindProtocol || '1'
-  next.__bind_row_id = row?.bindRowId
+  // bind_info 多行回显(property.bind_info.value 为 {ip:{value},port:{value},...} 数组)
+  const bindRows = row?.property?.bind_info?.value
+  if (Array.isArray(bindRows)) {
+    next.__bind_rows = bindRows.map((r) => ({
+      row_id: r.row_id,
+      ip: String(r.ip?.value?.value ?? r.ip?.value ?? '1'),
+      protocol: String(r.protocol?.value?.value ?? r.protocol?.value ?? '1'),
+      port: String(r.port?.value?.value ?? r.port?.value ?? ''),
+      enable: r.enable?.value?.value ?? r.enable?.value ?? true
+    }))
+  }
   return next
 }
 
@@ -162,21 +171,23 @@ function buildProperty() {
     if (f.bk_property_id === 'bind_info') continue
     const v = form[f.bk_property_id]
     const hasValue = v !== '' && v !== null && v !== undefined
+    // 空值直接省略:后端对 int 等类型的 null 值会校验拒绝
+    if (!hasValue && f.bk_property_type !== 'bool') continue
     property[f.bk_property_id] = {
       value: hasValue ? v : (f.bk_property_type === 'bool' ? false : null),
       as_default_value: hasValue
     }
   }
   property.bind_info = {
-    value: form.__bind_port
-      ? [{
-          row_id: form.__bind_row_id ?? 1,
-          ip: { value: form.__bind_ip || '1', as_default_value: true },
-          port: { value: String(form.__bind_port), as_default_value: true },
-          protocol: { value: form.__bind_protocol || '1', as_default_value: true },
-          enable: { value: true, as_default_value: true }
-        }]
-      : [],
+    value: (form.__bind_rows || [])
+      .filter((r) => String(r.port || '').trim() !== '')
+      .map((r, i) => ({
+        row_id: r.row_id ?? i + 1,
+        ip: { value: r.ip || '1', as_default_value: true },
+        port: { value: String(r.port), as_default_value: true },
+        protocol: { value: r.protocol || '1', as_default_value: true },
+        enable: { value: r.enable !== false, as_default_value: true }
+      })),
     as_default_value: true
   }
   return property
@@ -232,6 +243,8 @@ async function save() {
   }
   const missing = processAttrs.value.filter((f) => {
     if (!f.isrequired || f.bk_property_id === 'bk_func_name') return false
+    // 进程别名跟随进程名称(对齐老版自动带出),不单独校验
+    if (f.bk_property_id === 'bk_process_name') return false
     const v = form[f.bk_property_id]
     return v === '' || v === null || v === undefined
   })
@@ -239,6 +252,7 @@ async function save() {
     ElMessage.warning(`请填写必填字段: ${missing.map((f) => f.bk_property_name).join('、')}`)
     return
   }
+  if (!String(form.bk_process_name || '').trim()) form.bk_process_name = form.bk_func_name
   saving.value = true
   try {
     const property = buildProperty()
