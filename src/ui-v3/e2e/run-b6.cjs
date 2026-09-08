@@ -105,7 +105,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     const treeNodes = await page.locator('.el-tree .el-tree-node').count()
     if (treeNodes > 0) ok(`侧栏树节点数: ${treeNodes}`)
     // 点击 B8模块
-    await page.locator('.el-tree-node:has(.lbl:has-text("B8模块"))').first().click()
+    await page.locator('.el-tree-node__content:has(.lbl:has-text("B8模块"))').first().click()
     await page.waitForTimeout(1500)
     const headTitle = await page.locator('.ha-title').textContent().catch(() => '')
     if (headTitle.includes('B8模块')) ok(`右侧标题: ${headTitle.trim()}`)

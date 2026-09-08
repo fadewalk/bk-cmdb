@@ -57,7 +57,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     else fail('分页器', '不可见')
 
     // 右键 B8集群
-    const setRow = page.locator('.el-tree-node:has(.node-label:text-is("B8集群"))')
+    const setRow = page.locator('.el-tree-node__content:has(.node-label:text-is("B8集群"))')
     await setRow.click({ button: 'right' })
     await page.waitForTimeout(300)
     const ctxVisible = await page.locator('ul.ctx-menu').isVisible().catch(() => false)
