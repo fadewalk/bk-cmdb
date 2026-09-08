@@ -143,6 +143,9 @@ export const getHostInstTopo = (hostId, data) =>
   http.post(`/find/instassttopo/host/${hostId}`, data)
 export const searchHostInstAssoc = (data) =>
   http.post('/findmany/inst/association', data)
+// 实例关联(老版契约: 按 obj_id/inst_id 分页查询关联关系及对端实例)
+export const searchInstAssociations = (objId, instId, start = 0, limit = 50) =>
+  http.post(`/findmany/inst/association/object/${objId}/inst_id/${instId}/offset/${start}/limit/${limit}/web`, {})
 // 主机收藏
 export const listHostFavorites = (data) => http.post('/hosts/favorites/search', data)
 export const createHostFavorite = (data) => http.post('/hosts/favorites', data)
@@ -523,6 +526,10 @@ export const searchServiceTemplates = (bizId, page) =>
   http.post('/findmany/proc/service_template', { bk_biz_id: bizId, page })
 export const getServiceTemplateDetail = (templateId) =>
   http.get(`/find/proc/service_template/${templateId}/detail`)
+
+// 服务模板实例同步状态(契约: {bk_module_ids, service_template_id} → [{bk_inst_id,status,last_time,fail_tips}])
+export const getServiceTemplateSyncStatus = (bizId, data) =>
+  http.post(`/findmany/proc/service_template/sync_status/biz/${bizId}`, data)
 
 // 服务分类(含使用统计)
 export const searchServiceCategories = (bizId) =>

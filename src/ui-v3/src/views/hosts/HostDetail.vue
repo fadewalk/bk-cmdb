@@ -161,7 +161,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
-  http, searchBusiness, searchModelAttributes, getHostInstTopo, searchHostInstAssoc,
+  http, searchBusiness, searchModelAttributes, getHostInstTopo, searchHostInstAssoc, searchInstAssociations,
   getBizTopoTree, getBizInternalTopo, transferHostModule, transferHostToResource,
   searchServiceInstances, searchProcessInstances, deleteServiceInstances, createProcessInstance,
   listHostsWithoutApp
@@ -276,15 +276,19 @@ async function loadAssoc() {
   }
   assocLoading.value = true
   try {
-    // 用通用关联查询
-    const data = await searchHostInstAssoc({
-      bk_obj_id: 'host',
-      bk_supplier_account: '0',
-      bk_biz_id: bizId,
-      page: { start: 0, limit: 200 }
-    }).catch(() => ({ info: [] }))
-    // data.info 里是该主机关联的实例(按 objId 分组)
-    const all = data?.info || []
+    // 老版契约: 按 obj_id/inst_id 查询关联(src+dst 合并)
+    const data = await searchInstAssociations('host', hostId).catch(() => null)
+    const assoc = data?.data?.association || {}
+    const instMap = data?.data?.instance || {}
+    const all = []
+    for (const item of [...(assoc.src || []), ...(assoc.dst || [])]) {
+      const peerId = item.bk_asst_id_1 || item.asst_inst_id
+      const detail = instMap[peerId] || {}
+      all.push({
+        ...item,
+        __peer: detail.bk_host_innerip || detail.bk_inst_name || peerId
+      })
+    }
     const byObj = {}
     for (const it of all) {
       const objId = it.bk_obj_id
@@ -295,7 +299,7 @@ async function loadAssoc() {
     const groups = []
     for (const [objId, items] of Object.entries(byObj)) {
       const cols = items[0] ? Object.keys(items[0]).filter((k) => !k.startsWith('__') && !k.startsWith('_')).slice(0, 5) : []
-      groups.push({ objId, objName: objId, items, cols })
+      groups.push({ objId, objName: objId, items: items.map((it) => ({ ...it, __peer: it.__peer || it.bk_asst_id_1 || it.asst_inst_id })), cols: ['__peer'] })
     }
     assocGroups.value = groups
   } finally {

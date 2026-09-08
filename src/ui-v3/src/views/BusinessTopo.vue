@@ -170,6 +170,7 @@
             <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" @click="openInstanceDrawer(row)">查看/编辑进程</el-button>
+                <el-button link type="primary" @click="openClone(row)">克隆</el-button>
                 <el-button link type="danger" @click="removeInstance(row)">删除</el-button>
               </template>
             </el-table-column>
@@ -373,6 +374,28 @@
       <template #footer>
         <el-button @click="acrossVisible = false">取消</el-button>
         <el-button type="primary" :loading="acrossSubmitting" @click="submitAcrossTransfer">确认转移</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 服务实例克隆 -->
+    <el-dialog v-model="cloneVisible" :title="`克隆服务实例「${cloneSource?.name || ''}」`" width="480px">
+      <el-form label-width="100px">
+        <el-form-item label="目标模块" required>
+          <el-cascader
+            v-model="cloneModulePath"
+            :options="moduleOptions"
+            :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
+            placeholder="选择集群 / 模块"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="进程配置">
+          <span>将复制源实例的全部 {{ cloneProcesses.length }} 个进程</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cloneVisible = false">取消</el-button>
+        <el-button type="primary" :loading="cloneSubmitting" @click="submitClone">克隆</el-button>
       </template>
     </el-dialog>
 
@@ -1072,6 +1095,42 @@ async function removeProcess(row) {
   await refreshProcesses()
   if (rightTab.value === 'instance') loadInstances()
 }
+// ---------- 服务实例克隆 ----------
+const cloneVisible = ref(false)
+const cloneSource = ref(null)
+const cloneModulePath = ref(null)
+const cloneProcesses = ref([])
+const cloneSubmitting = ref(false)
+
+async function openClone(row) {
+  cloneSource.value = row
+  cloneModulePath.value = null
+  cloneVisible.value = true
+  try {
+    const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
+    cloneProcesses.value = data?.info || []
+  } catch { cloneProcesses.value = [] }
+}
+
+async function submitClone() {
+  if (!cloneModulePath.value) { ElMessage.warning('请选择目标模块'); return }
+  cloneSubmitting.value = true
+  try {
+    // 老版克隆语义: 新实例名 = 源名-copy,进程配置照搬源实例
+    const instances = [{
+      bk_host_id: cloneSource.value.bk_host_id,
+      service_instance_name: `${cloneSource.value.name || '实例'}-copy`,
+      processes: cloneProcesses.value.map((proc) => ({ process_info: proc.property || {} }))
+    }]
+    await createServiceInstance(bizId.value, cloneModulePath.value, instances)
+    ElMessage.success('克隆成功')
+    cloneVisible.value = false
+    loadInstances()
+  } catch (e) {
+    ElMessage.error('克隆失败: ' + (e?.message || '后端异常'))
+  } finally { cloneSubmitting.value = false }
+}
+
 async function removeInstance(row) {
   await ElMessageBox.confirm(`确定删除服务实例「${row.name || row.id}」?`, '删除确认', { type: 'warning' })
   await deleteServiceInstances(bizId.value, [row.id])

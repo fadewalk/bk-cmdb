@@ -7,6 +7,7 @@
 
     <el-tabs v-model="tab" class="detail-tabs">
       <el-tab-pane label="属性" name="property" />
+      <el-tab-pane label="关联" name="relation" />
       <el-tab-pane label="变更历史" name="history" />
     </el-tabs>
 
@@ -17,6 +18,17 @@
         </el-descriptions-item>
       </el-descriptions>
       <el-empty v-else-if="!loading" description="业务不存在" />
+    </template>
+
+    <template v-else-if="tab === 'relation'">
+      <el-table :data="assocRows" v-loading="assocLoading" size="small" stripe>
+        <el-table-column label="关联模型" width="140">
+          <template #default="{ row }">{{ row.bk_asst_obj_id || row.bk_obj_id }}</template>
+        </el-table-column>
+        <el-table-column label="关联类型" prop="bk_asst_id" width="120" />
+        <el-table-column label="实例" prop="__peer" min-width="140" show-overflow-tooltip />
+      </el-table>
+      <el-empty v-if="!assocLoading && assocRows.length === 0" description="暂无关联实例" :image-size="70" />
     </template>
 
     <template v-else>
@@ -38,7 +50,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { searchBusiness, searchInstAudit } from '../../api/cmdb'
+import { searchBusiness, searchInstAudit, searchInstAssociations } from '../../api/cmdb'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,6 +61,8 @@ const biz = ref(null)
 const loading = ref(false)
 const auditRows = ref([])
 const auditLoading = ref(false)
+const assocRows = ref([])
+const assocLoading = ref(false)
 
 const BIZ_FIELDS = {
   bk_biz_id: '业务 ID', bk_biz_name: '业务名称', bk_biz_maintainer: '运维人员',
@@ -103,7 +117,24 @@ async function loadAudit() {
 
 watch(tab, (v) => {
   if (v === 'history' && !auditRows.value.length && !auditLoading.value) loadAudit()
+  if (v === 'relation' && !assocRows.value.length && !assocLoading.value) loadAssoc()
 })
+
+async function loadAssoc() {
+  if (!bizId.value) return
+  assocLoading.value = true
+  try {
+    const data = await searchInstAssociations('biz', bizId.value).catch(() => null)
+    const assoc = data?.data?.association || {}
+    const instMap = data?.data?.instance || {}
+    const rows = []
+    for (const item of [...(assoc.src || []), ...(assoc.dst || [])]) {
+      const peerId = item.bk_asst_id_1 || item.asst_inst_id
+      rows.push({ ...item, __peer: (instMap[peerId] || {}).bk_inst_name || peerId })
+    }
+    assocRows.value = rows
+  } finally { assocLoading.value = false }
+}
 watch(bizId, () => { biz.value = null; auditRows.value = []; loadBiz() })
 
 onMounted(loadBiz)

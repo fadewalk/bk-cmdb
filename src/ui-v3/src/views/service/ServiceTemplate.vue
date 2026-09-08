@@ -214,12 +214,16 @@
     </el-dialog>
 
     <!-- 服务模板进程列表 -->
-    <el-drawer v-model="tplDrawer" :title="`「${tplDetailName}」进程模板`" size="45%">
-      <div class="drawer-toolbar">
+    <el-drawer v-model="tplDrawer" :title="`「${tplDetailName}」服务模板详情`" size="50%">
+      <el-tabs v-model="tplDetailTab">
+        <el-tab-pane label="进程配置" name="process" />
+        <el-tab-pane label="模块实例" name="instance" />
+      </el-tabs>
+      <div v-if="tplDetailTab === 'process'" class="drawer-toolbar">
         <span class="drawer-count">共 {{ tplProcesses.length }} 个进程模板</span>
         <el-button type="primary" size="small" :icon="'Plus'" @click="openAddProcTpl({ id: tplDetailId, name: tplDetailName })">新增进程模板</el-button>
       </div>
-      <el-table :data="tplProcesses" v-loading="tplDetailLoading" size="default">
+      <el-table v-if="tplDetailTab === 'process'" :data="tplProcesses" v-loading="tplDetailLoading" size="default">
         <el-table-column label="进程名称" min-width="140">
           <template #default="{ row }">{{ row.bk_func_name || '-' }}</template>
         </el-table-column>
@@ -239,6 +243,36 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 模块实例(对齐老版双 tab + 待同步红点) -->
+      <div v-if="tplDetailTab === 'instance'">
+        <el-table :data="tplModules" v-loading="tplModuleLoading" size="default">
+          <el-table-column label="模块" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="module-cell">
+                <i v-if="row.status === 'need_sync'" class="red-dot" />
+                {{ row.bk_module_name || `模块 ${row.bk_module_id}` }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="同步状态" width="130">
+            <template #default="{ row }">
+              <span v-if="row.status === 'need_sync'" class="sync-text need-sync">待同步</span>
+              <span v-else-if="row.status === 'syncing'" class="sync-text">同步中</span>
+              <span v-else-if="row.status === 'finished'" class="sync-text finished">已同步</span>
+              <span v-else-if="row.status === 'failure'" class="sync-text failure">同步失败</span>
+              <span v-else class="sync-text">--</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="最近同步" width="170">
+            <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
+          </el-table-column>
+          <el-table-column label="失败原因" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.fail_tips || '--' }}</template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!tplModuleLoading && tplModules.length === 0" description="该模板尚未绑定模块" :image-size="70" />
+      </div>
       <el-empty v-if="!tplDetailLoading && tplProcesses.length === 0" description="该模板暂无进程" :image-size="80" />
     </el-drawer>
 
@@ -302,6 +336,7 @@ import {
   searchServiceCategories, searchSetTemplates, http,
   getSetTemplateDetail, searchSetTemplateStatus, syncSetTemplateToInstances, searchSetTemplateSyncHistory,
   createProcTemplate, updateProcTemplate, deleteProcTemplate,
+  listModulesByServiceTemplate, getServiceTemplateSyncStatus,
   searchModelAttributes
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
@@ -332,6 +367,9 @@ const tplDetailName = ref('')
 const tplDetailLoading = ref(false)
 const tplProcesses = ref([])
 const tplDetailId = ref(null)
+const tplDetailTab = ref('process')
+const tplModules = ref([])
+const tplModuleLoading = ref(false)
 
 const procTplDialog = ref(false)
 const saving = ref(false)
@@ -709,7 +747,9 @@ function loadAll() {
 async function showTplDetail(row) {
   tplDetailName.value = row.name
   tplDetailId.value = row.id
+  tplDetailTab.value = 'process'
   tplDrawer.value = true
+  loadTplModules()
   tplDetailLoading.value = true
   try {
     // 进程模板按服务模板维度查询
@@ -746,6 +786,36 @@ async function showTplDetail(row) {
       }
     })
   } finally { tplDetailLoading.value = false }
+}
+
+async function loadTplModules() {
+  if (!tplDetailId.value) return
+  tplModuleLoading.value = true
+  try {
+    const data = await listModulesByServiceTemplate(bizId.value, tplDetailId.value)
+    tplModules.value = (data?.info || []).map((m) => ({
+      bk_module_id: m.bk_module_id || m.id,
+      bk_module_name: m.bk_module_name || m.name,
+      status: null, last_time: '', fail_tips: ''
+    }))
+    // 契约: {bk_module_ids, service_template_id} → [{bk_inst_id,status,last_time,fail_tips}]
+    if (tplModules.value.length) {
+      const resp = await getServiceTemplateSyncStatus(bizId.value, {
+        bk_module_ids: tplModules.value.map((m) => m.bk_module_id),
+        service_template_id: tplDetailId.value
+      }).catch(() => [])
+      for (const st of resp || []) {
+        const row = tplModules.value.find((m) => m.bk_module_id === st.bk_inst_id)
+        if (row) {
+          row.status = st.status
+          row.last_time = st.last_time
+          row.fail_tips = st.fail_tips
+        }
+      }
+    }
+  } catch {
+    tplModules.value = []
+  } finally { tplModuleLoading.value = false }
 }
 
 async function loadProcessAttrs() {
@@ -814,4 +884,5 @@ onMounted(async () => {
 watch(bizId, () => { if (bizId.value) loadAll() })
 watch(() => route.path, () => { if (route.params.bizId || route.path.includes('/service/template/')) applyDeepLink() })
 watch(tab, () => { if (bizId.value) loadAll() })
+watch(tplDetailTab, (v) => { if (v === 'instance') loadTplModules() })
 </script>
