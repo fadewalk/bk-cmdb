@@ -50,7 +50,7 @@ const items = [
   { module: '业务同步', desc: '差异展示(增/删/改/属性)、单模块与全量同步、旧版深链', status: 'done' },
 
   { module: '登录与权限(IAM)', desc: '方向已定:对接开源方案体系(OIDC/OAuth2、Casbin 等),不依赖蓝鲸权限中心;另行立项', status: 'doing' },
-  { module: '云资源同步', desc: '云资源发现(依赖云供应商插件,独立模式无后端数据)', status: 'todo' },
+  { module: '云资源', desc: '云账户/管控区域/云资源发现(cloudserver 已纳入核心,实际同步需云厂商凭据)', status: 'done' },
   { module: '容器管理', desc: 'K8s 集群纳管、Pod 详情(kube,依赖容器数据链路)', status: 'todo' }
 ]
 </script>

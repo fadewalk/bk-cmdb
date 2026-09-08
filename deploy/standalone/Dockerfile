@@ -44,7 +44,7 @@ COPY . .
 # 所有 standalone 服务显式以 open_source 配置运行,不依赖腾讯蓝鲸平台。
 RUN set -eux; \
     mkdir -p /out; \
-    targets="apiserver:cmdb_apiserver web_server:cmdb_webserver scene_server/admin_server:cmdb_adminserver scene_server/topo_server:cmdb_toposerver scene_server/host_server:cmdb_hostserver scene_server/proc_server:cmdb_procserver scene_server/event_server:cmdb_eventserver scene_server/task_server:cmdb_taskserver scene_server/datacollection:cmdb_datacollection scene_server/operation_server:cmdb_operationserver source_controller/coreservice:cmdb_coreservice source_controller/cacheservice:cmdb_cacheservice"; \
+    targets="apiserver:cmdb_apiserver web_server:cmdb_webserver scene_server/admin_server:cmdb_adminserver scene_server/topo_server:cmdb_toposerver scene_server/host_server:cmdb_hostserver scene_server/proc_server:cmdb_procserver scene_server/event_server:cmdb_eventserver scene_server/task_server:cmdb_taskserver scene_server/datacollection:cmdb_datacollection scene_server/operation_server:cmdb_operationserver scene_server/cloud_server:cmdb_cloudserver source_controller/coreservice:cmdb_coreservice source_controller/cacheservice:cmdb_cacheservice"; \
     case "${STANDALONE_PROFILE}" in \
       core) ;; \
       cloud) targets="${targets} scene_server/cloud_server:cmdb_cloudserver" ;; \

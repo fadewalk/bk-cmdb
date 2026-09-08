@@ -67,18 +67,27 @@
 
     <!-- 新建云账户(独立模式无云厂商对接,仅录入名称/备注) -->
     <el-dialog v-model="formVisible" title="新建云账户" width="480px">
-      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
-        title="独立部署模式未对接云厂商插件,此处仅保存账户基础信息" />
       <el-form label-width="100px">
         <el-form-item label="账户名称" required>
-          <el-input v-model="form.bk_account_name" />
+          <el-input v-model="form.bk_account_name" placeholder="请输入账户名称" />
         </el-form-item>
-        <el-form-item label="云厂商">
+        <el-form-item label="云厂商" required>
           <el-select v-model="form.bk_cloud_vendor" style="width: 100%">
             <el-option label="AWS" value="1" />
             <el-option label="腾讯云" value="2" />
             <el-option label="阿里云" value="4" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="认证类型" required>
+          <el-select v-model="form.bk_account_type" style="width: 100%">
+            <el-option label="密钥认证" value="api_secret_key" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="SecretId" required>
+          <el-input v-model="form.bk_secret_id" placeholder="云账户访问密钥 ID" />
+        </el-form-item>
+        <el-form-item label="SecretKey" required>
+          <el-input v-model="form.bk_secret_key" type="password" show-password placeholder="云账户访问密钥 Key" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.bk_desc" type="textarea" :rows="2" />
@@ -105,7 +114,7 @@ const page = ref(1)
 const loading = ref(false)
 const saving = ref(false)
 const formVisible = ref(false)
-const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_desc: '' })
+const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_account_type: 'api_secret_key', bk_secret_id: '', bk_secret_key: '', bk_desc: '' })
 
 const VENDORS = { '1': 'AWS', '2': '腾讯云', '4': '阿里云' }
 function vendorName(v) { return VENDORS[String(v)] || '--' }
@@ -124,7 +133,6 @@ async function load() {
     rows.value = data?.info || []
     total.value = data?.count ?? rows.value.length
   } catch {
-    // core profile 无 cmdb_cloudserver,云账户接口不可用(依赖阻塞)
     rows.value = []
     total.value = 0
   } finally { loading.value = false }
@@ -134,14 +142,10 @@ async function submitCreate() {
   if (!String(form.value.bk_account_name || '').trim()) { ElMessage.warning('请填写账户名称'); return }
   saving.value = true
   try {
-    await createCloudAccount({
-      bk_account_name: form.value.bk_account_name,
-      bk_cloud_vendor: form.value.bk_cloud_vendor,
-      bk_desc: form.value.bk_desc
-    })
+    await createCloudAccount({ ...form.value })
     ElMessage.success('云账户已创建')
     formVisible.value = false
-    form.value = { bk_account_name: '', bk_cloud_vendor: '2', bk_desc: '' }
+    
     await load()
   } catch (e) {
     ElMessage.error('创建失败: ' + (e?.message || '后端异常'))

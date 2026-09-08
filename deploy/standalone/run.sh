@@ -88,7 +88,7 @@ fi
 # 注意:--enable-auth 仅部分服务支持(与官方 init.py 生成的启动参数一致),
 #       webserver/taskserver/coreservice 不带该 flag。
 # 业务服务(cloud/synchronize/transfer/event/datacollection/operation)的源码保留;
-# 当前核心 profile 只启动下列 12 个进程,避免把部署裁剪误认为源码删除。
+# 当前核心 profile 启动下列 13 个进程(含云服务),避免把部署裁剪误认为源码删除。
 AUTH_FLAG="--enable-auth=false"
 COMMON="--log-dir=${LOG_DIR} --v=3 --register-ip=127.0.0.1"
 
@@ -110,6 +110,8 @@ start_svc cmdb_datacollection 60005 \
     --addrport=127.0.0.1:60005 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
 start_svc cmdb_operationserver 60011 \
     --addrport=127.0.0.1:60011 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
+start_svc cmdb_cloudserver 60013 \
+    --addrport=127.0.0.1:60013 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG} --enable-cryptor=false
 start_svc cmdb_apiserver 8080 \
     --addrport=127.0.0.1:8080 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
 
@@ -139,7 +141,7 @@ pgrep -a cmdb_ || true
 echo "------------------------------------"
 
 dead=0
-services="cmdb_adminserver cmdb_coreservice cmdb_cacheservice cmdb_toposerver cmdb_hostserver cmdb_procserver cmdb_eventserver cmdb_taskserver cmdb_datacollection cmdb_operationserver cmdb_apiserver cmdb_webserver"
+services="cmdb_adminserver cmdb_coreservice cmdb_cacheservice cmdb_toposerver cmdb_hostserver cmdb_procserver cmdb_eventserver cmdb_taskserver cmdb_datacollection cmdb_operationserver cmdb_apiserver cmdb_cloudserver cmdb_webserver"
 case "${STANDALONE_PROFILE}" in
     cloud) services="${services} cmdb_cloudserver" ;;
     sync) services="${services} cmdb_synchronizeserver" ;;

@@ -48,7 +48,7 @@
 | 主机历史 | `src/ui/src/views/history/` | 无等价深链 | 未迁移 | 变更记录展示、筛选和详情 |
 | 管控区域 | `src/ui/src/views/cloud-area/` | `/resource/cloud-area` | 核心流程 | 表格内编辑、新增、区域选择和错误处理 |
 | 云账户 | `src/ui/src/views/cloud-account/` | `/resource/cloud-account` | 部分迁移 | 新增/编辑/删除、详情侧滑和任务关联 |
-| 云资源发现 | `src/ui/src/views/cloud-resource/` | `/resource/cloud-discover` | 依赖阻塞 | 云账户/VPC/资源选择、任务详情/历史；需云供应商数据 |
+| 云资源发现 | `src/ui/src/views/cloud-resource/` | `/resource/cloud-discover` | 核心流程 | cloudserver 已纳入 core profile;任务/账户管理可用,实际同步需真实云厂商凭据 |
 | 跨业务主机转移 | 业务/主机操作旧版流程 | 业务拓扑「跨业务转移」对话框 | 核心流程 | 目标业务/模块级联选择+确认(/hosts/modules/across/biz);资源池主机走 /hosts/resource/cross/biz 待接 |
 
 ## 模型上下文
@@ -75,7 +75,7 @@
 
 | 模块 | 旧版实现 | 新版状态 | 放行条件 |
 |---|---|---|---|
-| 云资源发现/同步 | `src/ui/src/views/cloud-resource/` | 依赖阻塞 | standalone 或生产环境提供云供应商、账户、VPC 和任务数据链路 |
+| 云资源发现/同步 | `src/ui/src/views/cloud-resource/` | 已接入 core | cmdb_cloudserver 已部署;账户密钥验证与实际同步需真实云厂商凭据和网络 |
 | Pod/容器详情 | `src/ui/src/views/pod-details/` | 依赖阻塞 | Kubernetes 集群纳管和 Pod/容器 API 可用 |
 | 外部 IAM/正式登录 | 旧版 router auth/interceptor(绑定蓝鲸 IAM) | 尚未实现 | **方向已定:对接开源方案体系**(OIDC/OAuth2 IdP、Casbin 等),不依赖蓝鲸权限中心;现有 StandaloneAPIKeyProxy 作为 OpenAPI/服务间鉴权基础;落地前 skip-login 模式验收 |
 
@@ -91,5 +91,6 @@
 8. **第八批（已完成）**：实例导出(修复 web_server 导出空 `$in` 条件的后端缺陷,重编 webserver 二进制,真实导出验证);业务详情页(属性/变更历史)+旧版深链;IAM 方向确认为对接开源方案体系。
 9. **第九批（已完成）**：业务完整 CRUD(新建/编辑/归档/恢复/彻底删除,闭环验证);修复 createBusiness/updateHostProperties 根路径前缀 bug;业务集/项目详情页+旧版深链;项目列表改用专用接口;Roadmap 口径修正。
 10. **第十批（已完成）**：全量 E2E 回归(run-route-smoke + run + b5~b13 共 10 个脚本)全部通过;修复 b6/b8/b9 过期选择器;b11 云账户 500 按 URL 归因标记为预期依赖阻塞(core profile 无 cmdb_cloudserver)。
+11. **第十一批（已完成）**：云功能纳入核心模块——cmdb_cloudserver 编译部署(core profile),云账户 CRUD 打通(密钥不回显);移除前端依赖阻塞降级提示;Dockerfile/run.sh 更新。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。

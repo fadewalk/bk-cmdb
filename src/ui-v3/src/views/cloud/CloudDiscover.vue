@@ -1,7 +1,7 @@
 <template>
   <div class="page-card">
     <el-alert type="warning" :closable="false" style="margin-bottom: 16px"
-      title="云资源发现依赖云供应商对接插件;独立部署模式下未对接云厂商,此功能无数据来源" />
+      title="云资源发现用于定期同步云主机到管控区域;请先在「云账户」录入账户,再新建发现任务" />
 
     <div class="table-toolbar">
       <span style="font-size: 14px; font-weight: 600; color: #313238">发现任务</span>
