@@ -65,8 +65,8 @@ const router = createRouter({
         { path: 'resource/host', name: 'ResourceHost', component: () => import('../views/HostList.vue'), meta: { title: '主机' } },
         { path: 'resource/host/:id', name: 'LegacyResourceHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'resource/host/:business/:id', name: 'LegacyBusinessResourceHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
-        { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/Cloud.vue'), meta: { title: '管控区域', tab: 'area' } },
-        { path: 'resource/cloud-account', name: 'CloudAccount', component: () => import('../views/cloud/Cloud.vue'), meta: { title: '云账户', tab: 'account' } },
+        { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/CloudArea.vue'), meta: { title: '管控区域' } },
+        { path: 'resource/cloud-account', name: 'CloudAccount', component: () => import('../views/cloud/CloudAccount.vue'), meta: { title: '云账户' } },
         { path: 'resource/cloud-discover', name: 'CloudDiscover', component: () => import('../views/cloud/CloudDiscover.vue'), meta: { title: '云资源发现' } },
 
         // 模型

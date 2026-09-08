@@ -19,8 +19,8 @@
     </div>
 
     <el-table :data="filtered" v-loading="loading" stripe>
-      <el-table-column prop="bk_biz_id" label="业务 ID" width="110" sortable />
-      <el-table-column prop="bk_biz_name" label="业务名称" min-width="200" show-overflow-tooltip>
+      <el-table-column prop="bk_biz_id" label="ID" width="100" sortable />
+      <el-table-column prop="bk_biz_name" label="业务名" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_biz_name }}</el-link>
         </template>
@@ -28,18 +28,15 @@
       <el-table-column prop="bk_biz_maintainer" label="运维人员" width="160" show-overflow-tooltip>
         <template #default="{ row }">{{ row.bk_biz_maintainer || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="bk_biz_developer" label="开发人员" width="160" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.bk_biz_developer || '-' }}</template>
+      <el-table-column label="创建时间" width="170">
+        <template #default="{ row }">{{ (row.create_time || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="life_cycle" label="生命周期" width="120">
-        <template #default="{ row }">
-          <el-tag v-if="row.life_cycle === '1'" size="small">测试中</el-tag>
-          <el-tag v-else-if="row.life_cycle === '2'" size="small" type="success">已上线</el-tag>
-          <el-tag v-else-if="row.life_cycle === '3'" size="small" type="info">停运</el-tag>
-          <span v-else>-</span>
-        </template>
+      <el-table-column label="创建人" width="120">
+        <template #default="{ row }">{{ row.bk_created_by || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="time_zone" label="时区" width="150" />
+      <el-table-column label="更新时间" width="170">
+        <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <template v-if="scope === 'normal'">

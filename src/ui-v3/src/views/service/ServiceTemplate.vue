@@ -118,13 +118,16 @@
         <el-button size="small" type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
       </div>
       <el-table :data="filteredSetTemplates" v-loading="setLoading" stripe>
-        <el-table-column prop="id" label="模板 ID" width="110" />
-        <el-table-column prop="name" label="模板名称" min-width="200" />
-        <el-table-column label="绑定的服务模板" min-width="200">
-          <template #default="{ row }">{{ (row.service_template_ids || []).join(', ') || '--' }}</template>
+        <el-table-column prop="id" label="ID" width="90" sortable />
+        <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="apply_count" label="应用数量" width="110">
+          <template #default="{ row }">{{ row.apply_count ?? 0 }}</template>
         </el-table-column>
-        <el-table-column prop="creator" label="创建人" width="130">
-          <template #default="{ row }">{{ row.creator || '-' }}</template>
+        <el-table-column prop="modifier" label="修改人" width="130">
+          <template #default="{ row }">{{ row.modifier || row.creator || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="修改时间" width="170">
+          <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">

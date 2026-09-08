@@ -10,13 +10,22 @@
 
     <template v-if="bizId">
       <el-table :data="groups" v-loading="loading" stripe>
-        <el-table-column prop="id" label="分组 ID" width="110" />
-        <el-table-column prop="name" label="动态分组名称" min-width="200" />
-        <el-table-column prop="bk_user" label="创建人" width="140">
+        <el-table-column prop="name" label="查询名称" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="id" label="ID" width="100" />
+        <el-table-column label="查询对象" width="120">
+          <template #default="{ row }">{{ { host: '主机' }[row.bk_obj_id] || row.bk_obj_id }}</template>
+        </el-table-column>
+        <el-table-column prop="create_user" label="创建用户" width="140">
           <template #default="{ row }">{{ row.bk_user || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="create_time" label="创建时间" width="180">
-          <template #default="{ row }">{{ (row.create_time || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+        <el-table-column prop="create_time" label="创建时间" width="170">
+          <template #default="{ row }">{{ (row.create_time || '').replace('T', ' ').slice(0, 19) }}</template>
+        </el-table-column>
+        <el-table-column prop="modify_user" label="修改人" width="140">
+          <template #default="{ row }">{{ row.modify_user || '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="last_time" label="修改时间" width="170">
+          <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
