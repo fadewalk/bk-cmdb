@@ -45,10 +45,12 @@
 <script setup>
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MENUS, resolveMenuByRoute } from './menu-config'
+import { MENUS, resolveMenuByRoute, menuLinkPath } from './menu-config'
+import { useBizStore } from '../stores/biz'
 
 const route = useRoute()
 const router = useRouter()
+const bizStore = useBizStore()
 const topMenus = MENUS
 
 function isActive(menu) {
@@ -57,7 +59,7 @@ function isActive(menu) {
 }
 
 function goFirst(menu) {
-  if (menu.children?.length) router.push(menu.children[0].path)
+  if (menu.children?.length) router.push(menuLinkPath(menu.children[0], bizStore.bizId))
 }
 
 function onUserCmd(cmd) {

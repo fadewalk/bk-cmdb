@@ -172,7 +172,7 @@ import { useBizStore } from '../../stores/biz'
 
 const route = useRoute()
 const bizStore = useBizStore()
-const routeBizId = computed(() => Number(route.query.biz) || null)
+const routeBizId = computed(() => Number(route.params.bizId) || Number(route.query.biz) || null)
 const bizId = computed(() => routeBizId.value || bizStore.bizId)
 const groups = ref([])
 const loading = ref(false)

@@ -209,7 +209,7 @@ function goDetail(row) {
 }
 
 function goTopo(row) {
-  router.push({ path: '/business/topo', query: { biz: row.bk_biz_id } })
+  router.push({ path: `/business/${row.bk_biz_id}/index` })
 }
 
 function openForm(row) {

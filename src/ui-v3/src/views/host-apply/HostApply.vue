@@ -820,7 +820,7 @@ watch(() => bizStore.bizId, () => { resetWizard(); clearSelection(); loadTree() 
 watch(mode, () => { resetWizard(); clearSelection(); loadTree() })
 
 onMounted(async () => {
-  const legacyBiz = Number(route.query.biz)
+  const legacyBiz = Number(route.params.bizId || route.query.biz)
   if (legacyBiz && bizStore.bizList.some((b) => b.bk_biz_id === legacyBiz)) bizStore.select(legacyBiz)
   const legacyMode = route.query.mode
   if (legacyMode === 'template' || legacyMode === 'module') mode.value = legacyMode

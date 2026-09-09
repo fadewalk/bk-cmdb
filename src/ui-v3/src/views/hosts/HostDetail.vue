@@ -555,7 +555,7 @@ async function saveEdit() {
 
 function goToTopologyForAdd() {
   if (!bizId) { ElMessage.warning('资源池主机无业务模块,请先转移到业务'); return }
-  router.push({ path: '/business/topo', query: { biz: bizId } })
+  router.push({ path: `/business/${bizId}/index` })
 }
 
 async function openSvcProcesses(row) {

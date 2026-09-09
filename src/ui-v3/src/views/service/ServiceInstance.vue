@@ -278,7 +278,7 @@ async function loadModuleOptions() {
 }
 
 function goCreate() {
-  router.push({ path: '/business/topo', query: { action: 'new-svc-instance' } })
+  router.push({ path: `/business/${bizId.value}/index`, query: { action: 'new-svc-instance' } })
 }
 
 // ---------- 新增/编辑进程实例 ----------

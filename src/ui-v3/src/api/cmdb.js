@@ -692,3 +692,8 @@ export const searchSetsByFilter = (bizId, filter, page = { start: 0, limit: 20 }
 export const updateCloudAccount = (id, data) => http.put(`/update/cloud/account/${id}`, data)
 export const searchCloudTasks = (condition, page = { start: 0, limit: 50 }) =>
   http.post('/findmany/cloud/sync/task', { page, ...(condition ? { condition } : {}) })
+
+// ---------- 用户自定义配置(契约对齐老版 userCustom store) ----------
+// 保存为增量合并语义(老版 saveUsercustom 同名接口),读取当前用户全量自定义配置
+export const saveUserCustom = (data) => http.post('/usercustom', data)
+export const searchUserCustom = () => http.post('/usercustom/user/search', {})

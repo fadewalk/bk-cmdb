@@ -195,7 +195,7 @@ import CategoryInput from './children/CategoryInput.vue'
 
 const route = useRoute()
 const bizStore = useBizStore()
-const routeBizId = computed(() => Number(route.query.biz) || null)
+const routeBizId = computed(() => Number(route.params.bizId) || Number(route.query.biz) || null)
 const bizId = computed(() => routeBizId.value || bizStore.bizId)
 
 const loading = ref(false)

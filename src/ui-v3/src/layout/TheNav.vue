@@ -1,95 +1,233 @@
 <template>
-  <nav class="the-nav" :class="{ 'no-child': !currentChild }">
-    <!-- 业务选择器(业务组页面显示,对齐旧版 cmdb-business-mix-selector) -->
-    <div class="biz-selector-wrap" v-if="currentTop?.id === 'business' && currentChild?.biz">
-      <el-select
-        :model-value="bizStore.bizId"
-        filterable
-        placeholder="选择业务"
-        size="small"
-        style="width: 100%"
-        @change="bizStore.select"
-      >
-        <el-option
-          v-for="b in bizStore.bizList"
-          :key="b.bk_biz_id"
-          :label="b.bk_biz_name"
-          :value="b.bk_biz_id"
-        />
-      </el-select>
+  <!-- 旧版 dynamic-navigation.vue 复刻:60px 收起/260px 展开、悬停展开、底部固定按钮 -->
+  <nav
+    class="the-nav"
+    :class="{ unfolded: unfold }"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
+  >
+    <!-- 业务(集)选择器:旧版业务视图下常驻(对齐 cmdb-business-mix-selector) -->
+    <div class="business-wrapper" v-if="currentTop?.id === 'business'">
+      <BizMixSelector
+        v-if="unfold"
+        class="business-selector"
+        :model-value="selectedId"
+        @select="handleToggleBusiness"
+      />
+      <i v-else class="bk-cmdb-icon icon-cc-angle-right business-flag" />
     </div>
 
     <div class="menu-list">
-      <template v-for="child in currentTop?.children || []" :key="child.id">
-        <router-link
-          class="menu-item"
-          :class="{ active: isActive(child) }"
-          :to="child.path"
-        >
-          <i v-if="child.icon" :class="['bk-cmdb-icon', 'menu-icon', child.icon]" />
-          <span class="menu-name">{{ child.name }}</span>
-        </router-link>
-      </template>
+      <router-link
+        v-for="child in currentTop?.children || []"
+        :key="child.id"
+        class="menu-item"
+        :class="{ active: isActive(child) }"
+        :to="menuLinkPath(child, bizStore.bizId)"
+        :title="child.name"
+      >
+        <i v-if="child.icon" :class="['bk-cmdb-icon', 'menu-icon', child.icon]" />
+        <span class="menu-name">{{ child.name }}</span>
+      </router-link>
+    </div>
+
+    <div class="nav-option">
+      <i
+        class="bk-cmdb-icon icon-cc-nav-toggle nav-stick"
+        :class="{ sticked: navStick }"
+        :title="navStick ? '收起导航' : '固定导航'"
+        @click="toggleNavStick"
+      />
     </div>
   </nav>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { resolveMenuByRoute } from './menu-config'
+import { resolveMenuByRoute, menuLinkPath } from './menu-config'
 import { useBizStore } from '../stores/biz'
+import BizMixSelector from '../components/BizMixSelector.vue'
+
+const NAV_STICK_KEY = 'navStick'
 
 const route = useRoute()
 const bizStore = useBizStore()
 
+// 旧版 global store 初始语义:navStick 未写入或非 'false' 时视为固定
+const navStick = ref(localStorage.getItem(NAV_STICK_KEY) !== 'false')
+const navFold = ref(navStick.value === 'false')
+
 const currentTop = computed(() => resolveMenuByRoute(route)?.top || null)
 const currentChild = computed(() => resolveMenuByRoute(route)?.child || null)
+const unfold = computed(() => navStick.value || !navFold.value)
+
+// 旧版混合选择器的值格式为 `${id}-biz`
+const selectedId = computed(() => (bizStore.bizId == null ? '' : `${bizStore.bizId}-biz`))
 
 function isActive(child) {
-  return resolveMenuByRoute(route)?.child?.path === child.path
+  return currentChild.value?.path === child.path
 }
+
+let foldTimer = null
+
+function handleMouseEnter() {
+  if (foldTimer) {
+    clearTimeout(foldTimer)
+    foldTimer = null
+  }
+  navFold.value = false
+}
+
+function handleMouseLeave() {
+  if (foldTimer) clearTimeout(foldTimer)
+  foldTimer = setTimeout(() => {
+    navFold.value = true
+    foldTimer = null
+  }, 300)
+}
+
+function toggleNavStick() {
+  navStick.value = !navStick.value
+  navFold.value = !navStick.value
+  if (navStick.value) localStorage.removeItem(NAV_STICK_KEY)
+  else localStorage.setItem(NAV_STICK_KEY, 'false')
+}
+
+// 旧版 handleToggleBusiness:切换业务(集)后落到对应拓扑页并整页刷新
+function handleToggleBusiness(value, newId, isBizSet) {
+  if (value === selectedId.value) return
+  window.location.hash = isBizSet
+    ? `#/business-set/${newId}/index`
+    : `#/business/${newId}/index`
+  window.location.reload()
+}
+
+onBeforeUnmount(() => {
+  if (foldTimer) clearTimeout(foldTimer)
+})
 </script>
 
 <style scoped>
 .the-nav {
-  width: 260px;
-  flex: 0 0 260px;
+  position: relative;
+  width: 60px;
+  flex: 0 0 auto;
   height: 100%;
   background: #fff;
   border-right: 1px solid #DCDEE5;
-  display: flex;
-  flex-direction: column;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+}
+.the-nav.unfolded {
+  width: 260px;
+}
+.business-wrapper {
+  position: relative;
+  padding: 10px 0;
+  height: 53px;
+  border-bottom: 1px solid #DCDEE5;
+  overflow: hidden;
+}
+.business-selector {
+  display: block;
+  width: 240px;
+  margin: 0 auto;
+}
+.business-flag {
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  font-size: 20px;
+  color: #3A84FF;
+  border: 1px solid #C4C6CC;
+  border-radius: 2px;
+  transform: rotate(90deg);
+}
+.menu-list {
+  height: calc(100% - 123px);
+  padding: 10px 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  white-space: nowrap;
 }
-.biz-selector-wrap {
-  padding: 10px 16px;
-  border-bottom: 1px solid #E7E9EF;
+.menu-list::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
 }
-.menu-list { flex: 1; padding: 6px 0; }
+.menu-list::-webkit-scrollbar-thumb {
+  border-radius: 20px;
+  background: rgba(165, 165, 165, .3);
+  box-shadow: inset 0 0 6px hsla(0, 0%, 80%, .3);
+}
 .menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: block;
+  position: relative;
   height: 42px;
-  padding: 0 20px;
   color: #63656E;
   font-size: 14px;
   text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
 }
-.menu-item:hover { background-color: #F6F6F9; }
+.menu-item:hover {
+  background-color: #F6F6F9;
+}
 .menu-item.active {
   background-color: #E1ECFF;
+}
+.menu-item.active .menu-icon,
+.menu-item.active .menu-name {
   color: #3A84FF;
 }
 .menu-icon {
+  display: inline-block;
+  vertical-align: top;
+  margin: 13px 26px 13px 22px;
   font-size: 16px;
-  width: 16px;
-  text-align: center;
   color: #979BA5;
 }
-.menu-item.active .menu-icon { color: #3A84FF; }
-.menu-name { flex: 1; }
-.the-nav.no-child { display: none; }
+.menu-name {
+  display: inline-block;
+  vertical-align: top;
+  width: calc(100% - 120px);
+  height: 42px;
+  line-height: 42px;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-option {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50px;
+  line-height: 49px;
+  border-top: 1px solid #DCDEE5;
+  font-size: 0;
+  color: #63656E;
+}
+.nav-stick {
+  display: inline-block;
+  vertical-align: middle;
+  width: 32px;
+  height: 32px;
+  margin: 0 0 0 13px;
+  line-height: 32px;
+  text-align: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.nav-stick:hover {
+  opacity: .8;
+}
+.nav-stick.sticked {
+  transform: rotate(180deg);
+}
 </style>

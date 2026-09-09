@@ -1,5 +1,6 @@
 // 一级 / 二级菜单结构:与旧版 src/ui/src/dictionary/menu.js 保持一致
 // icon 取自旧版 bk-icon-cmdb 字体(iconcool.json),在 TheNav 中渲染
+// 业务下七个二级菜单的 path 为旧版同构路由模板(:bizId 在渲染时由 menuLinkPath 注入当前业务 ID)
 export const MENUS = [
   {
     id: 'index',
@@ -12,13 +13,13 @@ export const MENUS = [
     name: '业务',
     icon: 'icon-cc-nav-business',
     children: [
-      { id: 'topo', name: '业务拓扑', icon: 'icon-cc-host', path: '/business/topo', biz: true },
-      { id: 'service-template', name: '服务模板', icon: 'icon-cc-service-template', path: '/business/service-template', biz: true },
-      { id: 'set-template', name: '集群模板', icon: 'icon-cc-set-template', path: '/business/set-template', biz: true },
-      { id: 'service-category', name: '服务分类', icon: 'icon-cc-nav-service-topo', path: '/business/service-category', biz: true },
-      { id: 'host-apply', name: '主机自动应用', icon: 'icon-cc-host-apply', path: '/business/host-apply', biz: true },
-      { id: 'dynamic-group', name: '动态分组', icon: 'icon-cc-custom-query', path: '/business/dynamic-group', biz: true },
-      { id: 'custom-fields', name: '自定义字段', icon: 'icon-cc-custom-field', path: '/business/custom-fields' }
+      { id: 'topo', name: '业务拓扑', icon: 'icon-cc-host', path: '/business/:bizId/index' },
+      { id: 'service-template', name: '服务模板', icon: 'icon-cc-service-template', path: '/business/:bizId/service/template' },
+      { id: 'set-template', name: '集群模板', icon: 'icon-cc-set-template', path: '/business/:bizId/set/template' },
+      { id: 'service-category', name: '服务分类', icon: 'icon-cc-nav-service-topo', path: '/business/:bizId/service/cagetory' },
+      { id: 'host-apply', name: '主机自动应用', icon: 'icon-cc-host-apply', path: '/business/:bizId/host-apply' },
+      { id: 'dynamic-group', name: '动态分组', icon: 'icon-cc-custom-query', path: '/business/:bizId/custom-query' },
+      { id: 'custom-fields', name: '自定义字段', icon: 'icon-cc-custom-field', path: '/business/:bizId/custom-fields' }
     ]
   },
   {
@@ -67,28 +68,47 @@ export const MENUS = [
   }
 ]
 
+// 把菜单模板路径(:bizId)渲染成真实跳转地址;旧版由 getMenuLink 注入 params.bizId
+export function menuLinkPath(child, bizId) {
+  if (!child.path?.includes(':bizId')) return child.path
+  return child.path.replace(':bizId', bizId == null ? '' : String(bizId))
+}
+
+// 逐段匹配路由模板(/business/:bizId/index ↔ /business/3/index)
+function matchSegments(pattern, path) {
+  const patternSegs = pattern.split('/')
+  const pathSegs = path.split('/')
+  if (patternSegs.length !== pathSegs.length) return null
+  const params = {}
+  for (let i = 0; i < patternSegs.length; i += 1) {
+    const seg = patternSegs[i]
+    if (seg.startsWith(':')) params[seg.slice(1)] = decodeURIComponent(pathSegs[i])
+    else if (seg !== pathSegs[i]) return null
+  }
+  return params
+}
+
 export function findMenuByPath(path) {
   for (const top of MENUS) {
-    if (top.path === path) return { top, child: null }
+    if (top.path && matchSegments(top.path, path)) return { top, child: null, params: {} }
     for (const child of top.children || []) {
-      if (child.path === path) return { top, child }
+      const params = matchSegments(child.path, path)
+      if (params) return { top, child, params }
     }
   }
   return null
 }
 
 const LEGACY_ROUTE_FAMILIES = [
-  { pattern: /^\/business\/[^/]+\/index(?:\/.*)?$/, path: '/business/topo' },
-  { pattern: /^\/business\/[^/]+\/host(?:\/.*)?$/, path: '/business/topo' },
-  { pattern: /^\/business\/[^/]+\/pod(?:\/.*)?$/, path: '/business/topo' },
-  { pattern: /^\/business\/[^/]+\/service\/(?:template|operational\/template)(?:\/.*)?$/, path: '/business/service-template' },
-  { pattern: /^\/business\/[^/]+\/set\/(?:template|instance|sync)(?:\/.*)?$/, path: '/business/set-template' },
-  { pattern: /^\/business\/[^/]+\/service\/(?:cagetory|category)(?:\/.*)?$/, path: '/business/service-category' },
-  { pattern: /^\/business\/[^/]+\/host-apply(?:\/.*)?$/, path: '/business/host-apply' },
-  { pattern: /^\/business\/[^/]+\/(?:custom-query|dynamic-group)(?:\/.*)?$/, path: '/business/dynamic-group' },
-  { pattern: /^\/business\/[^/]+\/custom-fields(?:\/.*)?$/, path: '/business/custom-fields' },
+  // 业务视图附属页(主机详情/Pod)在导航上归属业务拓扑
+  { pattern: /^\/business\/[^/]+\/host(?:\/.*)?$/, path: '/business/:bizId/index' },
+  { pattern: /^\/business\/[^/]+\/pod(?:\/.*)?$/, path: '/business/:bizId/index' },
+  // 旧版拼写 category 与规范化前的变体路径
+  { pattern: /^\/business\/[^/]+\/service\/category(?:\/.*)?$/, path: '/business/:bizId/service/cagetory' },
+  // 业务同步为非菜单页,保持与旧版一致(无导航上下文)
   { pattern: /^\/business\/[^/]+\/(?:synchronous|sync)(?:\/.*)?$/, path: '/business/sync' },
-  { pattern: /^\/business\/[^/]+\/service\/(?:instance|delete)(?:\/.*)?$/, path: '/business/topo' },
+  { pattern: /^\/business\/[^/]+\/service\/(?:instance|delete)(?:\/.*)?$/, path: '/business/:bizId/index' },
+  { pattern: /^\/business\/[^/]+\/set\/sync(?:\/.*)?$/, path: '/business/:bizId/set/template' },
   { pattern: /^\/business-set\/[^/]+(?:\/.*)?$/, path: '/biz-set/topo' },
   { pattern: /^\/business\/details\/[^/]+$/, path: '/resource/business' },
   { pattern: /^\/resource\/(?:business-set|biz-set)(?:\/.*)?$/, path: '/resource/biz-set' },
