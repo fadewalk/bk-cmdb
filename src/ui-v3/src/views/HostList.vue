@@ -296,15 +296,14 @@
       </template>
     </el-dialog>
 
-    <!-- 导入主机 -->
     <el-dialog v-model="importVisible" title="导入主机" width="720px" top="6vh">
       <el-alert type="info" :closable="false" style="margin-bottom: 12px"
-        title="支持 CSV 文件上传,或在下方直接粘贴 Excel/CSV 文本" />
+        title="支持 .xlsx/.xls 文件上传,也可直接粘贴 CSV/制表符文本" />
       <div class="import-toolbar">
         <el-upload :auto-upload="false" :limit="1" accept=".csv,.xlsx,.xls" :on-change="onFileChange">
-          <el-button size="small" :icon="'Upload'" :loading="parsing">选择文件并预览</el-button>
+          <el-button size="small" :icon="'Upload'" :loading="parsing">选择 Excel/CSV 并预览</el-button>
         </el-upload>
-        <el-button size="small" @click="downloadTemplate">下载模板</el-button>
+        <el-button size="small" @click="downloadTemplate">下载 Excel 模板</el-button>
         <el-button size="small" type="primary" :loading="importing" :disabled="!parsedRows.length"
           @click="submitImport">导入 ({{ parsedRows.length }} 行)</el-button>
       </div>
@@ -321,6 +320,20 @@
           </template>
         </el-table-column>
       </el-table>
+    </el-dialog>
+
+    <!-- 导入编辑(老版 host-options 导入编辑:真实 xlsx → /hosts/update) -->
+    <el-dialog v-model="importEditVisible" title="导入编辑" width="520px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
+        title="请上传包含 bk_host_id 的 Excel 文件。可先从主机列表导出后修改再上传。" />
+      <el-upload :auto-upload="false" :limit="1" accept=".xlsx,.xls" :on-change="onImportEditFile">
+        <el-button :icon="'Upload'">选择 Excel 文件</el-button>
+      </el-upload>
+      <p v-if="importEditFile" class="selected-file">已选择: {{ importEditFile.name }}</p>
+      <template #footer>
+        <el-button @click="importEditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importEditing" :disabled="!importEditFile" @click="submitImportEdit">开始导入编辑</el-button>
+      </template>
     </el-dialog>
 
     <!-- 批量编辑主机属性(契约: PUT /hosts/batch {...changed, bk_host_id:"1,2"}) -->
@@ -348,9 +361,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import {
   http, listHostsWithoutApp, transferHostModule, transferHostToResource,
-  transferHostsToDirectory, importHosts, listResourceDirectory, deleteHostsBatch, exportHosts,
+  transferHostsToDirectory, importHosts, updateHostsByExcel, downloadHostTemplate, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
   getBizTopoTree, getBizInternalTopo, searchModelAttributes
@@ -717,7 +731,31 @@ async function onCopy(cmd) {
 
 function onBatchEdit(cmd) {
   if (cmd === 'edit') openHostBatchEdit()
-  // importEdit 已有独立入口
+  else if (cmd === 'importEdit') {
+    importEditFile.value = null
+    importEditVisible.value = true
+  }
+}
+
+// ---------- 主机导入编辑(真实 xlsx /hosts/update,对齐老版 import-file 两步流的最终提交) ----------
+const importEditVisible = ref(false)
+const importEditFile = ref(null)
+const importEditing = ref(false)
+function onImportEditFile(file) {
+  importEditFile.value = file?.raw || null
+}
+async function submitImportEdit() {
+  if (!importEditFile.value) return
+  importEditing.value = true
+  try {
+    await updateHostsByExcel(importEditFile.value, { op: 2, bk_biz_id: 0 })
+    ElMessage.success('主机导入编辑成功')
+    importEditVisible.value = false
+    importEditFile.value = null
+    await load()
+  } catch (e) {
+    ElMessage.error('导入编辑失败: ' + (e?.message || '后端异常'))
+  } finally { importEditing.value = false }
 }
 
 // ---------- 批量编辑主机属性(老版 form-multiple 语义:只提交修改字段) ----------
@@ -824,6 +862,7 @@ const importText = ref('')
 const parsedRows = ref([])
 const importing = ref(false)
 const parsing = ref(false)
+const importSourceFile = ref(null)
 
 function parseText() {
   const lines = importText.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -844,21 +883,35 @@ async function onFileChange(uploadFile) {
   if (!uploadFile?.raw) return
   parsing.value = true
   try {
-    const text = await uploadFile.raw.text()
-    importText.value = text
-    parseText()
-    ElMessage.success(`已识别 ${parsedRows.value.length} 行`)
-  } catch (e) { ElMessage.error('文件解析失败') }
+    const file = uploadFile.raw
+    importSourceFile.value = file
+    const isSpreadsheet = /\.(xlsx|xls)$/i.test(file.name || '')
+    if (isSpreadsheet) {
+      // 真正解析 Excel(后端也只接受 xlsx/xls),首个工作表按表头映射字段
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const records = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
+      parsedRows.value = records.map((record) => ({
+        bk_host_innerip: record.IP || record['内网IP'] || record.bk_host_innerip || '',
+        bk_cloud_id: Number(record['云区域ID'] || record.bk_cloud_id || 0),
+        bk_host_name: record['主机名'] || record.bk_host_name || '',
+        bk_os_name: record['操作系统'] || record.bk_os_name || '',
+        __error: ''
+      })).filter((r) => r.bk_host_innerip)
+      ElMessage.success(`已识别 ${parsedRows.value.length} 行 Excel 数据`)
+    } else {
+      importText.value = await file.text()
+      parseText()
+      ElMessage.success(`已识别 ${parsedRows.value.length} 行文本数据`)
+    }
+  } catch (e) { ElMessage.error('文件解析失败: ' + (e?.message || '格式不正确')) }
   finally { parsing.value = false }
 }
 
-function downloadTemplate() {
-  const csv = 'IP,云区域ID,主机名,操作系统\n10.0.0.100,0,host-100,Linux\n10.0.0.101,0,host-101,Windows\n'
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = 'host-template.csv'; a.click()
-  URL.revokeObjectURL(url)
+async function downloadTemplate() {
+  try {
+    await downloadHostTemplate()
+  } catch (e) { ElMessage.error('模板下载失败: ' + (e?.message || '后端异常')) }
 }
 
 async function submitImport() {
@@ -866,12 +919,19 @@ async function submitImport() {
   if (!valid.length) { ElMessage.warning('无可导入的有效行'); return }
   importing.value = true
   try {
-    const csv = ['IP,云区域ID,主机名,操作系统', ...valid.map((r) => `${r.bk_host_innerip},${r.bk_cloud_id},${r.bk_host_name},${r.bk_os_name}`)].join('\n')
-    const file = new File([csv], 'hosts.csv', { type: 'text/csv' })
-    await importHosts(file, {})
+    let file = importSourceFile.value
+    // 文本粘贴仍转换为 CSV 文件;上传的 Excel 原样交给后端 excelize 解析
+    if (!file) {
+      const csv = ['IP,云区域ID,主机名,操作系统', ...valid.map((r) => `${r.bk_host_innerip},${r.bk_cloud_id},${r.bk_host_name},${r.bk_os_name}`)].join('\n')
+      file = new File([csv], 'hosts.csv', { type: 'text/csv' })
+    }
+    const params = { op: 2 }
+    if (currentDirId.value && currentDirId.value !== 'default') params.bk_module_id = Number(currentDirId.value)
+    await importHosts(file, params)
     ElMessage.success(`成功导入 ${valid.length} 台主机`)
     importVisible.value = false
     importText.value = ''
+    importSourceFile.value = null
     parsedRows.value = []
     load()
   } finally { importing.value = false }

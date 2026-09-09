@@ -4,6 +4,18 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 // 路由结构与旧版菜单(dictionary/menu.js)一一对应
 const ComingSoon = () => import('../views/ComingSoon.vue')
 
+const legacyQuery = (to, values = {}) => ({
+  ...to.query,
+  ...Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+})
+
+const legacyBizQuery = (to, extra = {}) => legacyQuery(to, {
+  ...extra,
+  ...(to.params.bizId ? { biz: to.params.bizId } : {})
+})
+
+const legacyStage = (segments) => segments.slice(1).join('/') || undefined
+
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
@@ -33,19 +45,25 @@ const router = createRouter({
         { path: 'business/set-template', name: 'SetTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '集群模板', tab: 'settpl' } },
         { path: 'business/service-category', name: 'ServiceCategory', component: () => import('../views/service-category/Index.vue'), meta: { title: '服务分类' } },
         { path: 'business/host-apply', name: 'HostApply', component: () => import('../views/host-apply/HostApply.vue'), meta: { title: '主机自动应用' } },
+        { path: 'business/:bizId/service-category', name: 'LegacyServiceCategory', redirect: (to) => ({ path: '/business/service-category', query: legacyBizQuery(to) }), meta: { title: '服务分类' } },
+        { path: 'business/:bizId/service/cagetory', name: 'LegacyServiceCagetory', redirect: (to) => ({ path: '/business/service-category', query: legacyBizQuery(to) }), meta: { title: '服务分类' } },
+        { path: 'business/:bizId?/custom-query', name: 'LegacyDynamicGroupByBiz', redirect: (to) => ({ path: '/business/dynamic-group', query: legacyBizQuery(to) }), meta: { title: '动态分组' } },
+        { path: 'custom-query', name: 'LegacyDynamicGroup', redirect: (to) => ({ path: '/business/dynamic-group', query: legacyQuery(to) }), meta: { title: '动态分组' } },
+        { path: 'business/:bizId/service/instance', name: 'LegacyServiceInstance', redirect: (to) => ({ path: '/business/topo', query: legacyBizQuery(to, { tab: 'instance' }) }), meta: { title: '服务实例' } },
+        { path: 'business/:bizId/service/delete/:moduleId?/:ids', name: 'LegacyServiceDelete', redirect: (to) => ({ path: '/business/topo', query: legacyBizQuery(to, { tab: 'instance', deleteIds: to.params.ids, module: to.params.moduleId }) }), meta: { title: '服务实例' } },
         { path: 'business/:bizId/host-apply/:rest(.*)?', name: 'LegacyHostApply', redirect: (to) => {
           const seg = String(to.params.rest || '').split('/').filter(Boolean)
           const mode = ['module', 'template'].includes(seg[0]) ? seg[0] : 'module'
-          return { path: '/business/host-apply', query: { mode } }
+          return { path: '/business/host-apply', query: legacyBizQuery(to, { mode, stage: legacyStage(seg) }) }
         }, meta: { title: '主机自动应用' } },
-        { path: 'business/:bizId/set/template', name: 'LegacySetTpl', redirect: { path: '/business/set-template' }, meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/template/create', name: 'LegacySetTplCreate', redirect: { path: '/business/set-template', query: { action: 'create' } }, meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/template/details/:templateId', name: 'LegacySetTplDetails', redirect: (to) => ({ path: '/business/set-template', query: { action: 'details', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/template/edit/:templateId', name: 'LegacySetTplEdit', redirect: (to) => ({ path: '/business/set-template', query: { action: 'details', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/instance/history/:templateId?', name: 'LegacySetTplHistory', redirect: (to) => ({ path: '/business/set-template', query: { action: 'history', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/sync/:setTemplateId', name: 'LegacySetSync', redirect: (to) => ({ path: '/business/set-template', query: { action: 'sync', templateId: to.params.setTemplateId } }), meta: { title: '集群模板同步' } },
-        { path: 'business/:bizId/synchronous/module/:template/:modules', name: 'LegacyBizSync', redirect: (to) => ({ path: '/business/sync', query: { template: to.params.template, modules: to.params.modules } }), meta: { title: '业务同步' } },
-        { path: 'business/:bizId/sync/service-template/:template/:modules', name: 'LegacyTplSync', redirect: (to) => ({ path: '/business/sync', query: { template: to.params.template, modules: to.params.modules } }), meta: { title: '业务同步' } },
+        { path: 'business/:bizId/set/template', name: 'LegacySetTpl', redirect: (to) => ({ path: '/business/set-template', query: legacyBizQuery(to) }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/template/create', name: 'LegacySetTplCreate', redirect: (to) => ({ path: '/business/set-template', query: legacyBizQuery(to, { action: 'create' }) }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/template/details/:templateId', name: 'LegacySetTplDetails', redirect: (to) => ({ path: '/business/set-template', query: legacyBizQuery(to, { action: 'details', templateId: to.params.templateId }) }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/template/edit/:templateId', name: 'LegacySetTplEdit', redirect: (to) => ({ path: '/business/set-template', query: legacyBizQuery(to, { action: 'edit', templateId: to.params.templateId }) }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/instance/history/:templateId?', name: 'LegacySetTplHistory', redirect: (to) => ({ path: '/business/set-template', query: legacyBizQuery(to, { action: 'history', templateId: to.params.templateId }) }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/sync/:setTemplateId', name: 'LegacySetSync', redirect: (to) => ({ path: '/business/set-template', query: legacyBizQuery(to, { action: 'sync', templateId: to.params.setTemplateId }) }), meta: { title: '集群模板同步' } },
+        { path: 'business/:bizId/synchronous/module/:template/:modules', name: 'LegacyBizSync', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'module' }) }), meta: { title: '业务同步' } },
+        { path: 'business/:bizId/sync/service-template/:template/:modules', name: 'LegacyTplSync', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'service-template' }) }), meta: { title: '业务同步' } },
         { path: 'business/dynamic-group', name: 'DynamicGroup', component: () => import('../views/dynamic-group/DynamicGroup.vue'), meta: { title: '动态分组' } },
         { path: 'business/custom-fields', name: 'CustomFields', component: () => import('../views/custom-fields/CustomFields.vue'), meta: { title: '自定义字段' } },
 
@@ -54,6 +72,7 @@ const router = createRouter({
         { path: 'resource/project', name: 'Project', component: () => import('../views/project/Project.vue'), meta: { title: '项目' } },
         { path: 'resource/project/details/:projectId', name: 'ProjectDetail', component: () => import('../views/project/ProjectDetail.vue'), meta: { title: '项目详情' } },
         { path: 'resource/biz-set', name: 'BizSetList', component: () => import('../views/biz-set/BizSet.vue'), meta: { title: '业务集' } },
+        { path: 'resource/business-set', name: 'LegacyBizSetList', redirect: '/resource/biz-set', meta: { title: '业务集' } },
         { path: 'resource/biz-set/details/:bizSetId', name: 'BizSetDetail', component: () => import('../views/biz-set/BizSetDetail.vue'), meta: { title: '业务集详情' } },
         { path: 'resource/business-set/details/:bizSetId', name: 'LegacyBizSetDetail', redirect: (to) => ({ path: `/resource/biz-set/details/${to.params.bizSetId}` }), meta: { title: '业务集详情' } },
         { path: 'resource/business', name: 'Business', component: () => import('../views/BusinessList.vue'), meta: { title: '业务' } },
@@ -74,11 +93,18 @@ const router = createRouter({
 
         // 模型
         { path: 'model/management', name: 'Models', component: () => import('../views/model/ModelManage.vue'), meta: { title: '模型管理' } },
+        { path: 'model/index', name: 'LegacyModels', redirect: '/model/management', meta: { title: '模型管理' } },
+        { path: 'model/index/details/:modelId', name: 'LegacyModelDetail', redirect: (to) => `/model/management/details/${to.params.modelId}`, meta: { title: '模型详情' } },
         { path: 'model/management/details/:objId', name: 'ModelDetail', component: () => import('../views/model/ModelDetail.vue'), meta: { title: '模型详情' } },
         { path: 'model/topology', name: 'ModelTopology', component: () => import('../views/model/ModelTopology.vue'), meta: { title: '模型拓扑' } },
+        { path: 'model/all/topology/new', name: 'LegacyModelTopology', redirect: '/model/topology', meta: { title: '模型拓扑' } },
         { path: 'model/relation', name: 'ModelRelation', component: () => import('../views/model/AssociationType.vue'), meta: { title: '模型关系', tab: 'relations' } },
         { path: 'model/association', name: 'AssociationTypes', component: () => import('../views/model/AssociationType.vue'), meta: { title: '关联类型', tab: 'types' } },
         { path: 'model/field-template', name: 'FieldTemplate', component: () => import('../views/model/FieldTemplate.vue'), meta: { title: '字段组合模板' } },
+        { path: 'model/field-template/create', name: 'LegacyFieldTemplateCreate', redirect: { path: '/model/field-template', query: { action: 'create' } }, meta: { title: '字段组合模板' } },
+        { path: 'model/field-template/edit/:id', name: 'LegacyFieldTemplateEdit', redirect: (to) => ({ path: '/model/field-template', query: { action: 'edit', id: to.params.id } }), meta: { title: '字段组合模板' } },
+        { path: 'model/field-template/bind/:id', name: 'LegacyFieldTemplateBind', redirect: (to) => ({ path: '/model/field-template', query: { action: 'bind', id: to.params.id } }), meta: { title: '字段组合模板' } },
+        { path: 'model/field-template/sync/:id/model/:modelId', name: 'LegacyFieldTemplateSync', redirect: (to) => ({ path: '/model/field-template', query: { action: 'sync', id: to.params.id, modelId: to.params.modelId } }), meta: { title: '字段组合模板' } },
         { path: 'business/service-instance', name: 'ServiceInstance', component: () => import('../views/service/ServiceInstance.vue'), meta: { title: '服务实例' } },
 
         // 运营分析

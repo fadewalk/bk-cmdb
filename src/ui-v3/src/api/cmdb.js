@@ -174,13 +174,23 @@ export const searchHostsResource = (data) =>
 export const listHostsInIdle = (bizId, data) =>
   http.post(`/hosts/app/${bizId}/list_hosts`, data)
 
-// 批量导入主机(走 multipart/form-data,file + params)
-// 注意: web_server 的 excel 路由挂在根路径(/hosts/import),不在 /api/v3 下,需覆盖 baseURL
+// 主机 Excel 导入(新增): multipart file + params {bk_module_id,op};根路径
 export const importHosts = (file, params) => {
   const form = new FormData()
   form.append('file', file)
   form.append('params', JSON.stringify(params))
   return http.post('/hosts/import', form, {
+    baseURL: '',
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000
+  })
+}
+// 主机 Excel 导入编辑: multipart file + params {bk_biz_id,op};根路径
+export const updateHostsByExcel = (file, params) => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('params', JSON.stringify(params))
+  return http.post('/hosts/update', form, {
     baseURL: '',
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000
@@ -192,6 +202,21 @@ export const deleteHostsBatch = (hostIds) =>
   http.delete('/hosts/batch', {
     data: { bk_host_id: hostIds.join(','), bk_supplier_account: '0' }
   })
+
+// 下载主机导入模板(web_server 生成真实 xlsx;根路径)
+export const downloadHostTemplate = async () => {
+  const res = await http.post('/importtemplate/host', {}, {
+    baseURL: '',
+    responseType: 'blob',
+    timeout: 60000
+  })
+  const url = URL.createObjectURL(res)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'bk_cmdb_host_template.xlsx'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // 导出主机(web_server 生成真实 xlsx;根路径)
 export const exportHosts = async (hostIds, customFields = []) => {

@@ -12,21 +12,21 @@
     <el-table :data="tasks" v-loading="loading" stripe>
       <el-table-column prop="bk_task_name" label="任务名称" min-width="160" show-overflow-tooltip />
       <el-table-column label="资源" width="110">
-        <template #default>--</template>
+        <template #default="{ row }">{{ row.bk_resource_type === 'host' ? '主机' : (row.bk_resource_type || '--') }}</template>
       </el-table-column>
-      <el-table-column prop="bk_account_name" label="账户名称" min-width="140" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.bk_account_name || '--' }}</template>
+      <el-table-column label="账户名称" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ accountName(row.bk_account_id) }}</template>
       </el-table-column>
       <el-table-column label="账户类型" width="120">
-        <template #default="{ row }">{{ ({ '1': 'AWS', '2': '腾讯云', '4': '阿里云' })[row.bk_cloud_vendor] || '--' }}</template>
+        <template #default="{ row }">{{ vendorName(row.bk_cloud_vendor) }}</template>
       </el-table-column>
       <el-table-column label="最近同步状态" width="130">
         <template #default="{ row }">
-          <el-tag size="small" :type="statusTag(row.bk_status)">{{ statusText(row.bk_status) }}</el-tag>
+          <el-tag size="small" :type="statusTag(row.bk_sync_status)">{{ statusText(row.bk_sync_status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="last_time" label="最近同步时间" min-width="170">
-        <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
+      <el-table-column prop="bk_last_sync_time" label="最近同步时间" min-width="170">
+        <template #default="{ row }">{{ fmtTime(row.bk_last_sync_time) }}</template>
       </el-table-column>
       <el-table-column label="编辑人" width="120">
         <template #default="{ row }">{{ row.bk_last_editor || row.bk_creator || '--' }}</template>
@@ -49,13 +49,15 @@
     <el-table :data="accounts" v-loading="loading" stripe>
       <el-table-column prop="bk_account_id" label="账户 ID" width="110" />
       <el-table-column prop="bk_account_name" label="账户名称" min-width="160" />
-      <el-table-column prop="bk_cloud_vendor" label="云厂商" width="140" />
-      <el-table-column prop="bk_desc" label="描述" min-width="160" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.bk_desc || '-' }}</template>
+      <el-table-column prop="bk_cloud_vendor" label="云厂商" width="140">
+        <template #default="{ row }">{{ vendorName(row.bk_cloud_vendor) }}</template>
+      </el-table-column>
+      <el-table-column prop="bk_description" label="描述" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.bk_description || '-' }}</template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
-          <el-button link type="danger" size="small" @click="removeAccount(row)">删除</el-button>
+          <el-button link type="danger" size="small" :disabled="row.bk_can_delete_account === false" @click="removeAccount(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -90,14 +92,18 @@
         </el-form-item>
         <el-form-item label="云厂商" required>
           <el-select v-model="accountForm.vendor" style="width: 100%">
-            <el-option label="AWS" value="aws" />
-            <el-option label="腾讯云" value="tencent" />
-            <el-option label="阿里云" value="aliyun" />
-            <el-option label="华为云" value="huawei" />
+            <el-option label="AWS" value="1" />
+            <el-option label="腾讯云" value="2" />
           </el-select>
         </el-form-item>
+        <el-form-item label="SecretId" required>
+          <el-input v-model="accountForm.secretId" />
+        </el-form-item>
+        <el-form-item label="SecretKey" required>
+          <el-input v-model="accountForm.secretKey" type="password" show-password />
+        </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="accountForm.desc" type="textarea" :rows="2" />
+          <el-input v-model="accountForm.description" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -120,14 +126,26 @@ const saving = ref(false)
 const taskDialog = ref(false)
 const taskForm = ref({ name: '', accountId: null, resourceType: 'host' })
 const accountDialog = ref(false)
-const accountForm = ref({ name: '', vendor: 'aws', desc: '' })
+const accountForm = ref({ name: '', vendor: '2', secretId: '', secretKey: '', description: '' })
 
 function statusText(s) {
-  return { running: '执行中', success: '成功', failed: '失败', waiting: '等待' }[s] || s || '--'
+  return {
+    cloud_sync_success: '成功',
+    cloud_sync_fail: '失败',
+    cloud_sync_in_progress: '执行中',
+    cloud_sync_waiting: '等待'
+  }[s] || s || '--'
 }
 function statusTag(s) {
-  return { success: 'success', failed: 'danger', running: 'warning', waiting: 'info' }[s] || 'info'
+  return { cloud_sync_success: 'success', cloud_sync_fail: 'danger', cloud_sync_in_progress: 'warning', cloud_sync_waiting: 'info' }[s] || 'info'
 }
+function vendorName(v) {
+  return { '1': 'AWS', '2': '腾讯云' }[String(v)] || '--'
+}
+function accountName(id) {
+  return accounts.value.find((a) => a.bk_account_id === id)?.bk_account_name || `账户 #${id ?? '--'}`
+}
+function fmtTime(t) { return t ? String(t).replace('T', ' ').slice(0, 19) : '--' }
 
 async function load() {
   loading.value = true
@@ -136,8 +154,16 @@ async function load() {
       searchCloudAccounts({ start: 0, limit: 100 }),
       listCloudSyncTask({ page: { start: 0, limit: 100 } })
     ])
-    accounts.value = acc.status === 'fulfilled' ? (acc.value?.info || []) : []
-    tasks.value = tk.status === 'fulfilled' ? (tk.value?.info || []) : []
+    if (acc.status === 'fulfilled') accounts.value = acc.value?.info || []
+    else {
+      accounts.value = []
+      ElMessage.error('云账户加载失败: ' + (acc.reason?.message || '后端异常'))
+    }
+    if (tk.status === 'fulfilled') tasks.value = tk.value?.info || []
+    else {
+      tasks.value = []
+      ElMessage.error('发现任务加载失败: ' + (tk.reason?.message || '后端异常'))
+    }
   } catch (e) {
     ElMessage.error('加载失败: ' + (e?.message || '后端异常'))
   } finally {
@@ -147,7 +173,7 @@ async function load() {
 
 function showTaskDetail(row) {
   ElMessageBox.alert(
-    `任务: ${row.bk_task_name || row.task_id}\n云账户: ${row.bk_account_name || '-'}\n状态: ${row.bk_status || '-'}\n最近执行: ${row.last_time || '-'}`,
+    `任务: ${row.bk_task_name || `#${row.bk_task_id ?? '--'}`}\n云账户: ${accountName(row.bk_account_id)}\n状态: ${statusText(row.bk_sync_status)}\n最近执行: ${fmtTime(row.bk_last_sync_time)}`,
     '任务详情',
     { confirmButtonText: '关闭' }
   )
@@ -162,46 +188,54 @@ async function submitTask() {
       bk_task_name: taskForm.value.name,
       bk_account_id: taskForm.value.accountId,
       bk_resource_type: taskForm.value.resourceType || 'host'
-    }).catch(() => {})
-    ElMessage.success('已创建(独立模式可能不持久)')
+    })
+    ElMessage.success('发现任务已创建')
     taskDialog.value = false
     taskForm.value = { name: '', accountId: null, resourceType: 'host' }
     await load()
+  } catch (e) {
+    ElMessage.error('创建发现任务失败: ' + (e?.message || '后端异常'))
   } finally { saving.value = false }
 }
 
 async function submitAccount() {
   if (!accountForm.value.name.trim()) { ElMessage.warning('请输入账户名'); return }
+  if (!accountForm.value.secretId.trim() || !accountForm.value.secretKey.trim()) { ElMessage.warning('请输入 SecretId 和 SecretKey'); return }
   saving.value = true
   try {
     await http.post('/create/cloud/account', {
       bk_account_name: accountForm.value.name,
       bk_cloud_vendor: accountForm.value.vendor,
-      bk_desc: accountForm.value.desc
-    }).catch(() => {})
-    ElMessage.success('已创建(独立模式可能不持久)')
+      bk_account_type: 'api_secret_key',
+      bk_secret_id: accountForm.value.secretId,
+      bk_secret_key: accountForm.value.secretKey,
+      bk_description: accountForm.value.description
+    })
+    ElMessage.success('云账户已创建')
     accountDialog.value = false
-    accountForm.value = { name: '', vendor: 'aws', desc: '' }
+    accountForm.value = { name: '', vendor: '2', secretId: '', secretKey: '', description: '' }
     await load()
+  } catch (e) {
+    ElMessage.error('创建云账户失败: ' + (e?.message || '后端异常'))
   } finally { saving.value = false }
 }
 
 async function removeTask(row) {
-  try { await ElMessageBox.confirm(`确定删除发现任务「${row.bk_task_name || row.task_id}」?`, '删除确认', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm(`确定删除发现任务「${row.bk_task_name || row.bk_task_id}」?`, '删除确认', { type: 'warning' }) } catch { return }
   try {
-    await http.delete(`/delete/cloud/sync/task/${row.task_id}`).catch(() => {})
+    await http.delete(`/delete/cloud/sync/task/${row.bk_task_id}`)
     ElMessage.success('已删除')
     await load()
-  } catch (e) { ElMessage.error('删除失败') }
+  } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
 }
 
 async function removeAccount(row) {
   try { await ElMessageBox.confirm(`确定删除云账户「${row.bk_account_name}」?`, '删除确认', { type: 'warning' }) } catch { return }
   try {
-    await http.delete(`/delete/cloud/account/${row.bk_account_id}`).catch(() => {})
+    await http.delete(`/delete/cloud/account/${row.bk_account_id}`)
     ElMessage.success('已删除')
     await load()
-  } catch (e) { ElMessage.error('删除失败') }
+  } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
 }
 
 onMounted(load)
