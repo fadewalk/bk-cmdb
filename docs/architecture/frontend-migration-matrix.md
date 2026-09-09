@@ -145,3 +145,10 @@
 2. **HostApply 收口**：未应用主机对话框新增「直接应用」（按当前节点现有规则执行，载荷 `additional_rules:[] + changed:true`——后端契约要求无规则变更时必须带 changed 才建任务）；执行失败副标题如实展示任务 ID 并说明后端 status 接口仅返回 `{task_id,status}`（无逐主机失败原因，不伪造）。多目标批量编辑的 `additional_rules` 按目标分别组装此前已达成。
 3. **回归入口统一**：`run-all.cjs` 纳入 b15/b16/b17/b18，失败自动重跑一次并如实报告；b15/b16/b17 适配平铺业务路由→规范 bizId 路由的重定向（hash 比较剥离数字段）；b17 改为自建服务模板夹具（创建→流程→清理，不再依赖外部遗留数据）；b15 云账户段适配 B18 后的「查看抽屉→编辑」路径，SecretID 改为每次运行唯一。
 4. **环境事实**：cmdb-mongodb 被外部以约 1 次/分钟的节奏干净重启（RestartCount 571+，ExitCode=0，无 OOM，宿主机无 crontab），写接口间歇性 1199018/1199998——E2E 失败先重跑再归因。
+
+## 17. 老版转移确认页复刻批次（已完成，2026-09-10，B20）
+
+- **新增路由页** `business/:bizId/host/transfer/:type/:module?`（HostTransfer.vue），1:1 复刻老版 host-operation：已选主机计数 → 转移到（模块 chip + 拓扑路径 tooltip，idle 型「点击修改」、business 型编辑图标重选模块）→ 变更确认（按类型过滤 tab：新增服务实例/删除服务实例/移动到空闲机的主机/属性自动应用，仅显示非空 tab 并带计数徽标）→ 确认转移/取消。面包屑标题按类型变化（转移到空闲模块/业务模块/移除主机/追加主机）。
+- **接口契约**：预览/执行均为 `host/transfer_with_auto_clear_service_instance/bk_biz_id/:bizId`（/preview 与执行体），参数 `is_remove_from_all`、`default_internal_module`、`remove_from_modules`、`add_to_modules`，执行时按老版在有数据的 tab 上附加 `options.service_instance_options` 与 `options.host_apply_trans_rule`；模块路径用 `/find/topopath/biz/:id`。
+- **入口改造**：业务拓扑「转移至」下拉新增「业务模块」项；转移/追加对话框选完目标模块后跳转转移确认页（老版两段式交互），不再直接执行。
+- **验收**：`e2e/run-b20.cjs` 全闭环（建集群/双模块→资源池造主机→分配空闲机→模块A→UI 预览断言 final_modules→执行→清理全链路，0 残留）；转移页新旧截图 judge 对照 pass（含标题、chip、按钮、空态结构）。

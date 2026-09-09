@@ -303,6 +303,14 @@ export const getTopoPath = (bizId, data) =>
 export const getModuleFinalRules = (data) =>
   http.post('/host/findmany/module/get_module_final_rules', data)
 
+// ---------- 主机转移(老版 host-operation 页契约) ----------
+// 预览变更:响应为逐主机数组(to_add_to_modules/to_remove_from_modules/host_apply_plan)
+export const transferPreview = (bizId, data) =>
+  http.post(`/host/transfer_with_auto_clear_service_instance/bk_biz_id/${bizId}/preview`, data)
+// 执行转移:可带 options.service_instance_options / options.host_apply_trans_rule
+export const transferExecute = (bizId, data) =>
+  http.post(`/host/transfer_with_auto_clear_service_instance/bk_biz_id/${bizId}`, data)
+
 // ---------- 云区域 / 云账户 ----------
 // 契约对齐老版:page+condition(+is_fuzzy),host_count/sync_task_ids 由服务端合并返回
 export const searchCloudAreas = (params) =>

@@ -31,6 +31,7 @@ const router = createRouter({
         { path: 'business/:bizId/index', name: 'BusinessTopo', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑' } },
         { path: 'business/:bizId/service/template', name: 'ServiceTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
         { path: 'business/:bizId/set/template', name: 'SetTemplate', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '集群模板', tab: 'settpl' } },
+        { path: 'business/:bizId/host/transfer/:type/:module?', name: 'HostTransfer', component: () => import('../views/hosts/HostTransfer.vue'), meta: { title: '主机转移' } },
         { path: 'business/:bizId/service/cagetory', name: 'ServiceCategory', component: () => import('../views/service-category/Index.vue'), meta: { title: '服务分类' } },
         { path: 'business/:bizId/host-apply', name: 'HostApply', component: () => import('../views/host-apply/HostApply.vue'), meta: { title: '主机自动应用' } },
         { path: 'business/:bizId/custom-query', name: 'DynamicGroup', component: () => import('../views/dynamic-group/DynamicGroup.vue'), meta: { title: '动态分组' } },
@@ -145,6 +146,12 @@ const router = createRouter({
 // 2. 平铺旧路径 → 补齐业务 ID(?biz= 优先,其次上次选择 selectedBusiness,再次首个业务)后重定向到规范路由
 // 3. 规范业务路由 → 同步当前业务到 biz store 与 localStorage(老版同名 key selectedBusiness)
 router.beforeEach(async (to, from) => {
+  // 转移确认页标题随类型变化(老版语义)
+  if (to.name === 'HostTransfer') {
+    to.meta.title = ({
+      idle: '转移到空闲模块', business: '转移到业务模块', remove: '移除主机', increment: '追加主机', add: '添加主机'
+    })[to.params.type] || '主机转移'
+  }
   const isBizView = (location) => location.path.startsWith('/business/')
   const toBizId = Number(to.params.bizId)
   const fromBizId = Number(from.params.bizId)

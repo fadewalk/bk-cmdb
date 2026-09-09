@@ -6,8 +6,8 @@ const e2eDir = path.resolve(__dirname)
 const scripts = [
   'run-route-smoke.cjs', 'run.cjs', 'run-b5.cjs', 'run-b6.cjs', 'run-b7.cjs', 'run-b8.cjs',
   'run-b9.cjs', 'run-b10.cjs', 'run-b11.cjs', 'run-b13.cjs', 'run-b14-column-config.cjs',
-  // A/B/C 批(动态分组/云账户、主机/业务批量编辑、进程模板 bind_info)与 B18 资源/模型域
-  'run-b15-batch-a.cjs', 'run-b16-batch-b.cjs', 'run-b17-batch-c.cjs', 'run-b18.cjs'
+  // A/B/C 批(动态分组/云账户、主机/业务批量编辑、进程模板 bind_info)与 B18/B20 资源模型域、转移确认页
+  'run-b15-batch-a.cjs', 'run-b16-batch-b.cjs', 'run-b17-batch-c.cjs', 'run-b18.cjs', 'run-b20.cjs'
 ]
 
 // cmdb-mongodb 被外部周期性重启(约 1 次/分钟),写接口在重启窗口会失败。

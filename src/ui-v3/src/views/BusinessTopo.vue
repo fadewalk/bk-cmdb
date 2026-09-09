@@ -47,6 +47,7 @@
               <el-button size="small" :disabled="!selectedHosts.length">转移至<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="module">业务模块</el-dropdown-item>
                   <el-dropdown-item command="idle">转移至空闲机池</el-dropdown-item>
                   <el-dropdown-item command="resource">转移到资源池</el-dropdown-item>
                   <el-dropdown-item command="across">跨业务转移</el-dropdown-item>
@@ -868,35 +869,38 @@ async function loadModuleOptions() {
 
 async function doTransfer() {
   if (!targetModule.value) { ElMessage.warning('请选择目标模块'); return }
-  transferring.value = true
-  try {
-    await transferHostModule(bizId.value, selectedHosts.value.map((h) => h.bk_host_id), [targetModule.value], false)
-    ElMessage.success('转移成功')
-    transferVisible.value = false
-    loadHosts()
-    load()
-  } finally {
-    transferring.value = false
-  }
+  // 对齐老版:选完目标模块进入转移确认页(preview→变更确认→执行)
+  transferVisible.value = false
+  router.push({
+    path: `/business/${bizId.value}/host/transfer/${transferType.value}`,
+    query: {
+      resources: selectedHosts.value.map((h) => h.bk_host_id).join(','),
+      targetModules: String(targetModule.value)
+    }
+  })
 }
 
 async function doAppend() {
   if (!appendModule.value) { ElMessage.warning('请选择目标模块'); return }
-  transferring.value = true
-  try {
-    await transferHostModule(bizId.value, selectedHosts.value.map((h) => h.bk_host_id), [appendModule.value], true)
-    ElMessage.success('追加成功')
-    appendVisible.value = false
-    loadHosts()
-  } finally {
-    transferring.value = false
-  }
+  appendVisible.value = false
+  router.push({
+    path: `/business/${bizId.value}/host/transfer/increment`,
+    query: {
+      resources: selectedHosts.value.map((h) => h.bk_host_id).join(','),
+      targetModules: String(appendModule.value)
+    }
+  })
 }
 
 // ---------- 工具栏下拉/筛选/收藏/批量编辑 ----------
+const transferType = ref('business')
 function onTransferCmd(cmd) {
   if (!selectedHosts.value.length) return
   if (cmd === 'idle') {
+    transferType.value = 'idle'
+    transferVisible.value = true
+  } else if (cmd === 'module') {
+    transferType.value = 'business'
     transferVisible.value = true
   } else {
     onHostMore(cmd)
