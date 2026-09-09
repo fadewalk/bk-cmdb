@@ -95,7 +95,20 @@ standalone-docker 分支已实现去蓝鲸部署：登录走 skip-login（自动
 
 当前实现的验收边界：OIDC/Casbin 默认关闭时 standalone 行为与之前一致；启用 OIDC 需要外部兼容 OIDC 的 IdP（Casdoor/Keycloak 等），启用 Casbin 目前提供边缘接口级 RBAC，不宣称已替换所有原有资源级 IAM 语义。
 
-## 5. 总体架构
+## 5.1 第二阶段实现状态：Casbin 策略管理 API
+
+当前已增加以下 web_server API（仅在 `webServer.auth.enabled=true` 时开放）：
+
+- `GET /iam/me/permissions`：返回当前 subject、内存策略和 groupings
+- `GET /iam/policies`：策略管理员查看策略
+- `POST /iam/policies` / `DELETE /iam/policies`：策略管理员增删五元组策略 `[subject, domain, object, action, effect]`
+- `GET /iam/groupings`：查看用户/角色/域绑定
+- `POST /iam/groupings` / `DELETE /iam/groupings`：管理用户角色域绑定
+- `PUT /iam/policy/reload`：当前内存策略实现的幂等 reload/health 入口
+
+默认 bootstrap 策略为 `admin` 全权限，`webServer.auth.bootstrapUsers` 中的用户绑定到 `admin`。当前策略只存在进程内内存，服务重启会恢复配置中的 bootstrap 策略；Mongo 持久化、审计和资源级实例过滤仍是后续阶段，不能将当前骨架描述为完整替代蓝鲸 IAM。
+
+
 
 ```
                      ┌────────────┐

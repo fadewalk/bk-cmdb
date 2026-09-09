@@ -60,6 +60,7 @@ type Service struct {
 	Session   redis.RedisStore
 	NoticeCli noticeCli.ClientI
 	ApiCli    apiserver.ApiServerClientInterface
+	Policy    *authorization.Authorizer
 }
 
 // WebService TODO
@@ -82,6 +83,7 @@ func (s *Service) WebService() *gin.Engine {
 		if err != nil {
 			blog.Fatalf("initialize standalone authorization failed: %v", err)
 		}
+		s.Policy = policy
 		ws.Use(authorization.Middleware(policy, true))
 	}
 	ws.Use(func(c *gin.Context) {
@@ -163,6 +165,14 @@ func (s *Service) initService(ws *gin.Engine) {
 	ws.GET("/user/language/:language", s.UpdateUserLanguage)
 	// get current login user info
 	ws.GET("/userinfo", s.UserInfo)
+	ws.GET("/iam/me/permissions", s.IAMPermissions)
+	ws.GET("/iam/policies", s.IAMPolicies)
+	ws.POST("/iam/policies", s.IAMAddPolicy)
+	ws.DELETE("/iam/policies", s.IAMRemovePolicy)
+	ws.GET("/iam/groupings", s.IAMGroupings)
+	ws.POST("/iam/groupings", s.IAMAddGrouping)
+	ws.DELETE("/iam/groupings", s.IAMRemoveGrouping)
+	ws.PUT("/iam/policy/reload", s.IAMPolicyReload)
 	ws.PUT("/user/current/supplier/:id", s.UpdateSupplier)
 
 	ws.GET("/", s.Index)

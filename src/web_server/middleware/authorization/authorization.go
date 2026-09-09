@@ -44,6 +44,9 @@ func New(cfg options.Authorization) (*Authorizer, error) {
 	if _, err := e.AddPolicy("admin", "*", "*", "*", "allow"); err != nil {
 		return nil, err
 	}
+	if _, err := e.AddGroupingPolicy("admin", "admin", "*"); err != nil {
+		return nil, err
+	}
 	for _, user := range cfg.BootstrapUsers {
 		if strings.TrimSpace(user) == "" {
 			continue
@@ -68,6 +71,43 @@ func (a *Authorizer) Policies() ([][]string, error) {
 	}
 	return a.enforcer.GetPolicy()
 }
+
+func (a *Authorizer) AddPolicy(policy []string) (bool, error) {
+	if a == nil || a.enforcer == nil || len(policy) != 5 {
+		return false, fmt.Errorf("policy must contain 5 fields")
+	}
+	return a.enforcer.AddPolicy(policy)
+}
+
+func (a *Authorizer) RemovePolicy(policy []string) (bool, error) {
+	if a == nil || a.enforcer == nil || len(policy) != 5 {
+		return false, fmt.Errorf("policy must contain 5 fields")
+	}
+	return a.enforcer.RemovePolicy(policy)
+}
+
+func (a *Authorizer) Groupings() ([][]string, error) {
+	if a == nil || a.enforcer == nil {
+		return nil, nil
+	}
+	return a.enforcer.GetGroupingPolicy()
+}
+
+func (a *Authorizer) AddGrouping(subject, role, domain string) (bool, error) {
+	if a == nil || a.enforcer == nil || subject == "" || role == "" {
+		return false, fmt.Errorf("subject and role are required")
+	}
+	return a.enforcer.AddGroupingPolicy(subject, role, domain)
+}
+
+func (a *Authorizer) RemoveGrouping(subject, role, domain string) (bool, error) {
+	if a == nil || a.enforcer == nil || subject == "" || role == "" {
+		return false, fmt.Errorf("subject and role are required")
+	}
+	return a.enforcer.RemoveGroupingPolicy(subject, role, domain)
+}
+
+func Subject(c *gin.Context) string { return subject(c) }
 
 var bizIDPattern = regexp.MustCompile(`(?:^|/)(?:biz|business|project|bk_biz_id)/?(\d+)`)
 

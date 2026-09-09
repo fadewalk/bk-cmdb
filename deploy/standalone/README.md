@@ -58,8 +58,8 @@ profile 只裁剪镜像构建目标和启动进程，不删除公共 API 契约�
 
 | 项 | 原版 | 独立模式 |
 |---|---|---|
-| 登录 | 蓝鲸 PaaS 统一登录 | `skip-login` 免登录(自动以 admin 进入) |
-| 权限 | 蓝鲸权限中心 IAM | `internal` 内置权限 |
+| 登录 | 蓝鲸 PaaS 统一登录 | 默认 `skip-login` 免登录(自动以 admin 进入);可选 `webServer.oidc` 对接 Casdoor/Keycloak 等标准 OIDC IdP |
+| 权限 | 蓝鲸权限中心 IAM | 默认关闭服务内授权(`--enable-auth=false`);可选 `webServer.auth.enabled=true` 启用 web_server Casbin 边缘策略(当前内存策略/接口级 RBAC) |
 | 监控上报 | 蓝鲸监控平台 | `noop` 插件 |
 | 主机身份下发/快照 | GSE | 关闭/待机 |
 | 全文检索 | ES + 日志平台 | 关闭 |
