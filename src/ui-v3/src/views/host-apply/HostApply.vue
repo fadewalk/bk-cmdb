@@ -277,7 +277,7 @@ function nodeIconClass(data) {
 }
 
 function propName(attrId) {
-  const a = attrList.value.find((x) => x.id === attrId)
+  const a = attrList.value.find((x) => x.id === attrId || x.bk_property_id === attrId)
   return a ? a.bk_property_name : `#${attrId}`
 }
 function formatValue(rule) {
@@ -344,7 +344,7 @@ async function loadRules() {
     if (isModule.value) {
       res = await searchHostApplyRules(bizStore.bizId, { bk_module_ids: [currentNode.value.moduleId] })
     } else {
-      res = await searchHostApplyTemplateRules({ service_template_ids: [currentNode.value.templateId] })
+      res = await searchHostApplyTemplateRules({ bk_biz_id: bizStore.bizId, service_template_ids: [currentNode.value.templateId] })
     }
     const list = (res?.info || []).flatMap((entry) => entry.rules || []).filter((r) => !r.is_deleted)
     rules.value = list
@@ -394,11 +394,21 @@ function onAttrSelect(rows) {
   selectedAttrIds.value = rows.map((r) => r.bk_property_id)
 }
 
+function additionalRules() {
+  return selectedAttrIds.value.map((propertyId) => {
+    const attr = attrList.value.find((a) => a.id === propertyId || a.bk_property_id === propertyId)
+    const rule = { bk_attribute_id: attr?.id ?? propertyId, bk_property_value: draftMap.value[propertyId] ?? '' }
+    if (isModule.value) rule.bk_module_id = currentNode.value.moduleId
+    else rule.service_template_id = currentNode.value.templateId
+    return rule
+  })
+}
+
 async function onPreview() {
   if (!selectedAttrIds.value.length) { ElMessage.warning('请至少选择一个字段'); return }
   loadingPreview.value = true
   try {
-    const additional = selectedAttrIds.value.map((id) => ({ bk_attribute_id: id, bk_property_value: draftMap.value[id] ?? '' }))
+    const additional = additionalRules()
     const payload = { bk_biz_id: bizStore.bizId, additional_rules: additional }
     if (isModule.value) payload.bk_module_ids = [currentNode.value.moduleId]
     else payload.service_template_ids = [currentNode.value.templateId]
@@ -415,7 +425,7 @@ async function submitRun() {
   submitting.value = true
   runStatus.value = '提交中'
   try {
-    const additional = selectedAttrIds.value.map((id) => ({ bk_attribute_id: id, bk_property_value: draftMap.value[id] ?? '' }))
+    const additional = additionalRules()
     const payload = { bk_biz_id: bizStore.bizId, additional_rules: additional, changed: true }
     if (isModule.value) payload.bk_module_ids = [currentNode.value.moduleId]
     else payload.service_template_ids = [currentNode.value.templateId]
@@ -478,9 +488,9 @@ async function removeRule(row) {
   await ElMessageBox.confirm(`确定删除规则「${propName(row.bk_attribute_id)}」?`, '删除确认', { type: 'warning' })
   try {
     if (isModule.value) {
-      await deleteHostApplyModuleRules(bizStore.bizId, { data: { host_apply_rule_ids: [row.id], bk_module_ids: [currentNode.value.moduleId] } })
+      await deleteHostApplyModuleRules(bizStore.bizId, { host_apply_rule_ids: [row.id], bk_module_ids: [currentNode.value.moduleId] })
     } else {
-      await deleteHostApplyTemplateRules(bizStore.bizId, { data: { host_apply_rule_ids: [row.id], service_template_ids: [currentNode.value.templateId] } })
+      await deleteHostApplyTemplateRules(bizStore.bizId, { host_apply_rule_ids: [row.id], service_template_ids: [currentNode.value.templateId] })
     }
     ElMessage.success('已删除')
     await loadRules()
