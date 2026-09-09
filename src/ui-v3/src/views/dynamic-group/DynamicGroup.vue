@@ -1,15 +1,15 @@
 <template>
   <div class="page-card">
     <h1 class="page-title sr-only">动态分组</h1>
-    <p class="page-tips">动态分组主要用于定义常用的条件查询，在其他SaaS中可以根据动态分组快速检索目标主机</p>
+    <p v-show="tipsVisible" class="page-tips">动态分组主要用于定义常用的条件查询，在其他SaaS中可以根据动态分组快速检索目标主机<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipsVisible = false" /></p>
     <div class="table-toolbar">
-      <el-button type="primary" :icon="'Plus'" :disabled="!bizId" @click="openEditor()">新建</el-button>
+      <el-button type="primary" :disabled="!bizId" @click="openEditor()">新建</el-button>
       <div class="spacer" />
       <el-input
         v-model="keyword"
         placeholder="请输入查询名称"
         clearable
-        :prefix-icon="'Search'"
+        suffix-icon="Search"
         style="width: 210px"
       />
     </div>
@@ -40,8 +40,12 @@
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :image-size="60" description="暂无数据">
+            <div class="empty-sub">您还未创建动态分组，<el-button link type="primary" :disabled="!bizId" @click="openEditor()">立即创建</el-button></div>
+          </el-empty>
+        </template>
       </el-table>
-      <el-empty v-if="!loading && groups.length === 0" description="您还未创建动态分组,可点击上方「新建」创建" :image-size="80" />
     </template>
     <el-empty v-else description="请先选择业务" />
 
@@ -183,6 +187,7 @@ const routeBizId = computed(() => Number(route.params.bizId) || Number(route.que
 const bizId = computed(() => routeBizId.value || bizStore.bizId)
 const groups = ref([])
 const keyword = ref('')
+const tipsVisible = ref(true)
 // 旧版列表按查询名称本地过滤
 const filteredGroups = computed(() => {
   const k = keyword.value.trim().toLowerCase()
@@ -483,6 +488,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.empty-sub { font-size: 14px; color: #63656E; }
+.tips-close { position: absolute; right: 8px; font-size: 12px; color: #979BA5; cursor: pointer; }
+.tips-close:hover { color: #3A84FF; }
 .editor-layout { display: flex; gap: 16px; height: 100%; }
 .editor-left { flex: 0 0 460px; overflow-y: auto; padding-right: 4px; }
 .editor-right { flex: 1; overflow: hidden; display: flex; flex-direction: column; border-left: 1px solid #E7E9EF; padding-left: 16px; }

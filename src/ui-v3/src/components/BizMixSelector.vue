@@ -12,7 +12,7 @@
     <el-option
       v-for="option in displayList"
       :key="option.id"
-      :label="option.rawName"
+      :label="`${option.rawName} (${option.rawId})`"
       :value="option.id"
     >
       <div class="option-item-content" :title="option.rawName">

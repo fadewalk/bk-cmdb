@@ -97,9 +97,39 @@ body {
   margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0);
   white-space: nowrap; border: 0; flex: none;
 }
+/* 旧版 cmdb-tips 同款:浅蓝底 + 蓝边框圆角 + ⓘ 图标 */
 .page-tips {
-  margin: 0; padding: 10px 20px;
-  font-size: 12px; color: #979BA5;
-  background: #F0F5FF;
-  border-bottom: 1px solid #E7E9EF;
+  position: relative;
+  display: flex; align-items: center; gap: 6px;
+  margin: 15px 20px 10px; padding: 0 40px 0 16px;
+  min-height: 30px; font-size: 12px; color: #63656E;
+  background: #F0F8FF;
+  border: 1px solid #A3C5FD;
+  border-radius: 2px;
 }
+.page-tips::before {
+  content: "\e2f0";
+  font-family: 'bk-cmdb' !important;
+  font-style: normal;
+  font-size: 16px;
+  line-height: 16px;
+  color: #3A84FF;
+  flex: 0 0 16px;
+}
+
+/* 旧版 bk-table 同款:白底表头、整体外边框、12px 字号 */
+.el-table {
+  --el-table-header-bg-color: #FFFFFF;
+  --el-table-header-text-color: #313238;
+  --el-table-border-color: #DCDEE5;
+  --el-table-text-color: #63656E;
+  font-size: 12px;
+  border: 1px solid #DCDEE5;
+}
+.el-table th.el-table__cell {
+  font-weight: 700;
+}
+
+.el-table .el-empty { padding: 24px 0; }
+.el-table .el-empty__description { margin-top: 4px; }
+.el-table { border-radius: 2px; }

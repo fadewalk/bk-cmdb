@@ -1,11 +1,11 @@
 <template>
   <div class="page-card">
-    <p class="page-tips">{{ pageTips }}</p>
+    <p v-show="tipsVisible" class="page-tips">{{ pageTips }}<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipsVisible = false" /></p>
 
     <!-- 服务模板(旧版独立页:新建在左,分类/名称筛选在右,无页内 tab) -->
     <template v-if="tab === 'template' && bizId">
       <div class="table-toolbar filter-bar">
-        <el-button type="primary" :icon="'Plus'" @click="tplFormVisible = true">新建</el-button>
+        <el-button type="primary" @click="goCreate">新建</el-button>
         <div class="spacer" />
         <el-select
           v-model="filterMainCate"
@@ -32,7 +32,7 @@
           placeholder="请输入模板名称"
           clearable
           style="width: 210px"
-          :prefix-icon="'Search'"
+          suffix-icon="Search"
           @input="applyTemplateFilter"
           @clear="applyTemplateFilter"
         />
@@ -43,12 +43,12 @@
         row-class-name="clickable-row"
         @row-click="(row) => showTplDetail(row)"
       >
-        <el-table-column prop="id" label="ID" width="90">
+        <el-table-column prop="id" label="ID" width="90" sortable>
           <template #default="{ row }">
             <span :class="['tpl-id', { 'need-sync': svcSyncIds.has(row.id) }]">{{ row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="模板名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="name" label="模板名称" min-width="180" show-overflow-tooltip sortable />
         <el-table-column label="服务分类" width="180">
           <template #default="{ row }">{{ categoryName(row.service_category_id) }}</template>
         </el-table-column>
@@ -61,34 +61,38 @@
         <el-table-column label="已应用模块数" width="120">
           <template #default="{ row }">{{ row.module_count ?? 0 }}</template>
         </el-table-column>
-        <el-table-column prop="modifier" label="修改人" width="110">
+        <el-table-column prop="modifier" label="修改人" width="110" sortable>
           <template #default="{ row }">{{ row.modifier || row.creator || '-' }}</template>
         </el-table-column>
-        <el-table-column label="修改时间" width="160">
+        <el-table-column label="修改时间" width="160" sortable prop="last_time">
           <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 16) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openEditTpl(row)">编辑</el-button>
-            <el-button link type="primary" @click.stop="cloneTpl(row)">克隆</el-button>
+            <el-button link type="primary" @click.stop="goCreate(row.id)">克隆</el-button>
             <el-button link type="danger" @click.stop="removeTpl(row)">删除</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :image-size="60" description="暂无数据">
+            <div class="empty-sub">您还未创建服务模板，<el-button link type="primary" @click="goCreate">立即创建</el-button></div>
+          </el-empty>
+        </template>
       </el-table>
-      <el-empty v-if="!tplLoading && templates.length === 0" description="该业务暂无服务模板" :image-size="80" />
     </template>
 
     <!-- 集群模板(旧版独立页:新建在左,名称搜索在右) -->
     <template v-if="tab === 'settpl' && bizId">
       <div class="table-toolbar filter-bar">
-        <el-button type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
+        <el-button type="primary" @click="setTplDialog = true">新建</el-button>
         <div class="spacer" />
         <el-input
           v-model="filterName"
           placeholder="请输入模板名称"
           clearable
           style="width: 210px"
-          :prefix-icon="'Search'"
+          suffix-icon="Search"
           @input="applyTemplateFilter"
           @clear="applyTemplateFilter"
         />
@@ -99,19 +103,19 @@
         row-class-name="clickable-row"
         @row-click="(row) => openSetTplDetail(row)"
       >
-        <el-table-column prop="id" label="ID" width="90">
+        <el-table-column prop="id" label="ID" width="90" sortable>
           <template #default="{ row }">
             <span :class="['tpl-id', { 'need-sync': setSyncIds.has(row.id) }]">{{ row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="apply_count" label="应用数量" width="110">
+        <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip sortable />
+        <el-table-column prop="apply_count" label="应用数量" width="110" sortable>
           <template #default="{ row }">{{ row.apply_count ?? 0 }}</template>
         </el-table-column>
-        <el-table-column prop="modifier" label="修改人" width="130">
+        <el-table-column prop="modifier" label="修改人" width="130" sortable>
           <template #default="{ row }">{{ row.modifier || row.creator || '--' }}</template>
         </el-table-column>
-        <el-table-column label="修改时间" width="170">
+        <el-table-column label="修改时间" width="170" sortable prop="last_time">
           <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="130" fixed="right">
@@ -120,8 +124,12 @@
             <el-button link type="danger" @click.stop="removeSetTpl(row)">删除</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :image-size="60" description="暂无数据">
+            <div class="empty-sub">您还未创建集群模板，<el-button link type="primary" @click="setTplDialog = true">立即创建</el-button></div>
+          </el-empty>
+        </template>
       </el-table>
-      <el-empty v-if="!setLoading && setTemplates.length === 0" description="该业务暂无集群模板" :image-size="80" />
 
       <el-dialog v-model="setTplDialog" title="新建集群模板" width="480px">
         <el-form label-width="110px">
@@ -316,7 +324,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
@@ -329,14 +337,16 @@ import {
 import { useBizStore } from '../../stores/biz'
 
 const route = useRoute()
+const router = useRouter()
 const bizStore = useBizStore()
 const bizId = computed(() => bizStore.bizId)
 const bizList = computed(() => bizStore.bizList)
 
 const tab = ref(route.meta.tab || 'template')
+const tipsVisible = ref(true)
 const pageTips = computed(() => tab.value === 'settpl'
-  ? '集群模板用于预定义业务通用的集群,业务拓扑中可批量部署和变更集群'
-  : '服务模板可以预定义业务通用的服务，用于业务拓扑中批量部署和变更服务实例。')
+  ? '集群模板可以定义业务通用的集群结构，用于业务拓扑中快速部署和维护集群。此功能依赖已经存在服务模板。'
+  : '服务模板可以定义业务通用的服务，用于业务拓扑中批量部署和变更服务实例。')
 
 // 路由切换(服务分类/集群模板同组件)时同步 tab
 watch(() => route.meta.tab, (v) => { if (v) tab.value = v })
@@ -596,16 +606,15 @@ async function loadTemplates() {
 async function loadCategories() {
   catLoading.value = true
   try {
-    const data = await searchServiceCategories(bizId.value)
-    // 分类接口返回树形(子分类含 sub_categories),展平为一层
-    const flat = []
-    for (const item of data?.info || []) {
-      const subCount = (item.sub_categories || []).length
-      flat.push({ id: item.category.id, category: item.category, usage_count: item.usage_count, isRoot: true, isLeaf: subCount === 0 })
-      for (const sub of item.sub_categories || []) {
-        flat.push({ id: sub.category.id, category: sub.category, usage_count: sub.usage_count, isRoot: false, isLeaf: true })
-      }
-    }
+    // 旧版契约:扁平列表,父子关系在 bk_parent_id(一级分类 bk_parent_id=0)
+    const data = await http.post('/findmany/proc/service_category', { bk_biz_id: bizId.value })
+    const flat = (data?.info || []).map((c) => ({
+      id: c.id,
+      category: c,
+      usage_count: c.usage_count,
+      isRoot: !c.bk_parent_id,
+      isLeaf: !!c.bk_parent_id
+    }))
     categories.value = flat
   } finally { catLoading.value = false }
 }
@@ -727,6 +736,24 @@ async function loadAll() {
   if (!bizId.value) return
   await Promise.all([loadTemplates(), loadCategories(), loadSetTemplates()])
   loadSyncStatus()
+  loadTemplateCounts()
+}
+
+// 旧版 count_info 契约:按模板批量取进程数量/已应用模块数
+async function loadTemplateCounts() {
+  if (!templates.value.length) return
+  const data = await http.post(`/findmany/proc/service_template/count_info/biz/${bizId.value}`, {
+    service_template_ids: templates.value.map((r) => r.id)
+  }).catch(() => [])
+  const byId = new Set()
+  for (const item of data || []) {
+    byId.add(item.service_template_id)
+    const row = templates.value.find((r) => r.id === item.service_template_id)
+    if (row) {
+      row.process_count = item.process_template_count ?? 0
+      row.module_count = item.module_count ?? 0
+    }
+  }
 }
 
 // 列表待同步红点(旧版契约: svc sync_status/biz + set_template_sync_status)
@@ -752,12 +779,19 @@ async function loadSyncStatus() {
   }
 }
 
+// 旧版新建/克隆跳整页创建(支持 ?clone= 带出模板数据)
+function goCreate(cloneId = null) {
+  const query = cloneId ? { clone: cloneId } : undefined
+  router.push({ path: `/business/${bizId.value}/service/template/create`, query })
+}
+
 // 旧版服务分类列显示 "一级 / 二级" 名称
 function categoryName(id) {
   const sub = categories.value.find((c) => c.category?.id === id)
   if (!sub) return '--'
-  const main = categories.value.find((c) => c.category?.id === sub.category?.bk_parent_id)
-  return `${main?.category?.name ?? '--'} / ${sub.category.name}`
+  if (!sub.category?.bk_parent_id) return sub.category.name
+  const main = categories.value.find((c) => c.category?.id === sub.category.bk_parent_id)
+  return `${main ? main.category.name : '--'} / ${sub.category.name}`
 }
 
 async function showTplDetail(row) {
@@ -942,6 +976,20 @@ watch(tplDetailTab, (v) => { if (v === 'instance') loadTplModules() })
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+}
+.empty-sub {
+  font-size: 14px;
+  color: #63656E;
+}
+.tips-close {
+  position: absolute;
+  right: 8px;
+  font-size: 12px;
+  color: #979BA5;
+  cursor: pointer;
+}
+.tips-close:hover {
+  color: #3A84FF;
 }
 </style>
 

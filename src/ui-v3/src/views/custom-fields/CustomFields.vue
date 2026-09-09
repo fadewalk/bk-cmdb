@@ -3,7 +3,7 @@
     <!-- 顶部功能提示(对齐原版 cmdb-tips) -->
     <div class="cmdb-tips" v-if="featureTips">
       <span>自定义字段：创建的业务专有字段，仅在业务内生效 <i class="req-star">*</i>为必填字段</span>
-      <i class="bk-icon icon-close close-x" @click="featureTips = false" />
+      <i class="bk-cmdb-icon icon-cc-tips-close close-x" @click="featureTips = false" />
     </div>
 
     <!-- Tab 切换:主线模型(原版 ['host', 'set', 'module']) -->
@@ -482,8 +482,17 @@ onMounted(async () => {
 .custom-fields-page { padding: 15px 20px 20px; min-height: 100%; background: #fff; }
 
 .cmdb-tips {
-  background: #f0f8ff; border: 1px solid #d6e8ff; padding: 8px 32px 8px 14px;
-  border-radius: 2px; margin-bottom: 10px; position: relative; font-size: 13px; color: #63656e;
+  display: flex; align-items: center; gap: 6px;
+  background: #F0F8FF; border: 1px solid #A3C5FD; padding: 8px 32px 8px 16px;
+  border-radius: 2px; margin: 15px 20px 10px; position: relative; font-size: 12px; color: #63656E;
+}
+.cmdb-tips::before {
+  content: "\e2f0";
+  font-family: 'bk-cmdb' !important;
+  font-style: normal;
+  font-size: 16px;
+  line-height: 16px;
+  color: #3A84FF;
 }
 .cmdb-tips .close-x { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #979BA5; font-size: 18px; }
 .cmdb-tips .close-x:hover { color: #3a84ff; }

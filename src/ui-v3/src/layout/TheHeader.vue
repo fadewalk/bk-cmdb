@@ -3,7 +3,7 @@
     <div class="logo">
       <router-link class="logo-link" to="/index">
         <span class="logo-icon">C</span>
-        <span class="logo-text">配置平台</span>
+        <span class="logo-text">蓝鲸配置平台</span>
       </router-link>
     </div>
     <nav class="header-nav">
