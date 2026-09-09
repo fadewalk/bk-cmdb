@@ -1,6 +1,5 @@
 <template>
   <div class="page-card category-wrapper" v-loading="loading">
-    <h1 class="page-title">服务分类</h1>
     <p class="page-tips">服务分类用于对服务进行分类管理，支持两级层级（一级分类 / 二级分类），二级分类可关联服务模板。</p>
 
     <div class="category-filter">

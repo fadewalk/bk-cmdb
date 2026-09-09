@@ -1,6 +1,5 @@
 <template>
   <div class="res-index">
-    <h1 class="page-title">资源目录</h1>
     <div class="res-body">
       <!-- 顶部搜索(对齐老版 classify-filter) -->
       <div class="classify-filter">
@@ -160,14 +159,6 @@ onMounted(async () => {
 
 <style scoped>
 .res-index { height: 100%; display: flex; flex-direction: column; background: #fff; overflow-y: auto; }
-.page-title {
-  flex: none;
-  font-size: 16px; color: #313238; font-weight: 400;
-  padding: 0 20px; height: 50px; line-height: 50px;
-  background: #fff;
-  border-bottom: 1px solid #E7E9EF;
-  margin: 0;
-}
 .res-body { flex: 1; padding: 20px 20px 40px; }
 
 .classify-filter { margin-bottom: 20px; }

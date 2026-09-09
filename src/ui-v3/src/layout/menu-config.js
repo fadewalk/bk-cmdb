@@ -103,6 +103,10 @@ const LEGACY_ROUTE_FAMILIES = [
   // 业务视图附属页(主机详情/Pod)在导航上归属业务拓扑
   { pattern: /^\/business\/[^/]+\/host(?:\/.*)?$/, path: '/business/:bizId/index' },
   { pattern: /^\/business\/[^/]+\/pod(?:\/.*)?$/, path: '/business/:bizId/index' },
+  // 组件直出的子页深链(服务模板创建/详情/编辑等)归属各自菜单
+  { pattern: /^\/business\/[^/]+\/service\/template\/.+$/, path: '/business/:bizId/service/template' },
+  { pattern: /^\/business\/[^/]+\/set\/template\/.+$/, path: '/business/:bizId/set/template' },
+  { pattern: /^\/business\/[^/]+\/host-apply\/.+$/, path: '/business/:bizId/host-apply' },
   // 旧版拼写 category 与规范化前的变体路径
   { pattern: /^\/business\/[^/]+\/service\/category(?:\/.*)?$/, path: '/business/:bizId/service/cagetory' },
   // 业务同步为非菜单页,保持与旧版一致(无导航上下文)

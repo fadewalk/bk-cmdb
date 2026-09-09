@@ -1,6 +1,5 @@
 <template>
   <div class="page-card">
-    <h1 class="page-title">{{ pageTitle }}</h1>
     <p class="page-tips">{{ pageTips }}</p>
     <div class="table-toolbar">
       <el-tabs v-model="tab" style="flex: 1">
@@ -347,7 +346,6 @@ const bizId = computed(() => bizStore.bizId)
 const bizList = computed(() => bizStore.bizList)
 
 const tab = ref(route.meta.tab || 'template')
-const pageTitle = computed(() => tab.value === 'settpl' ? '集群模板' : '服务模板')
 const pageTips = computed(() => tab.value === 'settpl'
   ? '集群模板用于预定义业务通用的集群,业务拓扑中可批量部署和变更集群'
   : '服务模板可以预定义业务通用的服务，用于业务拓扑中批量部署和变更服务实例。')

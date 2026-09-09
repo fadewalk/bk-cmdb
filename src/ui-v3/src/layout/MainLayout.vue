@@ -4,7 +4,7 @@
     <div class="app-body">
       <TheNav v-if="showNav" />
       <div class="app-main">
-        <TheBreadcrumbs v-if="showNav" />
+        <TheBreadcrumbs v-if="showBreadcrumbs" />
         <router-view />
       </div>
     </div>
@@ -25,6 +25,11 @@ const bizStore = useBizStore()
 const showNav = computed(() => {
   if (isHomeRoute(route)) return false
   return Boolean(resolveMenuByRoute(route))
+})
+// 旧版所有内页都有标题栏:有菜单上下文,或路由自带 title(如业务同步),首页除外
+const showBreadcrumbs = computed(() => {
+  if (isHomeRoute(route)) return false
+  return showNav.value || Boolean(route.meta.title)
 })
 
 onMounted(() => {
