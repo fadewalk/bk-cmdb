@@ -304,17 +304,26 @@ export const getModuleFinalRules = (data) =>
   http.post('/host/findmany/module/get_module_final_rules', data)
 
 // ---------- 云区域 / 云账户 ----------
-// 独立模式只读云区域,后端 findmany/cloudarea 返回所有区域
-export const searchCloudAreas = (page) =>
-  http.post('/findmany/cloudarea', { page })
+// 契约对齐老版:page+condition(+is_fuzzy),host_count/sync_task_ids 由服务端合并返回
+export const searchCloudAreas = (params) =>
+  http.post('/findmany/cloudarea', params)
+// 批量建管控区域(老版任务表单契约:{data:[...]},响应按行返回 bk_cloud_id/err_msg)
+export const batchCreateCloudArea = (areas) =>
+  http.post('/createmany/cloudarea', { data: areas })
 export const createCloudArea = (info) =>
-  http.post('/createmany/cloudarea', { info: [info] })
+  http.post('/createmany/cloudarea', { data: [info] })
 export const updateCloudArea = (id, info) =>
   http.put(`/update/cloudarea/${id}`, info)
 export const deleteCloudArea = (id) =>
   http.delete(`/delete/cloudarea/${id}`)
-export const searchCloudAccounts = (page) =>
-  http.post('/findmany/cloud/account', { page })
+// 区域主机计数(老版契约:搜索接口不返回 host_count,需单独按批拉取合并)
+export const searchCloudAreaHostCount = (ids) =>
+  http.post('/findmany/cloudarea/hostcount', { bk_cloud_ids: ids })
+export const searchCloudAccounts = (params) =>
+  http.post('/findmany/cloud/account', params)
+// 账户连通性状态(老版状态列契约:err_msg 非空即异常)
+export const searchCloudAccountValidity = (accountIds) =>
+  http.post('/findmany/cloud/account/validity', { account_ids: accountIds })
 export const deleteCloudAccount = (id) =>
   http.delete(`/delete/cloud/account/${id}`)
 export const listCloudSyncTask = (data) =>
@@ -692,6 +701,13 @@ export const searchSetsByFilter = (bizId, filter, page = { start: 0, limit: 20 }
 export const updateCloudAccount = (id, data) => http.put(`/update/cloud/account/${id}`, data)
 export const searchCloudTasks = (condition, page = { start: 0, limit: 50 }) =>
   http.post('/findmany/cloud/sync/task', { page, ...(condition ? { condition } : {}) })
+// ---------- 云资源发现任务(契约对齐老版 cloud/resource store) ----------
+export const createCloudSyncTask = (params) => http.post('/create/cloud/sync/task', params)
+export const updateCloudSyncTask = (id, params) => http.put(`/update/cloud/sync/task/${id}`, params)
+export const deleteCloudSyncTask = (id) => http.delete(`/delete/cloud/sync/task/${id}`)
+export const findCloudSyncRegion = (params) => http.post('/findmany/cloud/sync/region', params)
+export const findCloudAccountVPC = (accountId, params) =>
+  http.post(`/findmany/cloud/account/vpc/${accountId}`, params)
 
 // ---------- 用户自定义配置(契约对齐老版 userCustom store) ----------
 // 保存为增量合并语义(老版 saveUsercustom 同名接口),读取当前用户全量自定义配置

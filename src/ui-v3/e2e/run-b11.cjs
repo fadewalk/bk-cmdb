@@ -54,16 +54,20 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.goto('http://localhost:8090/#/resource/cloud-discover', { waitUntil: 'load' })
     await page.waitForTimeout(3000)
     ok('CloudDiscover 加载')
-    // 应该有 2 个表格:发现任务 + 云账户
+    // 老版结构:单个发现任务表(云账户在独立页管理)
     const tables = await page.locator('.el-table').count()
-    if (tables >= 2) ok(`发现任务 + 云账户共 ${tables} 个表格`)
+    if (tables >= 1) ok(`发现任务表 ${tables} 个`)
     else fail('CloudDiscover 表格', `只 ${tables} 个`)
-    // 任务表头含"任务 ID"和"状态"
+    // 任务表头含"任务名称"和"最近同步状态"
     const taskHeaders = await page.locator('.el-table .cell').allTextContents()
-    const hasTaskId = taskHeaders.some((c) => c.includes('任务 ID'))
-    const hasStatus = taskHeaders.some((c) => c.includes('状态'))
-    if (hasTaskId) ok('发现任务表头含"任务 ID"')
-    if (hasStatus) ok('发现任务表头含"状态"')
+    const hasTaskName = taskHeaders.some((c) => c.includes('任务名称'))
+    const hasStatus = taskHeaders.some((c) => c.includes('最近同步状态'))
+    if (hasTaskName) ok('发现任务表头含"任务名称"')
+    if (hasStatus) ok('发现任务表头含"最近同步状态"')
+    // 工具栏含「新建」按钮(老版契约)
+    const hasCreate = await page.locator('button').filter({ hasText: '新建' }).count()
+    if (hasCreate) ok('任务工具栏含「新建」')
+    else fail('CloudDiscover 工具栏', '缺少「新建」按钮')
     await page.screenshot({ path: path.join(SHOTS, 'B11-cloud-discover.png'), fullPage: true })
 
     console.log('')

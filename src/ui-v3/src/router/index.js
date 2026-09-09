@@ -79,6 +79,7 @@ const router = createRouter({
         { path: 'business/:bizId/sync/service-template/:template/:modules', name: 'TplSyncLegacy', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'service-template' }) }), meta: { title: '业务同步' } },
 
         // 资源
+        { path: 'resource', name: 'ResourceRootLegacy', redirect: '/resource/index', meta: { title: '资源目录' } },
         { path: 'resource/index', name: 'ResourceIndex', component: () => import('../views/resource/ResourceIndex.vue'), meta: { title: '资源目录' } },
         { path: 'resource/project', name: 'Project', component: () => import('../views/project/Project.vue'), meta: { title: '项目' } },
         { path: 'resource/project/details/:projectId', name: 'ProjectDetail', component: () => import('../views/project/ProjectDetail.vue'), meta: { title: '项目详情' } },
@@ -101,8 +102,10 @@ const router = createRouter({
         { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/CloudArea.vue'), meta: { title: '管控区域' } },
         { path: 'resource/cloud-account', name: 'CloudAccount', component: () => import('../views/cloud/CloudAccount.vue'), meta: { title: '云账户' } },
         { path: 'resource/cloud-discover', name: 'CloudDiscover', component: () => import('../views/cloud/CloudDiscover.vue'), meta: { title: '云资源发现' } },
+        { path: 'resource/cloud-resource', name: 'CloudResourceLegacy', redirect: '/resource/cloud-discover', meta: { title: '云资源发现' } },
 
         // 模型
+        { path: 'model', name: 'ModelRootLegacy', redirect: '/model/management', meta: { title: '模型管理' } },
         { path: 'model/management', name: 'Models', component: () => import('../views/model/ModelManage.vue'), meta: { title: '模型管理' } },
         { path: 'model/index', name: 'ModelsLegacy', redirect: '/model/management', meta: { title: '模型管理' } },
         { path: 'model/index/details/:modelId', name: 'ModelDetailLegacy', redirect: (to) => `/model/management/details/${to.params.modelId}`, meta: { title: '模型详情' } },

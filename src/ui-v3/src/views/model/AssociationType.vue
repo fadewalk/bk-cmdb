@@ -1,9 +1,10 @@
 <template>
   <div class="page-card association-page">
     <h1 class="page-title sr-only">关联类型</h1>
-    <div class="feature-tip">
-      关联类型用于定义模型之间的关系，例如“属于”“连接”“运行于”。创建后可在模型关系中使用。
-      <i class="bk-icon icon-close" @click="tipVisible = false" v-if="tipVisible" />
+    <div class="feature-tip" v-if="tipVisible">
+      “关联类型”是模型关联的分类，如主机于交换机、路由之间的关系都可以分类为“上联”类型
+      <el-link type="primary" :underline="false" style="font-size: 12px; margin-left: 8px">更多详情 &gt;&gt;</el-link>
+      <i class="bk-icon icon-close" @click="tipVisible = false" />
     </div>
 
     <div class="relation-toolbar">
@@ -19,7 +20,6 @@
         @keyup.enter="reload"
         @clear="reload"
       />
-      <el-button size="small" :icon="'Search'" @click="reload">搜索</el-button>
     </div>
 
     <el-table
@@ -30,7 +30,9 @@
       class="relation-table"
       @row-click="handleRowClick"
     >
-      <el-table-column prop="bk_asst_id" label="唯一标识" min-width="150" />
+      <el-table-column prop="bk_asst_id" label="唯一标识" min-width="150">
+        <template #default="{ row }"><span class="cell-link">{{ row.bk_asst_id }}</span></template>
+      </el-table-column>
       <el-table-column prop="bk_asst_name" label="名称" min-width="140">
         <template #default="{ row }">{{ row.bk_asst_name || '--' }}</template>
       </el-table-column>
@@ -297,6 +299,7 @@ onMounted(load)
 .search-input { width: 300px; }
 .relation-table :deep(.el-table__row) { cursor: pointer; }
 .disabled-action { color: #C4C6CC; font-size: 12px; margin-right: 12px; cursor: not-allowed; }
+.cell-link { color: #3A84FF; cursor: pointer; }
 .pagination { margin-top: 16px; justify-content: flex-end; }
 .relation-form { padding: 10px 4px 80px; }
 .drawer-footer {

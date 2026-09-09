@@ -84,8 +84,6 @@
         <svg
           ref="svgEl"
           class="graph-svg"
-          :width="svgW"
-          :height="svgH"
           :viewBox="`${vbX} ${vbY} ${viewW} ${viewH}`"
           preserveAspectRatio="xMidYMid meet"
         >
@@ -298,6 +296,7 @@ const selectedModelId = ref(null)
 const selectedEdge = ref(null)
 const hoveredNode = ref(null)
 const relationTypes = ref([])
+const asstNameMap = ref({})
 const relationDetailVisible = ref(false)
 const relationCreateVisible = ref(false)
 const relationSaving = ref(false)
@@ -321,8 +320,6 @@ const STORAGE_KEY = 'bk-cmdb-topology-positions-v1'
 // 画布坐标系(逻辑像素)
 const BASE_W = 1100
 const BASE_H = 560
-const svgW = ref(BASE_W)
-const svgH = ref(BASE_H)
 const vbX = ref(0)
 const vbY = ref(0)
 const viewW = ref(BASE_W)
@@ -417,7 +414,10 @@ function goAssoc(a) {
 async function loadRelationTypes() {
   try {
     const data = await searchAssociationTypes({ page: { start: 0, limit: 200, sort: 'bk_asst_id' } })
-    relationTypes.value = associationItems(data).filter((item) => item.bk_asst_id !== 'bk_mainline')
+    const items = associationItems(data)
+    // 关联类型 id → 中文名映射(含 bk_mainline,拓扑连线标签显示中文名,老版行为)
+    asstNameMap.value = Object.fromEntries(items.map((item) => [item.bk_asst_id, item.bk_asst_name || item.bk_asst_id]))
+    relationTypes.value = items.filter((item) => item.bk_asst_id !== 'bk_mainline')
   } catch (e) {
     relationTypes.value = []
     ElMessage.error('关联类型加载失败: ' + (e?.message || '后端异常'))
@@ -606,7 +606,7 @@ function layout() {
         key: i,
         assocId: a.id,
         assoc: a,
-        label: a.bk_asst_name || a.bk_asst_id,
+        label: asstNameMap.value[a.bk_asst_id] || a.bk_asst_name || a.bk_asst_id,
       x1: placed[a.bk_obj_id].x,
       y1: placed[a.bk_obj_id].y,
       x2: placed[a.bk_asst_obj_id].x,
@@ -841,6 +841,8 @@ onMounted(async () => {
       ElMessage.error('关联数据加载失败: ' + (e?.message || '后端异常'))
     }
     layout()
+    // 布局/缓存位置可能超出初始视窗,加载后自适应缩放避免节点被裁切
+    nextTick(() => fitView())
   } catch (e) {
     modelList.value = []
     classifications.value = []
@@ -924,7 +926,7 @@ onBeforeUnmount(() => {
   cursor: grab;
 }
 .graph-wrap.is-panning { cursor: grabbing; }
-.graph-svg { display: block; }
+.graph-svg { display: block; width: 100%; height: 100%; }
 
 .node-g {
   cursor: pointer;

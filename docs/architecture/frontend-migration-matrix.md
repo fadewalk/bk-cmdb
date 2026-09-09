@@ -97,3 +97,44 @@
 14. **A/B/C/D 批（已完成）**：动态分组完整条件编辑器;云账户编辑/详情/任务关联;主机/业务批量编辑;自定义字段导入项对齐隐藏;进程模板 bind_info 多行;删除历史页;首页搜索落地与 404 已验证。
 
 模块只有在页面、工作流、API 回读、权限/异常、视觉对比和 E2E 全部通过后，才能标记为“完整替代”。在此之前保留旧前端，不删除旧路由。
+
+## 15. 资源与模型域复刻批次（已完成，2026-09-10）
+
+本批次以旧版 `http://localhost:8091` 为行为和视觉基线，新版 `http://localhost:8090` 为交付目标，范围固定为：
+
+### 资源菜单
+
+| 菜单 | 旧版入口 | 新版入口 | 关键验收 |
+|---|---|---|---|
+| 资源目录 | `/resource/index` | `/resource/index` | 分类/模型卡片、实例数量、收藏、内置模型映射、普通模型跳转、加载/空/错态 |
+| 管控区域 | `/resource/cloud-area` | `/resource/cloud-area` | 搜索、分页、排序、状态/主机数、未分配区域保护、删除限制、错误反馈 |
+| 云账户 | `/resource/cloud-account` | `/resource/cloud-account` | 创建、编辑、删除、密钥不回显、详情侧滑、关联同步任务、字段契约 |
+| 云资源发现 | `/resource/cloud-resource` | `/resource/cloud-discover` | 任务/账户列表、创建/编辑/详情/删除、账户/地域/资源/VPC 联动、同步状态和失败态 |
+
+资源域必须保持旧版 query、请求体和接口前缀契约：`/api/v3` API 与 web_server 根路径的导入/导出/table 接口不得混用；主机资源目录及其模型实例、主机详情、删除历史深链不得回归。
+
+### 模型菜单
+
+| 菜单 | 旧版入口 | 新版入口 | 关键验收 |
+|---|---|---|---|
+| 模型管理 | `/model` | `/model/management` | 分类树、模型 CRUD、字段/唯一校验入口、导入导出、收藏/排序、权限/错误态 |
+| 模型拓扑 | `/all/topology/new` | `/model/topology` | 模型/关系加载、节点布局、缩放/拖动/全屏、关联详情、关联 CRUD、内置关系保护 |
+| 关联类型 | `/association` | `/model/association` | 关联类型列表、创建/编辑/删除、使用统计、模型关联展示和错误态 |
+| 字段模板 | `/field-template` | `/model/field-template` | 列表/搜索/分页、创建/编辑/克隆、字段与唯一约束、绑定模型、差异/同步结果、历史/深链 |
+
+### 本批完成门禁
+
+1. 菜单层级、标题、高亮和旧版深链均正确；
+2. 关键主流程具备真实 API 读写闭环，创建/编辑/删除后可回读；
+3. 加载态、空态、错误态、禁用态和依赖阻塞态与旧版语义一致；
+4. 旧版与新版在 1440×900、禁用缓存条件下完成截图对照；
+5. 资源/模型专项 E2E、路由 smoke、构建、`git diff --check` 全部通过；
+6. 测试数据清理完毕后，按功能文件显式提交，不提交 `.playwright-mcp/`、截图和构建产物。
+
+### 实施结果（B18）
+
+- **云域重写**：管控区域补行内改名、服务端模糊搜索/排序、`findmany/cloudarea/hostcount` 主机数合并、未分配置顶、系统限定/主机/同步任务三重删除保护提示；云账户接 `findmany/cloud/account/validity` 状态列（err_msg 异常 tooltip）、服务端搜索、行内查看/删除契约（编辑移入详情抽屉）；云资源发现按老版重构为单任务表 + 详情/编辑抽屉 + VPC 选择器（`findmany/cloud/sync/region`、`findmany/cloud/account/vpc/:id`），保存时按老版契约 `createmany/cloudarea {data:[...]}` 为新 VPC 建管控区域并按行回填 `bk_cloud_id`。
+- **模型域收口**：拓扑连线标签改显关联类型中文名（含 bk_mainline），SVG 改容器自适应宽度修复右缘节点裁切，加载后 fitView；关联类型提示条文案/唯一标识链接样式/搜索框结构对齐；字段模板提示条对齐老版文案，工具栏合并为单搜索框（名称/模型/更新人 OR 过滤）+ 新建。
+- **路由深链**：新增 `/resource` → `/resource/index`、`/resource/cloud-resource` → `/resource/cloud-discover`、`/model` → `/model/management` 重定向。
+- **验收**：专项 `e2e/run-b18.cjs`（重定向/行内改名 API 回读/状态列/任务 CRUD 抽屉/模型四页加载/数据清理）+ b11 适配 + route smoke 全绿；8 组页面截图经三轮 judge 对照全部 pass（遗留修复：hostcount 列、空态单套化、空数据隐藏分页、列宽溢出、拓扑标签中文化与裁切、关联/字段模板文案与工具栏）。
+- 截图基线：`src/ui-v3/screenshots/resource-model/`（old-*/new-* 各 8 张）。

@@ -1,17 +1,21 @@
 <template>
   <div class="page-card field-template-page">
     <h1 class="page-title sr-only">字段组合模板</h1>
-    <p class="page-tips">将一组字段配置复用到多个模型,避免每个模型重复定义相同字段</p>
+    <p class="page-tips">字段组合模板：通过在字段组合模板中设置多个字段，可以将模板绑定到不同的模型中。这样，模型将采用模板中设定的字段作为其属性字段，实现对具有相同设置需求的不同模型字段的集中管理。</p>
 
     <div class="table-toolbar">
-      <el-input v-model="filters.templateName" placeholder="搜索模板名称" size="small" clearable style="width: 210px" @keyup.enter="reload" />
-      <el-input v-model="filters.modelName" placeholder="搜索绑定模型" size="small" clearable style="width: 190px" @keyup.enter="reload" />
-      <el-input v-model="filters.modifier" placeholder="搜索更新人" size="small" clearable style="width: 170px" @keyup.enter="reload" />
-      <el-button type="primary" size="small" :icon="'Search'" @click="reload">查询</el-button>
-      <el-button size="small" @click="clearFilters">重置</el-button>
       <el-button type="primary" size="small" :icon="'Plus'" @click="openDialog()">新建</el-button>
       <div class="spacer" />
-      <el-button size="small" :icon="'Refresh'" @click="load">刷新</el-button>
+      <el-input
+        v-model="searchKeyword"
+        placeholder="请输入模板名称/模型/更新人"
+        size="small"
+        clearable
+        style="width: 300px"
+        :prefix-icon="'Search'"
+        @keyup.enter="reload"
+        @clear="reload"
+      />
     </div>
 
     <el-table :data="rows" v-loading="loading" stripe @row-click="showDetail">
@@ -36,8 +40,10 @@
           </el-tooltip>
         </template>
       </el-table-column>
+      <template #empty>
+        <el-empty description="暂无字段组合模板" :image-size="80" />
+      </template>
     </el-table>
-    <el-empty v-if="!loading && rows.length === 0" description="暂无字段组合模板" :image-size="80" />
     <el-pagination
       v-model:current-page="page"
       v-model:page-size="pageSize"
@@ -159,7 +165,7 @@ const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filters = ref({ templateName: '', modelName: '', modifier: '' })
+const searchKeyword = ref('')
 const modelList = ref([])
 
 const detailVisible = ref(false)
@@ -229,31 +235,47 @@ function formatTime(value) {
   if (!value) return '--'
   return String(value).replace('T', ' ').slice(0, 19)
 }
-function buildFilter(field, value) {
-  return value.trim() ? { condition: 'AND', rules: [{ field, operator: 'like', value: value.trim() }] } : undefined
-}
 async function load() {
   loading.value = true
   try {
+    // 老版为单搜索框(模板名称/模型/更新人):有关键字时取全量在前端做 OR 过滤,否则服务端分页
+    const kw = searchKeyword.value.trim()
+    const searchMode = !!kw
     const data = await searchFieldTemplates({
-      template_filter: buildFilter('name', filters.value.templateName),
-      object_filter: buildFilter('bk_obj_name', filters.value.modelName),
-      page: { start: (page.value - 1) * pageSize.value, limit: pageSize.value, sort: '-last_time' }
+      page: { start: searchMode ? 0 : (page.value - 1) * pageSize.value, limit: searchMode ? 200 : pageSize.value, sort: '-last_time' }
     })
-    rows.value = data?.info || []
-    total.value = data?.count || 0
-    if (rows.value.length) {
-      const ids = rows.value.map((r) => r.id)
+    let list = data?.info || []
+    if (list.length) {
+      const ids = list.map((r) => r.id)
       const [fieldCounts, modelCounts] = await Promise.allSettled([countFieldTemplateAttributes(ids), Promise.all(ids.map((id) => searchFieldTemplateModels(id)))])
       const fieldMap = new Map((fieldCounts.value?.info || fieldCounts.value || []).map((x) => [x.bk_template_id, x.count]))
       const modelMap = new Map()
-      if (modelCounts.status === 'fulfilled') modelCounts.value.forEach((result, index) => modelMap.set(ids[index], result?.count ?? result?.info?.length ?? 0))
-      rows.value = rows.value.map((r) => ({ ...r, field_count: fieldMap.get(r.id) ?? r.field_count ?? 0, model_count: modelMap.get(r.id) ?? r.model_count ?? 0 }))
+      if (modelCounts.status === 'fulfilled') {
+        modelCounts.value.forEach((result, index) => {
+          const models = result?.info || []
+          modelMap.set(ids[index], { count: result?.count ?? models.length, names: models.map((m) => m.bk_obj_name || m.bk_obj_id) })
+        })
+      }
+      list = list.map((r) => {
+        const m = modelMap.get(r.id)
+        return { ...r, field_count: fieldMap.get(r.id) ?? r.field_count ?? 0, model_count: m?.count ?? r.model_count ?? 0, model_names: m?.names || [] }
+      })
+    }
+    if (searchMode) {
+      const needle = kw.toLowerCase()
+      list = list.filter((r) =>
+        (r.name || '').toLowerCase().includes(needle)
+        || (r.modifier || r.creator || '').toLowerCase().includes(needle)
+        || (r.model_names || []).some((n) => String(n).toLowerCase().includes(needle)))
+      total.value = list.length
+      rows.value = list.slice((page.value - 1) * pageSize.value, page.value * pageSize.value)
+    } else {
+      total.value = data?.count || 0
+      rows.value = list
     }
   } catch (e) { ElMessage.error('加载失败: ' + (e?.message || '后端异常')) } finally { loading.value = false }
 }
 function reload() { page.value = 1; load() }
-function clearFilters() { filters.value = { templateName: '', modelName: '', modifier: '' }; reload() }
 function handleSizeChange(size) { pageSize.value = size; page.value = 1; load() }
 async function loadModels() {
   try {

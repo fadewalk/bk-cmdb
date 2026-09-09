@@ -1,9 +1,5 @@
 <template>
   <div class="res-page">
-    <div class="page-head">
-      <span class="page-name">云账户</span>
-    </div>
-
     <div class="page-body">
       <el-alert type="info" :closable="true" style="margin-bottom: 14px">
         <template #title>
@@ -20,40 +16,51 @@
           clearable
           style="width: 280px"
           :prefix-icon="'Search'"
-          @keyup.enter="load"
-          @clear="load"
+          @keyup.enter="reloadFromFirst"
+          @clear="reloadFromFirst"
         />
       </div>
 
-      <el-table :data="filtered" v-loading="loading" stripe>
-        <el-table-column prop="bk_account_name" label="账户名称" min-width="160" show-overflow-tooltip />
-        <el-table-column label="账户类型" width="140">
+      <el-table :data="rows" v-loading="loading" stripe @sort-change="onSortChange" @cell-click="onCellClick">
+        <el-table-column prop="bk_account_name" label="账户名称" sortable="custom" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }"><span class="cell-link">{{ row.bk_account_name }}</span></template>
+        </el-table-column>
+        <el-table-column prop="bk_cloud_vendor" label="账户类型" sortable="custom" width="140">
           <template #default="{ row }">{{ vendorName(row.bk_cloud_vendor) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="100">
-          <template #default>--</template>
-        </el-table-column>
-        <el-table-column label="修改人" prop="bk_updated_by" width="130">
-          <template #default="{ row }">{{ row.bk_updated_by || '--' }}</template>
-        </el-table-column>
-        <el-table-column label="修改时间" width="170">
-          <template #default="{ row }">{{ fmtTime(row.last_time) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
-            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="remove(row)">删除</el-button>
+            <el-tooltip v-if="row.status === 'error' && row.error_message" :content="row.error_message" placement="top">
+              <span class="row-status"><i class="status-dot err" />异常</span>
+            </el-tooltip>
+            <span v-else-if="row.status === 'normal'" class="row-status"><i class="status-dot" />正常</span>
+            <span v-else>--</span>
           </template>
         </el-table-column>
+        <el-table-column prop="bk_last_editor" label="修改人" width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.bk_last_editor || '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="last_time" label="修改时间" sortable="custom" width="170">
+          <template #default="{ row }">{{ fmtTime(row.last_time) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
+            <el-tooltip :disabled="row.bk_can_delete_account !== false" content="云账户已被任务使用，不可删除" placement="top">
+              <span>
+                <el-button link type="danger" size="small" :disabled="row.bk_can_delete_account === false" @click="remove(row)">删除</el-button>
+              </span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无数据" :image-size="60">
+            <el-button link type="primary" @click="formVisible = true">立即创建</el-button>
+          </el-empty>
+        </template>
       </el-table>
 
-      <div v-if="!loading && filtered.length === 0" class="empty-block">
-        <p class="empty-title">暂无数据</p>
-        <p class="empty-sub">您还未创建云账户，<span class="link" @click="formVisible = true">立即创建</span></p>
-      </div>
-
-      <div class="table-footer">
+      <div v-if="total > 0" class="table-footer">
         <span>共计{{ total }}条</span>
         <span class="page-size">每页 20 条</span>
         <div class="spacer" />
@@ -153,6 +160,10 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!detailTasksLoading && detailTasks.length === 0" description="该账户暂未创建同步任务" :image-size="60" />
+        <div class="detail-footer">
+          <el-button @click="detailVisible = false">关闭</el-button>
+          <el-button type="primary" @click="detailVisible = false; openEdit(detailRow)">编辑</el-button>
+        </div>
       </template>
     </el-drawer>
   </div>
@@ -160,11 +171,11 @@
 
 <script setup>
 // 云账户:独立页面对齐老版 resource/cloud-account(空态/新建/删除)
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchCloudAccounts, createCloudAccount, deleteCloudAccount,
-  updateCloudAccount, searchCloudTasks
+  updateCloudAccount, searchCloudTasks, searchCloudAccountValidity
 } from '../../api/cmdb'
 
 const keyword = ref('')
@@ -173,6 +184,7 @@ const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
 const saving = ref(false)
+const sort = ref('bk_account_id')
 const formVisible = ref(false)
 const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_account_type: 'api_secret_key', bk_secret_id: '', bk_secret_key: '', bk_description: '' })
 
@@ -188,22 +200,57 @@ const VENDORS = { '1': 'AWS', '2': '腾讯云', '4': '阿里云' }
 function vendorName(v) { return VENDORS[String(v)] || '--' }
 function fmtTime(t) { return t ? String(t).replace('T', ' ').slice(0, 19) : '--' }
 
-const filtered = computed(() =>
-  keyword.value.trim()
-    ? rows.value.filter((r) => (r.bk_account_name || '').includes(keyword.value.trim()))
-    : rows.value
-)
+function reloadFromFirst() {
+  page.value = 1
+  load()
+}
+
+function onSortChange({ prop, order }) {
+  sort.value = order ? (order === 'descending' ? '-' : '') + prop : 'bk_account_id'
+  reloadFromFirst()
+}
+
+function onCellClick(row, column) {
+  if (column.property === 'bk_account_name') openDetail(row)
+}
 
 async function load() {
   loading.value = true
   try {
-    const data = await searchCloudAccounts({ start: (page.value - 1) * 20, limit: 20 })
-    rows.value = data?.info || []
+    const kw = keyword.value.trim()
+    const data = await searchCloudAccounts({
+      page: { start: (page.value - 1) * 20, limit: 20, sort: sort.value },
+      condition: kw ? { bk_account_name: kw } : {},
+      ...(kw ? { is_fuzzy: true } : {})
+    })
+    // 老版契约:行先带 pending 态,再异步取连通性回填状态列
+    rows.value = (data?.info || []).map((r) => ({ ...r, status: 'pending', error_message: '' }))
     total.value = data?.count ?? rows.value.length
+    loadStatus()
   } catch {
     rows.value = []
     total.value = 0
   } finally { loading.value = false }
+}
+
+// 连通性状态(老版 getStatus 契约:err_msg 非空即异常)
+async function loadStatus() {
+  if (!rows.value.length) return
+  try {
+    const results = await searchCloudAccountValidity(rows.value.map((r) => r.bk_account_id))
+    rows.value.forEach((row) => {
+      const status = (results || []).find((r) => r.bk_account_id === row.bk_account_id)
+      if (status && status.err_msg) {
+        row.status = 'error'
+        row.error_message = status.err_msg
+      } else {
+        row.status = 'normal'
+        row.error_message = ''
+      }
+    })
+  } catch {
+    rows.value.forEach((row) => { row.status = 'fail'; row.error_message = '' })
+  }
 }
 
 async function submitCreate() {
@@ -297,4 +344,12 @@ onMounted(load)
 }
 .table-footer .spacer { flex: 1; }
 .detail-task-title { font-size: 13px; font-weight: 600; color: #313238; margin: 16px 0 8px; }
+.cell-link { color: #3A84FF; cursor: pointer; }
+.row-status { display: inline-flex; align-items: center; }
+.status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #2DCB56; margin-right: 6px;
+}
+.status-dot.err { background: #EA3636; }
+.detail-footer { display: flex; justify-content: center; gap: 8px; padding-top: 20px; }
 </style>
