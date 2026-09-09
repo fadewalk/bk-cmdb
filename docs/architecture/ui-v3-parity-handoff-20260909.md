@@ -21,7 +21,7 @@
 
 ### 当前是否已经重新构建并启动？
 
-分两部分看：
+> **2026-09-09 更新（业务导航 parity 批次后）**：`src/ui-v3` 已重新构建，最新 dist 已 `docker cp` 到容器 `/data/cmdb/cmdb_webserver/web`，容器内 `cmdb_webserver` 已重启，8090 已确认返回最新 index.html（哈希与本地 dist 一致）。本节以下原文描述的是更新前的状态，仅作历史记录。
 
 1. **前端源码构建：已完成**
    ```bash
@@ -40,6 +40,16 @@
 > 如果要让浏览器/8090 使用本轮最新前端，必须按第 3 节重新构建或部署 dist，并重启容器内 `cmdb_webserver`。仅运行 `npm run build` 不会改变正在运行的容器内容。
 
 ## 2. 本轮已完成的 parity 工作
+
+### 2.0 业务导航交互契约批次（2026-09-09 晚，commit 81d3239e2a）
+
+业务一级导航下七个二级菜单（业务拓扑/服务模板/集群模板/服务分类/主机自动应用/动态分组/自定义字段）从"仅菜单同名"补齐为旧版交互契约：
+
+- 规范 URL 恢复旧版语义：`/business/:bizId/index`、`/business/:bizId/service/template`、`/business/:bizId/set/template`、`/business/:bizId/service/cagetory`、`/business/:bizId/host-apply`、`/business/:bizId/custom-query`、`/business/:bizId/custom-fields`；旧平铺路径（`/business/topo` 等）由全局守卫补齐业务 ID（`?biz=` → localStorage `selectedBusiness` → 业务列表首个）后重定向。
+- 复刻旧版 `business-interceptor`：业务视图间切换业务整页刷新；规范路由同步 biz store 与 localStorage。
+- 新增 `BizMixSelector`（对齐旧版 `cmdb-business-mix-selector`）：业务+业务集混合下拉、`name (id)` 展示、业务集角标、收藏星标置顶（`POST /usercustom` 持久化，key `business_selector_collection`）、底部新建业务/业务集入口。切换业务(集)后落到对应拓扑页并整页刷新。
+- 复刻旧版 `dynamic-navigation` 折叠交互：默认 260px；取消固定后 60px 仅图标，悬停展开、移开 300ms 收回；底部固定按钮按旧版 `navStick` localStorage 语义持久化。
+- 已知取舍：下拉未做旧版的滚动分页与拼音搜索（standalone 数据量小）；业务集列表经 `/findmany/biz_set` 读取。
 
 ### 2.1 主机详情历史记录
 
