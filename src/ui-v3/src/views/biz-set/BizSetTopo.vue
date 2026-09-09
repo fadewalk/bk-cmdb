@@ -107,19 +107,17 @@ async function loadBizsInSet() {
   if (!activeSet.value) return
   bizLoading.value = true
   try {
-    // biz_set_id 用 condition 过滤业务列表
     const data = await searchBusiness({ start: 0, limit: 200 })
     const all = data?.info || []
-    // 后端搜索条件没法直接传 bk_biz_set_id(老版靠后端 filter 字段),独立模式简单客户端按 bk_biz_maintainer 之外不强筛
-    // 这里根据业务集 ID 关联:有些后端字段 bk_biz_set_id 在 bk_biz_info
-    bizsInSet.value = all.filter((b) => {
-      // 优先看业务本身有无 bk_biz_set_id 字段
-      if (b.bk_biz_set_id) return b.bk_biz_set_id === activeSet.value.bk_biz_set_id
-      // 没有就回退:第一个业务集下显示全部(独立模式简化)
-      return true
-    })
-    if (!bizsInSet.value.length) {
-      ElMessage.info(`业务集「${activeSet.value.bk_biz_set_name}」下未查询到业务(独立模式后端可能未支持按业务集过滤)`)
+    const relationKey = activeSet.value.bk_biz_set_id
+    const hasRelation = all.some((b) => b.bk_biz_set_id !== undefined && b.bk_biz_set_id !== null)
+    bizsInSet.value = hasRelation
+      ? all.filter((b) => String(b.bk_biz_set_id) === String(relationKey))
+      : []
+    if (!hasRelation) {
+      ElMessage.warning(`业务集「${activeSet.value.bk_biz_set_name}」缺少业务关联数据，未展示未确认归属的业务`)
+    } else if (!bizsInSet.value.length) {
+      ElMessage.info(`业务集「${activeSet.value.bk_biz_set_name}」下未查询到业务`)
     }
   } catch (e) {
     ElMessage.error('业务列表加载失败')

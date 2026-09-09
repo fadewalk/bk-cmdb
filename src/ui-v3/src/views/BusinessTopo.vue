@@ -523,7 +523,7 @@ import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, createModule, deleteModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
-  searchServiceInstances, deleteServiceInstances, searchProcessInstances, createInstanceLabels,
+  searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   searchModelAttributes, exportHosts,
   http
@@ -1295,8 +1295,8 @@ async function openInstanceDrawer(row) {
 async function refreshProcesses() {
   procLoading.value = true
   try {
-    const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
-    processes.value = data?.info || []
+    const data = await searchProcessInstances(procInstId.value, { start: 0, limit: 100 })
+    processes.value = data?.info || data || []
   } finally {
     procLoading.value = false
   }
@@ -1331,13 +1331,11 @@ async function saveProcess() {
     if (procEditing.value) {
       const pid = info.bk_process_id
       delete info.bk_process_id
-      await http.post('/update/proc/process_instance/by_ids', {
-        bk_biz_id: bizId.value, process_ids: [pid], update_data: info
-      })
+      await updateProcessInstance(bizId.value, [pid], info)
       ElMessage.success('进程已更新')
     } else {
       delete info.bk_process_id
-      await createProcessInstance(bizId.value, procInstId.value, info)
+      await createProcessInstance(procInstId.value, info)
       ElMessage.success('进程已创建')
     }
     procFormVisible.value = false

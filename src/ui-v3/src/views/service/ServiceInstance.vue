@@ -165,7 +165,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, deleteServiceInstances, searchProcessInstances,
-  listHostsWithNoSvcInst, createProcessInstance, createInstanceLabels, deleteInstanceLabels,
+  listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, deleteInstanceLabels,
   getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
@@ -277,11 +277,7 @@ async function saveProcess() {
     if (procEditing.value) {
       const pid = info.bk_process_id
       delete info.bk_process_id
-      await http.post('/update/proc/process_instance/by_ids', {
-        bk_biz_id: bizId.value,
-        process_ids: [pid],
-        update_data: info
-      })
+      await updateProcessInstance(bizId.value, [pid], info)
       ElMessage.success('进程已更新')
     } else {
       delete info.bk_process_id

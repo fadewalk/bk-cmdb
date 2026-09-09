@@ -142,7 +142,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchFieldTemplates, getFieldTemplate, searchFieldTemplateAttributes, countFieldTemplateAttributes,
@@ -151,6 +152,8 @@ import {
   syncFieldTemplateToModels, searchModels, searchModelAttributes
 } from '../../api/cmdb'
 
+const route = useRoute()
+const router = useRouter()
 const rows = ref([])
 const loading = ref(false)
 const page = ref(1)
@@ -190,8 +193,38 @@ const filteredAttrs = computed(() => {
   if (!kw) return availableAttrs.value
   return availableAttrs.value.filter((a) => `${a.bk_property_id} ${a.bk_property_name}`.toLowerCase().includes(kw))
 })
-const bindableModels = computed(() => modelList.value.filter((m) => !boundModels.value.some((b) => b.id === m.id)))
+const bindableModels = computed(() => modelList.value.filter((m) => !boundModels.value.some((b) => String(b.bk_obj_id || b.id) === String(m.bk_obj_id || m.id))))
 
+function clearLegacyQuery() {
+  const query = { ...route.query }
+  delete query.action
+  delete query.id
+  delete query.modelId
+  router.replace({ path: route.path, query })
+}
+async function applyLegacyAction() {
+  const action = String(route.query.action || '')
+  const id = Number(route.query.id)
+  if (!action) return
+  try {
+    if (action === 'create') {
+      await openDialog()
+    } else if (id) {
+      const row = rows.value.find((item) => Number(item.id) === id) || { id }
+      if (action === 'edit') await openDialog(row)
+      if (action === 'bind') await openBindDialog(row)
+      if (action === 'sync') {
+        detail.value = row
+        await loadDetailData(id)
+        detailVisible.value = true
+        detailTab.value = 'models'
+        await syncModels()
+      }
+    }
+  } finally {
+    clearLegacyQuery()
+  }
+}
 function formatTime(value) {
   if (!value) return '--'
   return String(value).replace('T', ' ').slice(0, 19)
@@ -316,18 +349,22 @@ async function openBindDialog(row) {
 async function doBind() {
   if (!newBindModelId.value) return
   saving.value = true
-  try { await bindFieldTemplateModels(bindTarget.value.id, [...boundModels.value.map((m) => m.id), newBindModelId.value]); ElMessage.success('绑定成功'); newBindModelId.value = null; await openBindDialog(bindTarget.value); await load(); if (detail.value?.id === bindTarget.value.id) await loadDetailData(detail.value.id) } catch (e) { ElMessage.error('绑定失败: ' + (e?.message || '后端异常')) } finally { saving.value = false }
+  try { await bindFieldTemplateModels(bindTarget.value.id, [...boundModels.value.map((m) => m.bk_obj_id || m.id), newBindModelId.value]); ElMessage.success('绑定成功'); newBindModelId.value = null; await openBindDialog(bindTarget.value); await load(); if (detail.value?.id === bindTarget.value.id) await loadDetailData(detail.value.id) } catch (e) { ElMessage.error('绑定失败: ' + (e?.message || '后端异常')) } finally { saving.value = false }
 }
 async function unbindModel(model) {
   await ElMessageBox.confirm(`确定解除「${model.bk_obj_name || model.bk_obj_id}」与模板的绑定?`, '解绑', { type: 'warning' })
-  try { await unbindFieldTemplateModel(bindTarget.value?.id || detail.value.id, model.id); ElMessage.success('已解绑'); if (bindTarget.value) await openBindDialog(bindTarget.value); if (detail.value?.id) await loadDetailData(detail.value.id); await load() } catch (e) { ElMessage.error('解绑失败: ' + (e?.message || '后端异常')) }
+  try { await unbindFieldTemplateModel(bindTarget.value?.id || detail.value.id, model.bk_obj_id || model.id); ElMessage.success('已解绑'); if (bindTarget.value) await openBindDialog(bindTarget.value); if (detail.value?.id) await loadDetailData(detail.value.id); await load() } catch (e) { ElMessage.error('解绑失败: ' + (e?.message || '后端异常')) }
 }
 async function syncModels() {
   if (!detail.value?.id || !detailModels.value.length) return
   syncing.value = true
-  try { await syncFieldTemplateToModels({ bk_template_id: detail.value.id, object_ids: detailModels.value.map((m) => m.id) }); ElMessage.success('同步任务已提交') } catch (e) { ElMessage.error('同步失败: ' + (e?.message || '后端异常')) } finally { syncing.value = false }
+  try { await syncFieldTemplateToModels({ bk_template_id: detail.value.id, object_ids: detailModels.value.map((m) => m.bk_obj_id || m.id) }); ElMessage.success('同步任务已提交') } catch (e) { ElMessage.error('同步失败: ' + (e?.message || '后端异常')) } finally { syncing.value = false }
 }
-onMounted(async () => { await loadModels(); await load() })
+onMounted(async () => {
+  await loadModels()
+  await load()
+  await applyLegacyAction()
+})
 </script>
 
 <style scoped>

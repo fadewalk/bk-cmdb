@@ -77,6 +77,12 @@ export const createProcessInstance = (serviceInstanceId, processInfo) =>
     service_instance_id: serviceInstanceId,
     processes: [{ process_info: processInfo }]
   })
+export const updateProcessInstance = (bizId, processIds, updateData) =>
+  http.put('/update/proc/process_instance/by_ids', {
+    bk_biz_id: bizId,
+    process_ids: processIds,
+    update_data: updateData
+  })
 
 // ---------- 主机 ----------
 function buildHostBody(page, fields, filter) {

@@ -363,7 +363,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import {
-  http, listHostsWithoutApp, transferHostModule, transferHostToResource,
+  http, listHostsWithoutApp, transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   transferHostsToDirectory, importHosts, updateHostsByExcel, downloadHostTemplate, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
@@ -702,6 +702,14 @@ async function doTransfer() {
     if (transferType.value === 'idle') {
       await transferHostToResource(bizStore.bizId || 0, selectedHosts.value.map((h) => h.bk_host_id))
       ElMessage.success('已转入空闲机池')
+    } else if (transferType.value === 'across') {
+      const srcBiz = bizStore.bizId
+      if (!srcBiz || !targetBiz.value || !targetModule.value) {
+        ElMessage.warning('请选择目标业务与模块')
+        return
+      }
+      await transferBizHostAcrossBiz(srcBiz, targetBiz.value, selectedHosts.value.map((h) => h.bk_host_id), targetModule.value)
+      ElMessage.success('跨业务转移成功')
     } else {
       const biz = effectiveBiz.value
       await transferHostModule(biz, selectedHosts.value.map((h) => h.bk_host_id), [targetModule.value], isIncrement.value)
