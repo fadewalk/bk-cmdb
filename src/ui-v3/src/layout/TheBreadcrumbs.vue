@@ -11,10 +11,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { findMenuByPath } from './menu-config'
+import { resolveMenuByRoute, isHomeRoute } from './menu-config'
 
 const route = useRoute()
-const menu = computed(() => findMenuByPath(route.path))
+const menu = computed(() => isHomeRoute(route) ? null : resolveMenuByRoute(route))
 const title = computed(() => {
   const m = menu.value
   if (!m) return ''

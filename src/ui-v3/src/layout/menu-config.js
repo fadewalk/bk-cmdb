@@ -76,3 +76,52 @@ export function findMenuByPath(path) {
   }
   return null
 }
+
+const LEGACY_ROUTE_FAMILIES = [
+  { pattern: /^\/business\/[^/]+\/index(?:\/.*)?$/, path: '/business/topo' },
+  { pattern: /^\/business\/[^/]+\/host(?:\/.*)?$/, path: '/business/topo' },
+  { pattern: /^\/business\/[^/]+\/pod(?:\/.*)?$/, path: '/business/topo' },
+  { pattern: /^\/business\/[^/]+\/service\/(?:template|operational\/template)(?:\/.*)?$/, path: '/business/service-template' },
+  { pattern: /^\/business\/[^/]+\/set\/(?:template|instance|sync)(?:\/.*)?$/, path: '/business/set-template' },
+  { pattern: /^\/business\/[^/]+\/service\/(?:cagetory|category)(?:\/.*)?$/, path: '/business/service-category' },
+  { pattern: /^\/business\/[^/]+\/host-apply(?:\/.*)?$/, path: '/business/host-apply' },
+  { pattern: /^\/business\/[^/]+\/(?:custom-query|dynamic-group)(?:\/.*)?$/, path: '/business/dynamic-group' },
+  { pattern: /^\/business\/[^/]+\/custom-fields(?:\/.*)?$/, path: '/business/custom-fields' },
+  { pattern: /^\/business\/[^/]+\/(?:synchronous|sync)(?:\/.*)?$/, path: '/business/sync' },
+  { pattern: /^\/business\/[^/]+\/service\/(?:instance|delete)(?:\/.*)?$/, path: '/business/topo' },
+  { pattern: /^\/business-set\/[^/]+(?:\/.*)?$/, path: '/biz-set/topo' },
+  { pattern: /^\/business\/details\/[^/]+$/, path: '/resource/business' },
+  { pattern: /^\/resource\/(?:business-set|biz-set)(?:\/.*)?$/, path: '/resource/biz-set' },
+  { pattern: /^\/resource\/project(?:\/.*)?$/, path: '/resource/project' },
+  { pattern: /^\/resource\/(?:biz-set|business-set)(?:\/.*)?$/, path: '/resource/biz-set' },
+  { pattern: /^\/resource\/business(?:\/.*)?$/, path: '/resource/business' },
+  { pattern: /^\/resource\/host(?:\/.*)?$/, path: '/resource/host' },
+  { pattern: /^\/resource\/instance(?:\/.*)?$/, path: '/resource/index' },
+  { pattern: /^\/resource\/(?:catalog|history)(?:\/.*)?$/, path: '/resource/index' },
+  { pattern: /^\/resource\/cloud-area(?:\/.*)?$/, path: '/resource/cloud-area' },
+  { pattern: /^\/resource\/cloud-account(?:\/.*)?$/, path: '/resource/cloud-account' },
+  { pattern: /^\/resource\/cloud-discover(?:\/.*)?$/, path: '/resource/cloud-discover' },
+  { pattern: /^\/host-detail$/, path: '/resource/host' },
+  { pattern: /^\/model\/management\/details(?:\/.*)?$/, path: '/model/management' },
+  { pattern: /^\/model\/index(?:\/.*)?$/, path: '/model/management' },
+  { pattern: /^\/model\/all\/topology(?:\/.*)?$/, path: '/model/topology' },
+  { pattern: /^\/platform-management(?:\/.*)?$/, path: '/platform/global-config' }
+]
+
+/**
+ * Resolve the same menu context for canonical routes and legacy deep links.
+ * The resolver is shared by the shell so a deep link cannot lose its nav context.
+ */
+export function resolveMenuByRoute(route) {
+  const path = typeof route === 'string' ? route : route?.path || ''
+  const exact = findMenuByPath(path)
+  if (exact) return exact
+
+  const family = LEGACY_ROUTE_FAMILIES.find((item) => item.pattern.test(path))
+  return family ? findMenuByPath(family.path) : null
+}
+
+export function isHomeRoute(route) {
+  const path = typeof route === 'string' ? route : route?.path || ''
+  return path === '/index' || path === '/'
+}

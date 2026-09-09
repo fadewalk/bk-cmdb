@@ -37,23 +37,24 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { findMenuByPath } from './menu-config'
+import { resolveMenuByRoute } from './menu-config'
 import { useBizStore } from '../stores/biz'
 
 const route = useRoute()
 const bizStore = useBizStore()
 
-const currentTop = computed(() => findMenuByPath(route.path)?.top || null)
-const currentChild = computed(() => findMenuByPath(route.path)?.child || null)
+const currentTop = computed(() => resolveMenuByRoute(route)?.top || null)
+const currentChild = computed(() => resolveMenuByRoute(route)?.child || null)
 
 function isActive(child) {
-  return route.path === child.path
+  return resolveMenuByRoute(route)?.child?.path === child.path
 }
 </script>
 
 <style scoped>
 .the-nav {
-  width: 240px;
+  width: 260px;
+  flex: 0 0 260px;
   height: 100%;
   background: #fff;
   border-right: 1px solid #DCDEE5;
@@ -70,7 +71,7 @@ function isActive(child) {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 40px;
+  height: 42px;
   padding: 0 20px;
   color: #63656E;
   font-size: 14px;

@@ -18,8 +18,16 @@ async function openHash(page, hash, expectHash = hash, timeout = 30000) {
   console.log(`  … 导航 ${hash}${expectHash !== hash ? ` (期望重定向到 ${expectHash})` : ''}`)
   await page.evaluate((url) => { window.location.assign(url) }, `${BASE}/${hash}`)
   await page.waitForFunction(
-    (expected) => window.location.href.split('#')[1] === expected,
-    expectHash.replace(/^#/, ''),
+    (expected) => {
+      const normalize = (hash) => {
+        const raw = hash.replace(/^#/, '')
+        const [path, query = ''] = raw.split('?')
+        const params = [...new URLSearchParams(query).entries()].sort(([a], [b]) => a.localeCompare(b))
+        return `${path}?${new URLSearchParams(params)}`.replace(/\?$/, '')
+      }
+      return normalize(window.location.href.split('#')[1] || '/') === normalize(expected)
+    },
+    expectHash,
     { timeout }
   )
   // hash 稳定后再等一拍,让旧页面的异步请求排队结束
@@ -42,7 +50,7 @@ async function openHash(page, hash, expectHash = hash, timeout = 30000) {
 
   try {
     await page.goto(`${BASE}/#/index`, { waitUntil: 'networkidle', timeout: 30000 })
-    await page.locator('input').first().fill('10.0.0.1')
+    await page.locator('input, textarea').first().fill('10.0.0.1')
     await page.locator('button').filter({ hasText: '搜索' }).click()
     await page.waitForTimeout(500)
     assert(routePath(page).startsWith('/resource/host'), `首页搜索错误跳转: ${routePath(page)}`)
@@ -104,9 +112,9 @@ async function openHash(page, hash, expectHash = hash, timeout = 30000) {
     assert(routePath(page).startsWith('/platform/global-config'), `旧版平台管理路径未重定向: ${routePath(page)}`)
     await openHash(page, '#/business/1/host-apply/template')
     assert(!routePath(page).startsWith('/404') && routePath(page).includes('mode=template'), `旧版 host-apply 深链未兼容: ${routePath(page)}`)
-    await openHash(page, '#/business/1/set/sync/5', '#/business/set-template?action=sync&templateId=5')
+    await openHash(page, '#/business/1/set/sync/5', '#/business/set-template?action=sync&templateId=5&biz=1')
     assert(routePath(page).startsWith('/business/set-template'), `旧版 set-sync 深链未兼容: ${routePath(page)}`)
-    await openHash(page, '#/business/1/synchronous/module/7/12,13', '#/business/sync?template=7&modules=12,13')
+    await openHash(page, '#/business/1/synchronous/module/7/12,13', '#/business/sync?template=7&modules=12,13&biz=1&source=module')
     assert(!routePath(page).startsWith('/404') && routePath(page).includes('/business/sync'), `旧版业务同步深链未兼容: ${routePath(page)}`)
     await openHash(page, '#/business/details/2', '#/resource/business/details/2')
     assert(routePath(page).startsWith('/resource/business/details/'), `旧版业务详情深链未兼容: ${routePath(page)}`)

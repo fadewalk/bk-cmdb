@@ -17,18 +17,14 @@ import { useRoute } from 'vue-router'
 import TheHeader from './TheHeader.vue'
 import TheNav from './TheNav.vue'
 import TheBreadcrumbs from './TheBreadcrumbs.vue'
-import { findMenuByPath } from './menu-config'
+import { resolveMenuByRoute, isHomeRoute } from './menu-config'
 import { useBizStore } from '../stores/biz'
 
 const route = useRoute()
 const bizStore = useBizStore()
 const showNav = computed(() => {
-  if (findMenuByPath(route.path)) return true
-  // 资源目录子路由 /resource/catalog/:objId 视为资源类
-  if (route.path.startsWith('/resource/')) return true
-  // 主机详情
-  if (route.path === '/host-detail') return true
-  return false
+  if (isHomeRoute(route)) return false
+  return Boolean(resolveMenuByRoute(route))
 })
 
 onMounted(() => {

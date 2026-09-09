@@ -43,18 +43,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MENUS } from './menu-config'
+import { MENUS, resolveMenuByRoute } from './menu-config'
 
 const route = useRoute()
 const router = useRouter()
 const topMenus = MENUS
 
 function isActive(menu) {
-  if (menu.path) return route.path === menu.path
-  return route.path.startsWith(`/${menu.id}`)
+  const resolved = resolveMenuByRoute(route)
+  return resolved?.top?.id === menu.id
 }
 
 function goFirst(menu) {
@@ -77,7 +76,7 @@ function onUserCmd(cmd) {
   background-color: #182132;
   z-index: 1002;
 }
-.logo { flex: 200px 0 0; }
+.logo { flex: 292px 0 0; }
 .logo-link {
   display: inline-flex; align-items: center; gap: 10px;
   height: 58px; margin-left: 24px; color: #fff; font-size: 16px; text-decoration: none;
