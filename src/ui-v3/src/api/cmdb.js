@@ -273,7 +273,10 @@ export const setHostApplyTemplateEnabled = (bizId, data) =>
   http.put(`/updatemany/proc/service_template/host_apply_enable_status/biz/${bizId}`, data)
 // 未应用主机数
 export const getInvalidHostCount = (bizId, data) =>
-  http.post('/host/findmany/module/host_apply_plan/invalid_host_count', data)
+  http.post('/host/findmany/module/host_apply_plan/invalid_host_count', { bk_biz_id: bizId, ...data })
+// 未应用主机数(服务模板)
+export const getInvalidTemplateHostCount = (bizId, data) =>
+  http.post('/host/findmany/service_template/host_apply_plan/invalid_host_count', { bk_biz_id: bizId, ...data })
 // 删除规则(模块)
 export const deleteHostApplyModuleRules = (bizId, data) =>
   http.delete(`/host/deletemany/module/host_apply_rule/bk_biz_id/${bizId}`, { data })

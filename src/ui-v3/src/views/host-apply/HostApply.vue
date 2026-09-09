@@ -52,7 +52,10 @@
             highlight-current
             :filter-node-method="filterNode"
             :expand-on-click-node="false"
+            show-checkbox
+            :check-strictly="true"
             @node-click="onNodeClick"
+            @check="onTreeCheck"
           >
             <template #default="{ data }">
               <span class="tree-row">
@@ -65,7 +68,7 @@
 
           <!-- 底部多选摘要(类似原版 checked-list panel 的简化版) -->
           <div v-if="selectedIds.length" class="selected-summary">
-            <div class="ss-line">已选择 <em>{{ selectedIds.length }}</em> 个模块</div>
+            <div class="ss-line">已选择 <em>{{ selectedIds.length }}</em> 个目标</div>
             <div class="ss-actions">
               <el-button link size="small" type="primary" @click="onBatch('edit')">去编辑</el-button>
               <el-button link size="small" type="danger" @click="onBatch('delete')">去删除</el-button>
@@ -91,9 +94,9 @@
             <div class="spacer" />
             <el-button type="primary" @click="openEdit()">编辑</el-button>
             <el-tooltip :disabled="!conflictCount" content="无未应用需处理" placement="top">
-              <el-button :disabled="!conflictCount" @click="onShowUnapplied">
-                未应用主机 <em v-if="conflictCount" class="conflict-num">{{ conflictCount }}</em>
-              </el-button>
+            <el-button :disabled="!conflictCount || unappliedLoading" @click="onShowUnapplied">
+              未应用主机 <em v-if="conflictCount" class="conflict-num">{{ conflictCount }}</em>
+            </el-button>
             </el-tooltip>
             <el-button v-if="currentNode.__enabled" type="warning" @click="onToggle(false)">关闭自动应用</el-button>
             <el-button v-else type="success" @click="onToggle(true)">立即启用</el-button>
@@ -136,9 +139,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="冲突" width="100">
-          <template #default="{ row }">{{ row.conflict || row.unresolved_conflict ? '有冲突' : '无' }}</template>
-        </el-table-column>
+            <el-table-column label="冲突" width="100">
+              <template #default="{ row }">{{ planHasConflict(row) ? '有冲突' : '无' }}</template>
+            </el-table-column>
       </el-table>
       <el-empty v-if="!unappliedLoading && !unappliedPlans.length" description="暂无未应用主机" :image-size="60" />
     </el-dialog>
@@ -151,12 +154,12 @@
 
       <template v-if="wizardStep === 0">
         <el-alert type="info" :closable="false" style="margin-bottom: 8px"
-          :title="`为 ${currentNode?.label} 配置自动应用字段(可多选)`" />
+          :title="`为 ${currentNode?.label} 配置自动应用字段(可多选)${batchTargets.length > 1 ? `，将应用到 ${batchTargets.length} 个目标` : ''}`" />
         <div class="wizard-row">
           <el-input v-model="propKeyword" placeholder="搜索字段" size="small" clearable style="width: 240px" :prefix-icon="'Search'" />
           <el-button size="small" @click="loadAttrList">刷新字段</el-button>
         </div>
-        <el-table :data="filteredAttrs" max-height="320" size="small" border @selection-change="onAttrSelect" ref="propTableRef">
+          <el-table :data="filteredAttrs" row-key="id" :reserve-selection="true" max-height="320" size="small" border @selection-change="onAttrSelect" ref="propTableRef">
           <el-table-column type="selection" width="44" />
           <el-table-column label="字段名" min-width="160">
             <template #default="{ row }">{{ row.bk_property_name }} ({{ row.bk_property_id }})</template>
@@ -166,7 +169,7 @@
           </el-table-column>
           <el-table-column label="应用值" min-width="240">
             <template #default="{ row }">
-              <el-input v-model="draftMap[row.bk_property_id]" size="small" placeholder="填入自动应用值" />
+              <el-input v-model="draftMap[attrKey(row)]" size="small" placeholder="填入自动应用值" />
             </template>
           </el-table-column>
         </el-table>
@@ -220,13 +223,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { useBizStore } from '../../stores/biz'
 import {
-  http,
   getBizTopoTree, getBizInternalTopo,
   searchHostApplyRules, previewHostApplyModule,
   runHostApplyModule, getHostApplyModuleStatus, setHostApplyModuleEnabled,
   deleteHostApplyModuleRules,
   searchHostApplyTemplateRules, previewHostApplyTemplate, runHostApplyTemplate,
   getHostApplyTemplateStatus, setHostApplyTemplateEnabled, deleteHostApplyTemplateRules,
+  getInvalidHostCount, getInvalidTemplateHostCount,
   searchModelAttributes,
   searchServiceTemplates
 } from '../../api/cmdb'
@@ -242,6 +245,7 @@ const propKeyword = ref('')
 
 const treeData = ref([])
 const selectedIds = ref([])
+const batchTargets = ref([])
 const currentNode = ref(null)
 const rules = ref([])
 const attrList = ref([])
@@ -261,6 +265,8 @@ const wizardStep = ref(0)
 const previewData = ref(null)
 const runResult = ref(null)
 const runStatus = ref('')
+const pollToken = ref(0)
+const wizardContext = ref(null)
 
 const isModule = computed(() => mode.value === 'module')
 const filteredAttrs = computed(() => {
@@ -300,18 +306,85 @@ function nodeIconClass(data) {
 }
 
 function propName(attrId) {
-  const a = attrList.value.find((x) => x.id === attrId || x.bk_property_id === attrId)
+  const a = attrList.value.find((x) => String(x.id) === String(attrId) || String(x.bk_property_id) === String(attrId))
   return a ? a.bk_property_name : `#${attrId}`
+}
+function normalizeRuleList(res) {
+  return (res?.info || [])
+    .flatMap((entry) => Array.isArray(entry?.rules) ? entry.rules : [entry])
+    .filter((r) => r && !r.is_deleted)
+}
+function validTarget(node) {
+  return node && ((isModule.value && node.type === 'module' && node.moduleId) ||
+    (!isModule.value && node.type === 'template' && node.templateId))
+}
+function targetNodeById(id) {
+  const node = treeRef.value?.getNode(id)
+  return node?.data && validTarget(node.data) ? node.data : null
+}
+function selectedTargetNodes() {
+  const seen = new Set()
+  return selectedIds.value.map(targetNodeById).filter((node) => {
+    if (!node || seen.has(node.id)) return false
+    seen.add(node.id)
+    return true
+  })
+}
+function syncTreeSelection() {
+  const validIds = selectedTargetNodes().map((node) => node.id)
+  selectedIds.value = validIds
+  treeRef.value?.setCheckedKeys(validIds)
+  batchTargets.value = selectedTargetNodes()
+}
+function onTreeCheck(_, checked) {
+  const nodes = checked?.checkedNodes || []
+  selectedIds.value = nodes.filter(validTarget).map((node) => node.id)
+  batchTargets.value = selectedTargetNodes()
+}
+function planHasConflict(plan) {
+  return Boolean(plan?.unresolved_conflict_count || plan?.conflicts?.some((f) => f?.unresolved_conflict_exist))
+}
+function planHasChanges(plan) {
+  return Array.isArray(plan?.update_fields) && plan.update_fields.length > 0
+}
+function attrKey(attr) {
+  return String(attr?.id)
+}
+function ruleAttrKey(rule) {
+  return String(rule?.bk_attribute_id)
+}
+function initialValue(attr, value) {
+  if (value !== undefined && value !== null) return value
+  return attr?.bk_property_type === 'bool' ? false : (['int', 'float'].includes(attr?.bk_property_type) ? undefined : '')
+}
+function normalizeValue(attr, value) {
+  if (attr?.bk_property_type === 'bool') return Boolean(value)
+  if (value === '' || value === null || value === undefined) return value
+  if (attr?.bk_property_type === 'int') return Number(value)
+  if (attr?.bk_property_type === 'float') return Number(value)
+  return value
+}
+function valueIsBlank(value) {
+  return value === '' || value === null || value === undefined
 }
 function formatValue(rule) {
   if (rule.bk_property_value_display) return rule.bk_property_value_display
   return rule.bk_property_value ?? '-'
 }
+function findAttr(id) {
+  return attrList.value.find((attr) => String(attr.id) === String(id) || String(attr.bk_property_id) === String(id))
+}
 
 async function loadTree() {
-  if (!bizStore.bizId) { treeData.value = []; return }
+  if (!bizStore.bizId) {
+    treeData.value = []
+    selectedIds.value = []
+    batchTargets.value = []
+    return
+  }
   loading.value = true
   try {
+    const previousSelectedIds = [...selectedIds.value]
     if (isModule.value) {
       const [main, idle] = await Promise.allSettled([
         getBizTopoTree(bizStore.bizId),
@@ -321,31 +394,74 @@ async function loadTree() {
       if (main.status === 'fulfilled' && Array.isArray(main.value)) {
         for (const biz of main.value) {
           for (const s of biz.child || []) {
-            const setNode = { id: `set-${s.bk_inst_id}`, type: 'set', label: s.bk_inst_name, setId: s.bk_inst_id, children: [] }
+            const setNode = {
+              id: `set-${s.bk_inst_id}`,
+              type: 'set',
+              label: s.bk_inst_name,
+              setId: s.bk_inst_id,
+              children: []
+            }
             for (const m of s.child || []) {
               if (m.bk_obj_id !== 'module') continue
-              setNode.children.push({ id: `module-${m.bk_inst_id}`, type: 'module', label: m.bk_inst_name, moduleId: m.bk_inst_id, setId: s.bk_inst_id })
+              setNode.children.push({
+                id: `module-${m.bk_inst_id}`,
+                type: 'module',
+                label: m.bk_inst_name,
+                moduleId: m.bk_inst_id,
+                setId: s.bk_inst_id,
+                __enabled: Boolean(m.host_apply_enabled),
+                serviceTemplateId: m.service_template_id,
+                serviceTemplateHostApplyEnabled: m.service_template_host_apply_enabled
+              })
             }
             if (setNode.children.length) list.push(setNode)
           }
         }
       }
       if (idle.status === 'fulfilled' && idle.value?.bk_set_id) {
-        list.push({
-          id: `set-${idle.value.bk_set_id}`, type: 'set', label: idle.value.bk_set_name,
-          setId: idle.value.bk_set_id, isIdle: true,
-          children: (idle.value.module || []).map((m) => ({
-            id: `module-${m.bk_module_id}`, type: 'module', label: m.bk_module_name,
-            moduleId: m.bk_module_id, setId: idle.value.bk_set_id
-          }))
-        })
+        const idleSetId = `set-${idle.value.bk_set_id}`
+        if (!list.some((node) => node.id === idleSetId)) {
+          list.push({
+            id: idleSetId,
+            type: 'set',
+            label: idle.value.bk_set_name,
+            setId: idle.value.bk_set_id,
+            isIdle: true,
+            children: (idle.value.module || []).map((m) => ({
+              id: `module-${m.bk_module_id}`,
+              type: 'module',
+              label: m.bk_module_name,
+              moduleId: m.bk_module_id,
+              setId: idle.value.bk_set_id,
+              __enabled: Boolean(m.host_apply_enabled),
+              serviceTemplateId: m.service_template_id,
+              serviceTemplateHostApplyEnabled: m.service_template_host_apply_enabled
+            }))
+          })
+        }
       }
       treeData.value = list
     } else {
       const data = await searchServiceTemplates(bizStore.bizId, { start: 0, limit: 1000 })
-      const list = (data?.info || []).map((t) => ({ id: `tpl-${t.id}`, type: 'template', label: t.name, templateId: t.id }))
-      treeData.value = list.length ? [{ id: 'tpl-root', type: 'group', label: '服务模板', children: list }] : []
+      const list = (data?.info || []).map((t) => ({
+        id: `tpl-${t.id}`,
+        type: 'template',
+        label: t.name,
+        templateId: t.id,
+        __enabled: Boolean(t.host_apply_enabled)
+      }))
+      treeData.value = list.length
+        ? [{ id: 'tpl-root', type: 'group', label: '服务模板', children: list }]
+        : []
     }
+    await nextTick()
+    selectedIds.value = previousSelectedIds
+    syncTreeSelection()
+  } catch (e) {
+    treeData.value = []
+    selectedIds.value = []
+    batchTargets.value = []
+    ElMessage.error('自动应用节点加载失败: ' + (e?.message || '后端异常'))
   } finally {
     loading.value = false
   }
@@ -355,156 +471,241 @@ async function onNodeClick(data) {
   if (data.type === 'group') return
   if (data.type !== 'module' && data.type !== 'template') return
   currentNode.value = data
-  selectedIds.value = [data.id]
   await loadRules()
 }
 
 async function loadRules() {
   if (!currentNode.value) return
+  const node = currentNode.value
+  const modeAtStart = isModule.value
+  const bizId = bizStore.bizId
   loading.value = true
   try {
     let res
-    if (isModule.value) {
-      res = await searchHostApplyRules(bizStore.bizId, { bk_module_ids: [currentNode.value.moduleId] })
+    if (modeAtStart) {
+      res = await searchHostApplyRules(bizId, { bk_module_ids: [node.moduleId] })
     } else {
-      res = await searchHostApplyTemplateRules({ bk_biz_id: bizStore.bizId, service_template_ids: [currentNode.value.templateId] })
+      res = await searchHostApplyTemplateRules({ bk_biz_id: bizId, service_template_ids: [node.templateId] })
     }
-    const list = (res?.info || []).flatMap((entry) => entry.rules || []).filter((r) => !r.is_deleted)
+    const list = normalizeRuleList(res)
+    if (currentNode.value !== node || bizStore.bizId !== bizId || isModule.value !== modeAtStart) return
     rules.value = list
-    currentNode.value.__enabled = list.length > 0
     lastEditTime.value = list.map((r) => r.last_time || r.bk_updated_at).filter(Boolean).sort().slice(-1)[0] || ''
     try {
-      const url = isModule.value
-        ? '/host/findmany/module/host_apply_plan/invalid_host_count'
-        : '/host/findmany/service_template/host_apply_plan/invalid_host_count'
-      const data = await http.post(url, { bk_biz_id: bizStore.bizId, id: isModule.value ? currentNode.value.moduleId : currentNode.value.templateId })
-      conflictCount.value = data?.count || data?.invalid_count || 0
-    } catch (e) { conflictCount.value = 0 }
+      const id = modeAtStart ? node.moduleId : node.templateId
+      const data = modeAtStart
+        ? await getInvalidHostCount(bizId, { id })
+        : await getInvalidTemplateHostCount(bizId, { id })
+      if (currentNode.value === node && bizStore.bizId === bizId && isModule.value === modeAtStart) {
+        conflictCount.value = data?.count || data?.invalid_count || 0
+      }
+    } catch (e) {
+      if (currentNode.value === node) conflictCount.value = 0
+    }
+  } catch (e) {
+    if (currentNode.value === node) {
+      rules.value = []
+      lastEditTime.value = ''
+      conflictCount.value = 0
+      ElMessage.error('规则加载失败: ' + (e?.message || '后端异常'))
+    }
   } finally {
     loading.value = false
   }
 }
 
 async function loadAttrList() {
-  const list = await searchModelAttributes('host')
-  attrList.value = (list || []).filter((a) => a.bk_property_id !== 'bk_host_id')
+  try {
+    const list = await searchModelAttributes('host')
+    attrList.value = (list || []).filter((a) => a.bk_property_id !== 'bk_host_id' && a.id !== undefined)
+  } catch (e) {
+    attrList.value = []
+    ElMessage.error('字段加载失败: ' + (e?.message || '后端异常'))
+  }
+}
+
+function currentTargets() {
+  const contextTargets = wizardContext.value?.targets
+  const targets = contextTargets?.length ? contextTargets : (batchTargets.value.length ? batchTargets.value : (currentNode.value ? [currentNode.value] : []))
+  return targets.filter(validTarget)
+}
+
+function getRemovedRuleIds(target) {
+  const selected = new Set(selectedAttrIds.value.map(String))
+  const originalRules = wizardContext.value?.rulesByTarget?.[String(target.id)] || []
+  return originalRules.filter((rule) => !selected.has(ruleAttrKey(rule))).map((rule) => rule.id).filter(Boolean)
+}
+
+function buildAdditionalRules(target) {
+  return selectedAttrIds.value.map((id) => {
+    const attr = findAttr(id)
+    const key = attr ? attrKey(attr) : String(id)
+    const value = normalizeValue(attr, draftMap.value[key])
+    const rule = { bk_attribute_id: attr?.id ?? id, bk_property_value: value }
+    const modeAtStart = wizardContext.value?.mode ?? mode.value
+    if (modeAtStart === 'module') rule.bk_module_id = target.moduleId
+    else rule.service_template_id = target.templateId
+    return rule
+  })
+}
+
+function buildPlanPayload(changed = false) {
+  const targets = currentTargets()
+  if (!targets.length) return null
+  const payload = {
+    bk_biz_id: wizardContext.value?.bizId ?? bizStore.bizId,
+    additional_rules: targets.flatMap(buildAdditionalRules),
+    remove_rule_ids: targets.flatMap(getRemovedRuleIds)
+  }
+  if (changed) payload.changed = true
+  const modeAtStart = wizardContext.value?.mode ?? mode.value
+  if (modeAtStart === 'module') payload.bk_module_ids = [...new Set(targets.map((target) => target.moduleId))]
+  else payload.service_template_ids = [...new Set(targets.map((target) => target.templateId))]
+  return payload
 }
 
 function openEdit() {
-  if (!currentNode.value) return
+  const targets = currentTargets()
+  if (!targets.length) return
+  const first = targets[0]
+  const rulesByTarget = wizardContext.value?.rulesByTarget || {}
+  wizardContext.value = {
+    bizId: bizStore.bizId,
+    mode: mode.value,
+    targets: targets.map((target) => ({ ...target })),
+    rulesByTarget: { ...rulesByTarget, [String(first.id)]: [...rules.value] }
+  }
   wizardStep.value = 0
   wizardVisible.value = true
   runResult.value = null
   runStatus.value = ''
   previewData.value = null
   draftMap.value = {}
-  for (const r of rules.value) draftMap.value[r.bk_attribute_id] = r.bk_property_value
-  selectedAttrIds.value = rules.value.map((r) => r.bk_attribute_id)
+  selectedAttrIds.value = rules.value.map((r) => ruleAttrKey(r))
+  for (const r of rules.value) draftMap.value[ruleAttrKey(r)] = r.bk_property_value
   loadAttrList().then(() => {
     nextTick(() => {
+      propTableRef.value?.clearSelection()
       for (const id of selectedAttrIds.value) toggleAttr(id, true)
     })
   })
 }
 
-function toggleAttr(id, on) {
-  const table = propTableRef.value
-  if (!table) return
-  if (on) table.toggleRowSelection(attrList.value.find((a) => a.bk_property_id === id), true)
+function toggleAttr(id, on = true) {
+  const row = findAttr(id)
+  if (!row) return
+  propTableRef.value?.toggleRowSelection(row, on)
 }
 
 function onAttrSelect(rows) {
-  selectedAttrIds.value = rows.map((r) => r.bk_property_id)
+  const visibleIds = new Set(filteredAttrs.value.map((row) => attrKey(row)))
+  const selectedVisibleIds = new Set(rows.map((row) => attrKey(row)))
+  selectedAttrIds.value = [
+    ...selectedAttrIds.value.map(String).filter((id) => !visibleIds.has(id)),
+    ...selectedVisibleIds
+  ]
 }
 
 function additionalRules() {
-  return selectedAttrIds.value.map((propertyId) => {
-    const attr = attrList.value.find((a) => a.id === propertyId || a.bk_property_id === propertyId)
-    const rule = { bk_attribute_id: attr?.id ?? propertyId, bk_property_value: draftMap.value[propertyId] ?? '' }
-    if (isModule.value) rule.bk_module_id = currentNode.value.moduleId
-    else rule.service_template_id = currentNode.value.templateId
-    return rule
-  })
+  const targets = currentTargets()
+  return targets.flatMap(buildAdditionalRules)
 }
 
 async function onPreview() {
   if (!selectedAttrIds.value.length) { ElMessage.warning('请至少选择一个字段'); return }
+  const payload = buildPlanPayload(false)
+  if (!payload || !payload.additional_rules.length) { ElMessage.warning('请至少配置一个字段'); return }
   loadingPreview.value = true
   try {
-    const additional = additionalRules()
-    const payload = { bk_biz_id: bizStore.bizId, additional_rules: additional }
-    if (isModule.value) payload.bk_module_ids = [currentNode.value.moduleId]
-    else payload.service_template_ids = [currentNode.value.templateId]
-    previewData.value = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
+    const data = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
+    previewData.value = data
     wizardStep.value = 1
   } catch (e) {
-    ElMessage.error('预览失败')
+    ElMessage.error('预览失败: ' + (e?.message || '后端异常'))
   } finally {
     loadingPreview.value = false
   }
 }
 
 async function submitRun() {
+  const payload = buildPlanPayload(true)
+  if (!payload || !payload.additional_rules.length) { ElMessage.warning('请至少配置一个字段'); return }
   submitting.value = true
   runStatus.value = '提交中'
   try {
-    const additional = additionalRules()
-    const payload = { bk_biz_id: bizStore.bizId, additional_rules: additional, changed: true }
-    if (isModule.value) payload.bk_module_ids = [currentNode.value.moduleId]
-    else payload.service_template_ids = [currentNode.value.templateId]
-    const resp = isModule.value ? await runHostApplyModule(payload) : await runHostApplyTemplate(payload)
+    const context = wizardContext.value
+    const resp = context?.mode === 'module' ? await runHostApplyModule(payload) : await runHostApplyTemplate(payload)
     const taskId = resp?.task_id || resp?.data?.task_id
+    if (!taskId) throw new Error('后端未返回任务 ID')
     runResult.value = { taskId }
     wizardStep.value = 2
-    pollStatus(taskId)
+    await pollStatus(taskId, context)
   } catch (e) {
     runStatus.value = 'failure'
-    runResult.value = { error: e.message }
+    runResult.value = { error: e?.message || '后端异常' }
+    wizardStep.value = 2
     ElMessage.error('执行失败')
   } finally {
     submitting.value = false
   }
 }
 
-async function pollStatus(taskId) {
-  if (!taskId) { runStatus.value = 'finished'; return }
+async function pollStatus(taskId, context) {
+  const token = ++pollToken.value
   runStatus.value = 'executing'
-  const fn = isModule.value ? getHostApplyModuleStatus : getHostApplyTemplateStatus
+  const fn = context?.mode === 'module' ? getHostApplyModuleStatus : getHostApplyTemplateStatus
+  const bizId = context?.bizId ?? bizStore.bizId
   for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 2000))
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    if (token !== pollToken.value || !wizardVisible.value) return
     try {
-      const r = await fn({ bk_biz_id: bizStore.bizId, task_ids: [taskId] })
-      const stat = (r?.info || [])[0] || r
-      const s = stat?.status || 'executing'
-      runStatus.value = s
-      if (s === 'finished' || s === 'failure') break
-    } catch (e) { /* 容忍 */ }
+      const response = await fn({ bk_biz_id: bizId, task_ids: [taskId] })
+      const tasks = response?.task_info || response?.info || []
+      const stat = tasks.find((task) => String(task.task_id) === String(taskId)) || tasks[0] || response
+      const status = stat?.status || 'executing'
+      runStatus.value = status
+      if (status === 'finished' || status === 'failure') {
+        if (status === 'finished' && token === pollToken.value) {
+          await loadRules()
+        }
+        return
+      }
+    } catch (e) {
+      runStatus.value = '查询状态失败'
+    }
   }
-  if (runStatus.value === 'executing' || runStatus.value === '提交中') runStatus.value = 'finished'
+  if (token === pollToken.value) runStatus.value = 'timeout'
 }
 
 const runTitle = computed(() => {
   if (runStatus.value === 'finished') return '应用完成'
   if (runStatus.value === 'failure') return '应用失败'
+  if (runStatus.value === 'timeout') return '应用状态未知'
   return '应用执行中'
 })
 const runSubtitle = computed(() => {
   if (runStatus.value === 'failure' && runResult.value?.error) return runResult.value.error
   if (runStatus.value === 'finished') return '可关闭本对话框,规则已生效'
+  if (runStatus.value === 'timeout') return '任务状态查询超时，请稍后刷新确认结果，勿重复提交'
   return '请稍候,正在处理主机…'
 })
 
 async function onToggle(enable) {
   if (!currentNode.value) return
+  const node = currentNode.value
+  const bizId = bizStore.bizId
   try {
     if (isModule.value) {
-      await setHostApplyModuleEnabled(bizStore.bizId, { ids: [currentNode.value.moduleId], enabled: enable, clear_rules: false })
+      await setHostApplyModuleEnabled(bizId, { ids: [node.moduleId], enabled: enable, clear_rules: false })
     } else {
-      await setHostApplyTemplateEnabled(bizStore.bizId, { ids: [currentNode.value.templateId], enabled: enable, clear_rules: false })
+      await setHostApplyTemplateEnabled(bizId, { ids: [node.templateId], enabled: enable, clear_rules: false })
     }
+    node.__enabled = enable
+    const treeNode = targetNodeById(node.id)
+    if (treeNode) treeNode.__enabled = enable
     ElMessage.success(enable ? '已启用' : '已关闭')
     await loadRules()
-  } catch (e) { ElMessage.error('操作失败') }
+  } catch (e) { ElMessage.error('操作失败: ' + (e?.message || '后端异常')) }
 }
 
 async function removeRule(row) {
@@ -529,49 +730,71 @@ async function onShowUnapplied() {
     const payload = isModule.value
       ? { bk_biz_id: bizStore.bizId, bk_module_ids: [currentNode.value.moduleId] }
       : { bk_biz_id: bizStore.bizId, service_template_ids: [currentNode.value.templateId] }
+    await loadAttrList()
     const data = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
-    unappliedPlans.value = data?.plans || []
+    unappliedPlans.value = (data?.plans || []).filter(planHasChanges)
   } catch (e) {
     ElMessage.error('未应用主机查询失败: ' + (e?.message || '后端异常'))
   } finally { unappliedLoading.value = false }
 }
 
 async function onBatch(cmd) {
-  if (!selectedIds.value.length) { ElMessage.warning('请先在左侧选择模块'); return }
+  const targets = selectedTargetNodes()
+  if (!targets.length) { ElMessage.warning('请先在左侧选择模块或服务模板'); return }
   if (cmd === 'edit') {
-    // 批量编辑复用同一配置向导;多目标 additional_rules 会带每个目标 ID
-    const first = treeRef.value?.getNode(selectedIds.value[0])?.data
-    if (!first) return
+    const first = targets[0]
     currentNode.value = first
-    await loadRules()
+    const results = await Promise.all(targets.map(async (node) => {
+      const target = isModule.value ? { bk_module_ids: [node.moduleId] } : { service_template_ids: [node.templateId] }
+      const res = isModule.value
+        ? await searchHostApplyRules(bizStore.bizId, target)
+        : await searchHostApplyTemplateRules({ bk_biz_id: bizStore.bizId, ...target })
+      return [String(node.id), normalizeRuleList(res)]
+    }))
+    rules.value = results[0]?.[1] || []
+    wizardContext.value = {
+      bizId: bizStore.bizId,
+      mode: mode.value,
+      targets: targets.map((node) => ({ ...node })),
+      rulesByTarget: Object.fromEntries(results)
+    }
     openEdit()
-    ElMessage.info(`已载入 ${selectedIds.value.length} 个节点,保存时将应用到当前选择目标`)
+    ElMessage.info(`已载入 ${targets.length} 个目标,保存时将应用到当前选择目标`)
   } else if (cmd === 'delete') {
-    await ElMessageBox.confirm(`确定批量删除 ${selectedIds.value.length} 个节点的规则?`, '删除确认', { type: 'warning' })
-    try {
-      for (const id of selectedIds.value) {
-        const node = treeRef.value?.getNode(id)?.data
-        if (!node || (isModule.value && node.type !== 'module') || (!isModule.value && node.type !== 'template')) continue
-        const target = isModule.value ? { bk_module_ids: [node.moduleId] } : { service_template_ids: [node.templateId] }
-        const res = isModule.value
-          ? await searchHostApplyRules(bizStore.bizId, target)
-          : await searchHostApplyTemplateRules({ bk_biz_id: bizStore.bizId, ...target })
-        const ids = (res?.info || []).flatMap((entry) => entry.rules || []).map((r) => r.id).filter(Boolean)
-        if (!ids.length) continue
-        if (isModule.value) await deleteHostApplyModuleRules(bizStore.bizId, { host_apply_rule_ids: ids, ...target })
-        else await deleteHostApplyTemplateRules(bizStore.bizId, { host_apply_rule_ids: ids, ...target })
-      }
-      ElMessage.success('批量删除完成')
-      await loadTree()
-      if (currentNode.value && selectedIds.value.includes(currentNode.value.id)) await loadRules()
-    } catch (e) { ElMessage.error('批量删除失败: ' + (e?.message || '后端异常')) }
+    await ElMessageBox.confirm(`确定批量删除 ${targets.length} 个目标的规则?`, '删除确认', { type: 'warning' })
+    const results = await Promise.allSettled(targets.map(async (node) => {
+      const target = isModule.value ? { bk_module_ids: [node.moduleId] } : { service_template_ids: [node.templateId] }
+      const res = isModule.value
+        ? await searchHostApplyRules(bizStore.bizId, target)
+        : await searchHostApplyTemplateRules({ bk_biz_id: bizStore.bizId, ...target })
+      const ids = normalizeRuleList(res).map((rule) => rule.id).filter(Boolean)
+      if (!ids.length) return { node, skipped: true }
+      if (isModule.value) await deleteHostApplyModuleRules(bizStore.bizId, { host_apply_rule_ids: ids, ...target })
+      else await deleteHostApplyTemplateRules(bizStore.bizId, { host_apply_rule_ids: ids, ...target })
+      return { node }
+    }))
+    const failed = results.filter((result) => result.status === 'rejected')
+    if (failed.length) ElMessage.warning(`批量删除完成,${failed.length} 个目标失败`)
+    else ElMessage.success('批量删除完成')
+    await loadTree()
+    const next = targets.find((node) => node.id === currentNode.value?.id)
+    if (next) {
+      currentNode.value = targetNodeById(next.id)
+      await loadRules()
+    } else {
+      clearSelection()
+    }
   }
 }
 
 function clearSelection() {
   selectedIds.value = []
+  batchTargets.value = []
+  treeRef.value?.setCheckedKeys([])
   currentNode.value = null
   rules.value = []
+  conflictCount.value = 0
+  lastEditTime.value = ''
 }
 
 function switchMode(m) {
@@ -580,15 +803,21 @@ function switchMode(m) {
 }
 
 function resetWizard() {
+  pollToken.value++
   wizardVisible.value = false
   wizardStep.value = 0
   previewData.value = null
   runResult.value = null
   runStatus.value = ''
+  propKeyword.value = ''
+  selectedAttrIds.value = []
+  draftMap.value = {}
+  wizardContext.value = null
+  propTableRef.value?.clearSelection()
 }
 
-watch(() => bizStore.bizId, () => { clearSelection(); loadTree() })
-watch(mode, () => { clearSelection(); loadTree() })
+watch(() => bizStore.bizId, () => { resetWizard(); clearSelection(); loadTree() })
+watch(mode, () => { resetWizard(); clearSelection(); loadTree() })
 
 onMounted(async () => {
   const legacyBiz = Number(route.query.biz)
