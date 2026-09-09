@@ -13,17 +13,49 @@ const errors = []
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()) })
   const stamp = Date.now()
+  const api = (method, path, body) => page.evaluate(async ({ method, path, body }) => {
+    const res = await fetch(`/api/v3${path}`, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+    return res.json()
+  }, { method, path, body })
+  let svcTplId = null
+  const svcTplName = `smoke-svc-tpl-${stamp}`
   try {
+    await page.goto('http://localhost:8090/#/index', { waitUntil: 'load' })
+    await page.waitForTimeout(800)
+    // 自建服务模板夹具(不再依赖外部遗留数据)
+    const cats = await api('POST', '/findmany/proc/service_category/with_statistics', { bk_biz_id: 2 })
+    // 响应结构: info[{category:{id,...}, usage_amount}]
+    const catId = (cats?.data?.info || [])[0]?.category?.id || 0
+    if (!catId) throw new Error('未获取到服务分类 ID')
+    const created = await api('POST', '/create/proc/service_template', { bk_biz_id: 2, name: svcTplName, service_category_id: catId })
+    if (created.bk_error_code !== 0) throw new Error('创建夹具服务模板失败: ' + created.bk_error_msg)
+    svcTplId = created.data.id
+    console.log('夹具服务模板:', svcTplId, svcTplName)
     await page.evaluate((url) => { window.location.assign(url) }, 'http://localhost:8090/#/business/process-template')
-    await page.waitForFunction((h) => window.location.href.split('#')[1] === h, '/business/process-template', { timeout: 20000 })
+    // 平铺业务路由会重定向到规范 bizId 路由,剥离数字段后比较最终路径
+    await page.waitForFunction(() => {
+      const raw = window.location.href.split('#')[1] || '/'
+      return raw.split('?')[0].replace(/\/\d+(?=\/|$)/g, '') === '/business/process-template'
+    }, { timeout: 20000 })
     await page.waitForTimeout(1200)
+    // 服务模板下拉要等模板列表加载后才可用
+    await page.waitForFunction(() => {
+      const sels = document.querySelectorAll('.toolbar .el-select')
+      return sels.length >= 2 && !sels[1].className.includes('is-disabled')
+    }, { timeout: 15000 })
     const selects = await page.$$('.toolbar .el-select')
     await selects[1].click()
     await page.waitForTimeout(500)
-    await page.evaluate(() => {
-      const opt = [...document.querySelectorAll('.el-select-dropdown__item')].filter((o) => o.offsetParent !== null).find((o) => o.textContent.includes('smoke-svc-tpl'))
-      opt?.click()
-    })
+    await page.evaluate((name) => {
+      const opt = [...document.querySelectorAll('.el-select-dropdown__item')].filter((o) => o.offsetParent !== null).find((o) => o.textContent.includes(name))
+      if (!opt) throw new Error('下拉中未找到夹具模板: ' + name)
+      opt.click()
+    }, svcTplName)
     await page.waitForTimeout(800)
     await page.click('button:has-text("新建进程模板")')
     await page.waitForSelector('.el-dialog:has-text("新建进程模板")', { timeout: 5000 })
@@ -66,10 +98,10 @@ const errors = []
     console.log('创建进程模板:', saveBody.bk_error_code, (saveBody.bk_error_msg || '').slice(0, 60))
     if (saveBody.bk_error_code !== 0) throw new Error('创建失败: ' + saveBody.bk_error_msg)
     await page.waitForTimeout(600)
-    const read = await page.evaluate(async (stamp) => {
-      const r = await fetch('/api/v3/findmany/proc/proc_template', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bk_biz_id: 2, service_template_id: 7, page: { start: 0, limit: 200 } }) }).then(x => x.json())
+    const read = await page.evaluate(async ({ stamp, tplId }) => {
+      const r = await fetch('/api/v3/findmany/proc/proc_template', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bk_biz_id: 2, service_template_id: tplId, page: { start: 0, limit: 200 } }) }).then(x => x.json())
       return (r.data?.info || []).filter((p) => (p.property?.bk_func_name?.value || '') === `e2eproc${stamp}`)
-    }, stamp)
+    }, { stamp, tplId: svcTplId })
     console.log('回读命中:', read.length)
     if (!read.length) throw new Error('回读未找到新建进程模板')
     const bi = read[0].property?.bind_info?.value || []
@@ -82,6 +114,8 @@ const errors = []
       return r.json()
     }, read[0].id)
     console.log('清理进程模板:', del.bk_error_code)
+    const delTpl = await api('DELETE', '/delete/proc/service_template', { bk_biz_id: 2, service_template_id: svcTplId })
+    console.log('清理服务模板:', delTpl.bk_error_code)
     await browser.close()
     console.log(!ok && '❌ 绑定内容不符' || (errors.length ? '页面错误: ' + errors.join(' | ') : '✅ bind_info 多行编辑闭环通过'))
     process.exit(ok && !errors.length ? 0 : 1)

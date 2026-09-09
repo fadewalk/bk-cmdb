@@ -21,9 +21,14 @@ async function api(page, method, path, body) {
   }, { method, path, body })
 }
 
-async function openHash(page, hash, timeout = 30000) {
+async function openHash(page, hash, timeout = 30000, expectPath) {
   await page.evaluate((url) => { window.location.assign(url) }, `${BASE}/${hash}`)
-  await page.waitForFunction((expected) => window.location.href.split('#')[1] === expected, hash.replace(/^#/, ''), { timeout })
+  // 平铺业务路由会重定向到规范 bizId 路由,剥离数字段后比较最终路径
+  await page.waitForFunction((expected) => {
+    const raw = window.location.href.split('#')[1] || '/'
+    const path = raw.split('?')[0].replace(/\/\d+(?=\/|$)/g, '')
+    return path === expected
+  }, expectPath || hash.replace(/^#/, ''), { timeout })
   await page.waitForTimeout(500)
 }
 
@@ -43,7 +48,8 @@ async function openHash(page, hash, timeout = 30000) {
 
   try {
     // ============ 动态分组编辑器 ============
-    await openHash(page, '#/business/dynamic-group')
+    // 动态分组规范路径名沿用老版拼写 custom-query(路由名 DynamicGroup)
+    await openHash(page, '#/business/dynamic-group', 30000, '/business/custom-query')
     await page.waitForSelector('.el-table', { timeout: 15000 })
     await page.waitForTimeout(800)
 
@@ -176,7 +182,7 @@ async function openHash(page, hash, timeout = 30000) {
     const stamp = Date.now()
     const mk = await api(page, 'POST', '/api/v3/create/cloud/account', {
       bk_account_name: `E2E账户${stamp}`, bk_cloud_vendor: '2', bk_account_type: 'api_secret_key',
-      bk_secret_id: 'sid', bk_secret_key: 'skey', bk_description: ''
+      bk_secret_id: `sid-${stamp}`, bk_secret_key: 'skey', bk_description: ''
     })
     assert(mk.bk_error_code === 0, `创建云账户失败: ${JSON.stringify(mk).slice(0, 120)}`)
     const acctId = mk.data.bk_account_id
@@ -184,12 +190,17 @@ async function openHash(page, hash, timeout = 30000) {
     await openHash(page, '#/resource/cloud-account')
     await page.waitForSelector('.el-table', { timeout: 15000 })
     await page.waitForTimeout(600)
-    // 编辑
+    // 编辑:B18 后行内是「查看」,编辑入口在详情抽屉 footer
     await page.evaluate((name) => {
       const tr = [...document.querySelectorAll('.el-table__body-wrapper tbody tr')].find((r) => r.textContent.includes(name))
-      const btn = [...tr.querySelectorAll('button')].find((b) => b.textContent.includes('编辑'))
+      const btn = [...tr.querySelectorAll('button')].find((b) => b.textContent.includes('查看'))
       btn?.click()
     }, `E2E账户${stamp}`)
+    await page.waitForSelector('.el-drawer__title:has-text("账户详情")', { timeout: 5000 })
+    await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('.el-drawer button')]
+      btns.find((b) => b.textContent.includes('编辑'))?.click()
+    })
     await page.waitForSelector('.el-dialog__title:has-text("编辑云账户")', { timeout: 5000 })
     const nameInput = await page.$('.el-dialog .el-form-item:has-text("账户名称") input')
     await nameInput.fill(`E2E账户改${stamp}`)
@@ -206,7 +217,7 @@ async function openHash(page, hash, timeout = 30000) {
     await page.waitForTimeout(600)
     await page.evaluate((name) => {
       const tr = [...document.querySelectorAll('.el-table__body-wrapper tbody tr')].find((r) => r.textContent.includes(name))
-      const btn = [...tr.querySelectorAll('button')].find((b) => b.textContent.includes('详情'))
+      const btn = [...tr.querySelectorAll('button')].find((b) => b.textContent.includes('查看'))
       btn?.click()
     }, `E2E账户改${stamp}`)
     await page.waitForSelector('.el-drawer__title:has-text("账户详情")', { timeout: 5000 })

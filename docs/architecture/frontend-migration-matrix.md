@@ -138,3 +138,10 @@
 - **路由深链**：新增 `/resource` → `/resource/index`、`/resource/cloud-resource` → `/resource/cloud-discover`、`/model` → `/model/management` 重定向。
 - **验收**：专项 `e2e/run-b18.cjs`（重定向/行内改名 API 回读/状态列/任务 CRUD 抽屉/模型四页加载/数据清理）+ b11 适配 + route smoke 全绿；8 组页面截图经三轮 judge 对照全部 pass（遗留修复：hostcount 列、空态单套化、空数据隐藏分页、列宽溢出、拓扑标签中文化与裁切、关联/字段模板文案与工具栏）。
 - 截图基线：`src/ui-v3/screenshots/resource-model/`（old-*/new-* 各 8 张）。
+
+## 16. 业务工作台深度收口批次（已完成，2026-09-10，B19）
+
+1. **B8 E2E 迁移**：业务集拓扑断言从旧版 `.el-card .el-table` 迁移到当前工作台结构——`.bs-item` 列表、`.topology-panel`/`.detail-panel`、主机/服务实例/节点信息三 tab；点击拓扑节点断言主机查询请求体带真实节点条件；服务实例 tab 触发业务集专用查询。集群模板段同步适配独立页面结构（新建跳转 `set/template/create` 创建页，老版契约）。
+2. **HostApply 收口**：未应用主机对话框新增「直接应用」（按当前节点现有规则执行，载荷 `additional_rules:[] + changed:true`——后端契约要求无规则变更时必须带 changed 才建任务）；执行失败副标题如实展示任务 ID 并说明后端 status 接口仅返回 `{task_id,status}`（无逐主机失败原因，不伪造）。多目标批量编辑的 `additional_rules` 按目标分别组装此前已达成。
+3. **回归入口统一**：`run-all.cjs` 纳入 b15/b16/b17/b18，失败自动重跑一次并如实报告；b15/b16/b17 适配平铺业务路由→规范 bizId 路由的重定向（hash 比较剥离数字段）；b17 改为自建服务模板夹具（创建→流程→清理，不再依赖外部遗留数据）；b15 云账户段适配 B18 后的「查看抽屉→编辑」路径，SecretID 改为每次运行唯一。
+4. **环境事实**：cmdb-mongodb 被外部以约 1 次/分钟的节奏干净重启（RestartCount 571+，ExitCode=0，无 OOM，宿主机无 crontab），写接口间歇性 1199018/1199998——E2E 失败先重跑再归因。

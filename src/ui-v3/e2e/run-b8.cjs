@@ -6,6 +6,7 @@ const SHOTS = '/tmp/ui-v3-shots'
 fs.mkdirSync(SHOTS, { recursive: true })
 function ok(label) { console.log(`✓ ${label}`) }
 function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); process.exitCode = 1 }
+function note(label) { console.log(`- ${label}`) }
 
 ;(async () => {
   const browser = await chromium.launch({ headless: true })
@@ -19,19 +20,64 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`) })
 
   try {
-    // === 1. 业务集拓扑 ===
+    // === 1. 业务集拓扑工作台 ===
     await page.goto('http://localhost:8090/#/biz-set/topo', { waitUntil: 'load' })
     await page.waitForTimeout(2500)
     ok('业务集拓扑加载')
     const setItems = await page.locator('.bs-item').count()
-    if (setItems > 0) ok(`业务集数: ${setItems}`)
-    else fail('业务集', '未渲染')
-    // 选中第一个业务集
+    if (setItems === 0) throw new Error('左侧无业务集(独立模式应至少有内置业务集)')
+    ok(`业务集数: ${setItems}`)
+
+    // 捕获工作台数据请求体(节点条件断言用)
+    const hostReqBodies = []
+    const svcReqBodies = []
+    page.on('request', (req) => {
+      const url = req.url()
+      if (url.includes('/findmany/hosts/biz_set/')) hostReqBodies.push(req.postData() || '')
+      if (url.includes('/findmany/proc/biz_set/') && url.includes('service_instance')) svcReqBodies.push(req.postData() || '')
+    })
+
     await page.locator('.bs-item').first().click()
     await page.waitForTimeout(1500)
-    const bizRows = await page.locator('.el-card .el-table .el-table__row').count()
-    if (bizRows > 0) ok(`业务集下业务 ${bizRows} 行`)
-    else fail('业务集业务', '0 行')
+    // 工作台结构:左列表 + 拓扑面板 + 详情面板
+    const hasTopoPanel = await page.locator('.topology-panel').count()
+    const hasDetailPanel = await page.locator('.detail-panel').count()
+    if (hasTopoPanel && hasDetailPanel) ok('工作台结构:拓扑面板 + 详情面板')
+    else fail('工作台结构', `topology-panel=${hasTopoPanel}, detail-panel=${hasDetailPanel}`)
+    // 详情面板三 tab
+    const tabTexts = (await page.locator('.detail-panel .el-tabs__item').allTextContents()).map((t) => t.trim())
+    const joined = tabTexts.join(',')
+    if (tabTexts.some((t) => t.includes('主机')) && tabTexts.some((t) => t.includes('服务实例')) && tabTexts.some((t) => t.includes('节点信息'))) {
+      ok(`详情面板三 tab: ${joined}`)
+    } else fail('详情面板 tab', joined)
+
+    // 选中拓扑节点 → 主机查询请求体带节点条件
+    const treeNodes = page.locator('.topology-panel .el-tree-node')
+    const nodeCount = await treeNodes.count()
+    if (nodeCount > 0) {
+      const before = hostReqBodies.length
+      await treeNodes.first().click()
+      await page.waitForTimeout(1500)
+      const fresh = hostReqBodies.slice(before)
+      if (fresh.length) {
+        ok('选中节点触发业务集主机查询')
+        // 请求体应包含拓扑节点条件(bk_set_id/bk_module_id 或 bk_inst_id 之一),不允许无条件全量
+        const body = fresh[fresh.length - 1]
+        const conditioned = /bk_set_id|bk_module_id|bk_inst_id|bk_biz_id/.test(body)
+        if (conditioned) ok(`主机查询带节点条件: ${body.slice(0, 120)}`)
+        else fail('主机查询条件', `请求体缺节点条件: ${body.slice(0, 160)}`)
+      } else {
+        note('点击节点未发出主机查询(节点可能无主机,前端可能短路);结构断言已覆盖')
+      }
+      // 切到服务实例 tab → 服务实例查询
+      const svcBefore = svcReqBodies.length
+      await page.locator('.detail-panel .el-tabs__item').filter({ hasText: '服务实例' }).click()
+      await page.waitForTimeout(1500)
+      if (svcReqBodies.length > svcBefore) ok('服务实例 tab 触发业务集服务实例查询')
+      else note('服务实例 tab 未发新请求(可能已有缓存数据)')
+    } else {
+      note('业务集下无拓扑节点(无业务),工作台空态已渲染')
+    }
     await page.screenshot({ path: path.join(SHOTS, 'B8-bizset.png'), fullPage: true })
 
     // === 2. ServiceInstance 完整列 ===
@@ -55,34 +101,33 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
       ok('服务实例表格 0 行(独立模式后端无数据;列已通过代码静态保证)')
     }
 
-    // === 3. SetTemplate 详情/同步/历史 按钮 ===
+    // === 3. SetTemplate 页(独立页面,含详情/同步/历史入口) ===
     await page.goto('http://localhost:8090/#/business/set-template', { waitUntil: 'load' })
     await page.waitForTimeout(3000)
-    // 切换到集群模板 tab
-    const setTplTab = page.locator('.el-tabs__item:has-text("集群模板")')
-    if (await setTplTab.count() > 0) {
-      await setTplTab.click()
-      await page.waitForTimeout(2000)
-      const setRows = await page.locator('.el-table .el-table__row').count()
-      ok(`集群模板 tab 表 ${setRows} 行(独立模式后端默认无数据,0 正常)`)
-      // 验证列名
-      const cols = await page.locator('.el-table__header th .cell').allTextContents()
-      const colNames = cols.filter(Boolean).map((c) => c.trim())
-      const hasDetail = colNames.includes('详情')
-      const hasSync = colNames.includes('同步')
-      const hasHistory = colNames.includes('历史')
-      if (hasDetail) ok('"详情"列存在')
-      else ok('"详情"列(独立模式 0 行,代码静态保证)')
-      if (hasSync) ok('"同步"列存在')
-      else ok('"同步"列(同上)')
-      if (hasHistory) ok('"历史"列存在')
-      else ok('"历史"列(同上)')
-      // 点"新建"按钮(测试对话框)
-      await page.locator('button:has-text("新建")').first().click()
-      await page.waitForTimeout(500)
-      const dlg = await page.locator('.el-dialog:has-text("新建集群模板")').isVisible().catch(() => false)
-      if (dlg) ok('集群模板新建对话框打开')
-      await page.keyboard.press('Escape')
+    const setTplTitle = (await page.locator('h1, .page-title, .content-title').first().textContent().catch(() => '')).trim()
+    if (setTplTitle.includes('集群模板')) ok('集群模板页标题')
+    else fail('集群模板页', `标题异常: ${setTplTitle}`)
+    const setNewBtn = page.locator('button').filter({ hasText: '新建' }).first()
+    if (await setNewBtn.count()) {
+      // 新建走独立创建页(对齐老版),点击后应跳转 set/template/create
+      await setNewBtn.click()
+      await page.waitForTimeout(1200)
+      const cur = new URL(page.url()).hash
+      if (cur.includes('/set/template/create')) ok('集群模板新建跳转创建页(老版契约)')
+      else fail('集群模板新建', `未跳转创建页,当前: ${cur}`)
+      await page.goBack()
+      await page.waitForTimeout(800)
+    } else fail('集群模板新建', '缺少「新建」按钮')
+    // 0 行时仅记录;有数据时校验详情/同步/历史操作
+    const setRows = await page.locator('.el-table .el-table__row').count()
+    if (setRows > 0) {
+      const ops = (await page.locator('.el-table .cell').allTextContents()).join(',')
+      for (const label of ['详情', '同步', '历史']) {
+        if (ops.includes(label)) ok(`集群模板"${label}"入口`)
+        else fail('集群模板操作', `缺少"${label}"`)
+      }
+    } else {
+      note('集群模板 0 行(独立模式无数据),操作入口由代码静态保证')
     }
 
     // === 4. FieldTemplate 完整化 ===

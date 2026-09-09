@@ -23,7 +23,12 @@ async function api(page, method, path, body) {
 
 async function openHash(page, hash, timeout = 30000) {
   await page.evaluate((url) => { window.location.assign(url) }, `${BASE}/${hash}`)
-  await page.waitForFunction((expected) => window.location.href.split('#')[1] === expected, hash.replace(/^#/, ''), { timeout })
+  // 平铺业务路由会重定向到规范 bizId 路由,剥离数字段后比较最终路径
+  await page.waitForFunction((expected) => {
+    const raw = window.location.href.split('#')[1] || '/'
+    const path = raw.split('?')[0].replace(/\/\d+(?=\/|$)/g, '')
+    return path === expected
+  }, hash.replace(/^#/, ''), { timeout })
   await page.waitForTimeout(600)
 }
 

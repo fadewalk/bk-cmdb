@@ -144,6 +144,19 @@
             </el-table-column>
       </el-table>
       <el-empty v-if="!unappliedLoading && !unappliedPlans.length" description="暂无未应用主机" :image-size="60" />
+      <template #footer>
+        <el-button @click="unappliedVisible = false">关闭</el-button>
+        <el-tooltip :disabled="unappliedPlans.length > 0" content="暂无需要应用的主机">
+          <span>
+            <el-button
+              type="primary"
+              :loading="unappliedApplying"
+              :disabled="!unappliedPlans.length || unappliedLoading"
+              @click="applyUnapplied"
+            >直接应用</el-button>
+          </span>
+        </el-tooltip>
+      </template>
     </el-dialog>
     <el-dialog v-model="wizardVisible" :title="wizardStep === 0 ? `编辑自动应用规则 - ${currentNode?.label}` : (wizardStep === 1 ? '预览变更' : '执行结果')" width="820px" top="6vh" :close-on-click-modal="false" @close="resetWizard">
       <el-steps :active="wizardStep" finish-status="success" simple style="margin-bottom: 16px">
@@ -259,6 +272,7 @@ const lastEditTime = ref('')
 const unappliedVisible = ref(false)
 const unappliedLoading = ref(false)
 const unappliedPlans = ref([])
+const unappliedApplying = ref(false)
 
 const wizardVisible = ref(false)
 const wizardStep = ref(0)
@@ -685,6 +699,11 @@ const runTitle = computed(() => {
 })
 const runSubtitle = computed(() => {
   if (runStatus.value === 'failure' && runResult.value?.error) return runResult.value.error
+  if (runStatus.value === 'failure') {
+    const id = runResult.value?.taskId
+    // 后端 status 接口仅返回 {task_id, status},无逐主机失败原因,如实呈现任务 ID 供追踪
+    return `任务 ${id || ''} 执行失败;后端仅返回任务状态,请通过任务 ID 追踪失败详情`
+  }
   if (runStatus.value === 'finished') return '可关闭本对话框,规则已生效'
   if (runStatus.value === 'timeout') return '任务状态查询超时，请稍后刷新确认结果，勿重复提交'
   return '请稍候,正在处理主机…'
@@ -736,6 +755,46 @@ async function onShowUnapplied() {
   } catch (e) {
     ElMessage.error('未应用主机查询失败: ' + (e?.message || '后端异常'))
   } finally { unappliedLoading.value = false }
+}
+
+// 未应用主机列表直接应用:按当前节点现有规则执行,空规则载荷需带 changed 才会建任务(后端契约)
+async function applyUnapplied() {
+  if (!currentNode.value || !unappliedPlans.value.length) return
+  const node = currentNode.value
+  const bizId = bizStore.bizId
+  const modeAtStart = isModule.value
+  try {
+    await ElMessageBox.confirm(
+      `确定对「${node.label}」执行自动应用?共 ${unappliedPlans.value.length} 台主机将按当前规则更新`,
+      '应用确认',
+      { type: 'warning' }
+    )
+  } catch { return }
+  unappliedApplying.value = true
+  runStatus.value = '提交中'
+  try {
+    const payload = modeAtStart
+      ? { bk_biz_id: bizId, bk_module_ids: [node.moduleId], additional_rules: [], remove_rule_ids: [], changed: true }
+      : { bk_biz_id: bizId, service_template_ids: [node.templateId], additional_rules: [], remove_rule_ids: [], changed: true }
+    wizardContext.value = {
+      bizId,
+      mode: modeAtStart,
+      targets: [{ ...node }],
+      rulesByTarget: { [String(node.id)]: [...rules.value] }
+    }
+    const resp = modeAtStart ? await runHostApplyModule(payload) : await runHostApplyTemplate(payload)
+    const taskId = resp?.task_id || resp?.data?.task_id
+    if (!taskId) throw new Error('后端未返回任务 ID')
+    unappliedVisible.value = false
+    runResult.value = { taskId }
+    wizardVisible.value = true
+    wizardStep.value = 2
+    await pollStatus(taskId, wizardContext.value)
+  } catch (e) {
+    ElMessage.error('应用失败: ' + (e?.message || '后端异常'))
+  } finally {
+    unappliedApplying.value = false
+  }
 }
 
 async function onBatch(cmd) {
