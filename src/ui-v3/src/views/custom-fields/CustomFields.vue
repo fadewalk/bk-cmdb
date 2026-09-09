@@ -475,12 +475,13 @@ onMounted(async () => {
   display: flex; padding: 0; margin: 0 0 12px 0;
 }
 .bk-tab-item {
-  padding: 0 20px; line-height: 32px; cursor: pointer; font-size: 14px; color: #63656e;
+  padding: 0 24px; line-height: 36px; cursor: pointer; font-size: 14px; color: #63656e;
 }
+.bk-tab-item:first-child { padding-left: 0; }
 .bk-tab-item:hover { color: #3a84ff; }
 .bk-tab-item.active { color: #3a84ff; }
 
-.field-options { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.field-options { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .field-options .filter-input { width: 240px; margin-left: auto; }
 .field-options .caret { font-style: normal; margin-left: 4px; font-size: 12px; }
 .setting-btn {
@@ -508,13 +509,14 @@ onMounted(async () => {
 /* 旧版字段卡片网格 */
 .field-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
-  margin-bottom: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
 }
 .field-card {
   display: flex; align-items: center; gap: 12px;
-  height: 60px; padding: 0 12px;
+  height: 68px; padding: 0 16px;
+  min-width: 0;
   background: #F5F7FA;
   border-radius: 2px;
   cursor: pointer;
@@ -522,7 +524,7 @@ onMounted(async () => {
 }
 .field-card:hover { background: #F0F8FF; }
 .field-type-icon { flex: 0 0 20px; font-size: 20px; color: #979BA5; }
-.field-info { flex: 1; overflow: hidden; }
+.field-info { flex: 1; min-width: 0; overflow: hidden; }
 .field-name {
   font-weight: 700; color: #313238; font-size: 14px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
