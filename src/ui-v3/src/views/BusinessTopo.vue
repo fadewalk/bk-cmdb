@@ -534,7 +534,7 @@ import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
-const bizId = computed(() => Number(route.params.bizId || bizStore.bizId) || null)
+const bizId = computed(() => Number(route.query.biz || route.params.bizId || bizStore.bizId) || null)
 
 const keyword = ref('')
 const treeData = ref([])
@@ -543,7 +543,7 @@ const hostTotal = ref(0)
 const selectedHosts = ref([])
 const loading = ref(false)
 const hostLoading = ref(false)
-const rightTab = ref('host')
+const rightTab = ref(route.query.tab === 'instance' ? 'instance' : 'host')
 const svcInstances = ref([])
 const selectedInstances = ref([])
 const instLoading = ref(false)
@@ -563,6 +563,17 @@ const targetModule = ref(null)
 const appendModule = ref(null)
 const transferring = ref(false)
 const moduleOptions = ref([])
+const legacyDeleteIds = computed(() => String(route.query.deleteIds || '').split(',').map((id) => Number(id)).filter(Boolean))
+const legacyModuleId = computed(() => Number(route.query.module) || null)
+
+function applyLegacyInstanceContext() {
+  if (rightTab.value === 'instance' && legacyModuleId.value) {
+    currentNode.value = treeData.value.flatMap((node) => node.children || []).flatMap((set) => [set, ...(set.children || [])]).find((node) => node.moduleId === legacyModuleId.value) || currentNode.value
+  }
+  if (legacyDeleteIds.value.length) {
+    ElMessage.info(`已保留 ${legacyDeleteIds.value.length} 个待处理实例，请在服务实例页确认后操作`)
+  }
+}
 
 const ipKeyword = ref('')
 const treeRef = ref(null)
@@ -740,6 +751,9 @@ async function load() {
     }]
     treeData.value = nodes
     await Promise.all([loadHosts(), loadInstances()])
+    applyLegacyInstanceContext()
+    const legacyAction = String(route.query.action || '')
+    if (legacyAction === 'new-svc-instance' && currentModuleId.value) openSvcInstWizard()
   } finally {
     loading.value = false
   }
@@ -1443,7 +1457,7 @@ onBeforeUnmount(() => {
 }
 .topo-body { flex: 1; display: flex; overflow: hidden; }
 .tree-col {
-  width: 280px; flex: 0 0 280px;
+  width: 286px; flex: 0 0 286px;
   border-right: 1px solid #E7E9EF;
   padding: 12px; overflow: auto;
 }
