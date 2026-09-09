@@ -85,7 +85,7 @@
     <!-- 集群模板(旧版独立页:新建在左,名称搜索在右) -->
     <template v-if="tab === 'settpl' && bizId">
       <div class="table-toolbar filter-bar">
-        <el-button type="primary" @click="setTplDialog = true">新建</el-button>
+        <el-button type="primary" @click="goSetCreate">新建</el-button>
         <div class="spacer" />
         <el-input
           v-model="filterName"
@@ -126,7 +126,7 @@
         </el-table-column>
         <template #empty>
           <el-empty :image-size="60" description="暂无数据">
-            <div class="empty-sub">您还未创建集群模板，<el-button link type="primary" @click="setTplDialog = true">立即创建</el-button></div>
+            <div class="empty-sub">您还未创建集群模板，<el-button link type="primary" @click="goSetCreate">立即创建</el-button></div>
           </el-empty>
         </template>
       </el-table>
@@ -777,6 +777,10 @@ async function loadSyncStatus() {
   } else {
     setSyncIds.value = new Set()
   }
+}
+
+function goSetCreate() {
+  router.push(`/business/${bizId.value}/set/template/create`)
 }
 
 // 旧版新建/克隆跳整页创建(支持 ?clone= 带出模板数据)

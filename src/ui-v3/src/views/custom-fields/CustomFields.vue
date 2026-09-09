@@ -17,37 +17,20 @@
       </div>
     </div>
 
-    <!-- 工具栏(对齐原版 field-options) -->
+    <!-- 工具栏(对齐原版 field-options:新建字段/新建分组/字段预览 左,搜索右) -->
     <div class="field-options">
-      <el-button type="primary" :icon="'Plus'" :disabled="!activeModel || activeModel.bk_ispaused" @click="handleAddField(null)">新建字段</el-button>
-
-      <el-dropdown trigger="click" @command="onImportDropdown">
-        <el-button :icon="'ArrowDown'">
-          导入<i class="caret">▾</i>
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <!-- 老版业务自定义字段页 hideImport=false,不提供导入字段入口(仅模型详情页有) -->
-            <el-dropdown-item command="export">导出字段</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-
+      <el-button type="primary" :disabled="!activeModel || activeModel.bk_ispaused" @click="handleAddField(null)">新建字段</el-button>
       <el-button :disabled="!activeModel || activeModel.bk_ispaused" @click="handleAddGroup">新建分组</el-button>
-
       <el-button :disabled="!properties.length" @click="previewShow = true">字段预览</el-button>
-
+      <div class="spacer" />
       <el-input
         class="filter-input"
         v-model.trim="keyword"
         placeholder="请输入关键字"
         clearable
         :prefix-icon="'Search'"
+        style="width: 320px"
       />
-
-      <div class="setting-btn" @click="configShow = true" title="实例表格字段排序设置">
-        <i class="bk-icon icon-cog" />
-      </div>
     </div>
 
     <!-- 分组 + 字段列表(对齐原版 group-list) -->
@@ -57,52 +40,43 @@
         :key="group.bk_classification_id || group.info.bk_group_id"
         :class="['group-item', { 'is-collapse': !!groupCollapse[group.info.bk_group_id] }]"
       >
-        <div class="group-header">
-          <div class="collapse-group-title" @click="toggleGroup(group)">
-            <i :class="['bk-icon toggle-icon', groupCollapse[group.info.bk_group_id] ? 'icon-angle-right' : 'icon-angle-down']" />
-            <span class="group-name">{{ group.info.bk_group_name }}</span>
-            <span class="group-count">( {{ group.properties.length }} )</span>
-            <span v-if="group.info.bk_isdefault" class="default-tag">默认</span>
+        <div class="group-header" @click="toggleGroup(group)">
+          <i :class="['bk-cmdb-icon icon-cc-triangle group-arrow', { collapsed: groupCollapse[group.info.bk_group_id] }]" />
+          <span class="group-name">{{ group.info.bk_group_name }}（ {{ group.properties.length }} ）</span>
 
-            <div class="group-actions" @click.stop>
-              <el-button link size="small" :disabled="!isEditableGroup(group.info) || group.info.bk_isdefault" @click="handleEditGroup(group)">编辑分组</el-button>
-              <el-button link size="small" type="danger" :disabled="!isEditableGroup(group.info) || group.info.bk_isdefault" @click="handleDeleteGroup(group, groupIndex)">删除分组</el-button>
-            </div>
+          <div class="group-actions" @click.stop>
+            <el-button link size="small" :disabled="!isEditableGroup(group.info) || group.info.bk_isdefault" @click="handleEditGroup(group)">编辑分组</el-button>
+            <el-button link size="small" type="danger" :disabled="!isEditableGroup(group.info) || group.info.bk_isdefault" @click="handleDeleteGroup(group, groupIndex)">删除分组</el-button>
           </div>
         </div>
 
         <transition name="collapse">
-          <ul v-show="!groupCollapse[group.info.bk_group_id]" class="field-list">
-            <li
+          <div v-show="!groupCollapse[group.info.bk_group_id]" class="field-grid">
+            <div
               v-for="(property, fieldIndex) in group.properties"
               :key="property.id || property.bk_property_id"
-              class="field-item"
+              class="field-card"
               @click="handleViewField({ group, groupIndex, fieldIndex, property })"
             >
-              <div class="field-card">
-                <div class="field-card-main">
-                  <div class="field-name">{{ property.bk_property_name }}</div>
-                  <div class="field-id">({{ property.bk_property_id }})</div>
-                  <el-tag v-if="property.isrequired" size="small" type="danger" effect="plain">必填</el-tag>
-                  <el-tag size="small" effect="plain">{{ property.bk_property_type }}</el-tag>
+              <i :class="['bk-cmdb-icon', `icon-cc-field-${property.bk_property_type}`, 'field-type-icon']" />
+              <div class="field-info">
+                <div class="field-name">
+                  {{ property.bk_property_name }}
+                  <span v-if="property.isrequired" class="req-star">*</span>
                 </div>
-                <div class="field-card-actions" @click.stop>
-                  <el-button link :icon="'Edit'" :disabled="!isEditableField(property, false)" @click="handleEditField(group, property)">编辑</el-button>
-                  <el-button link type="danger" :icon="'Delete'" :disabled="!isEditableField(property) || property.ispre" @click="handleDeleteField({ property, groupIndex, fieldIndex })">删除</el-button>
-                </div>
+                <div class="field-id">{{ property.bk_property_id }}</div>
               </div>
-            </li>
-
-            <li class="field-add" v-if="isEditableGroup(group.info)">
-              <el-button link :icon="'Plus'" @click.stop="handleAddField(group)">添加字段</el-button>
-            </li>
-            <li v-else-if="!group.properties.length" class="property-empty">暂无字段</li>
-          </ul>
+              <div class="card-actions" @click.stop>
+                <el-button link size="small" :disabled="!isEditableField(property, false)" @click="handleEditField(group, property)">编辑</el-button>
+                <el-button link size="small" type="danger" :disabled="!isEditableField(property) || property.ispre" @click="handleDeleteField({ property, groupIndex, fieldIndex })">删除</el-button>
+              </div>
+            </div>
+          </div>
         </transition>
       </div>
 
       <div class="add-group" v-if="activeModel && !activeModel.bk_ispaused">
-        <el-button link :icon="'Plus'" @click="handleAddGroup">新建分组</el-button>
+        <el-button link type="primary" :icon="'Plus'" @click="handleAddGroup">新建业务分组</el-button>
       </div>
 
       <el-empty
@@ -498,14 +472,13 @@ onMounted(async () => {
 .cmdb-tips .close-x:hover { color: #3a84ff; }
 
 .bk-tab-header {
-  display: flex; padding: 0; margin: 0 0 12px 0; border-bottom: 1px solid #DCDEE5;
+  display: flex; padding: 0; margin: 0 0 12px 0;
 }
 .bk-tab-item {
-  padding: 10px 20px; cursor: pointer; font-size: 14px; color: #63656e;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  padding: 0 20px; line-height: 32px; cursor: pointer; font-size: 14px; color: #63656e;
 }
 .bk-tab-item:hover { color: #3a84ff; }
-.bk-tab-item.active { color: #3a84ff; border-bottom-color: #3a84ff; font-weight: 500; }
+.bk-tab-item.active { color: #3a84ff; }
 
 .field-options { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .field-options .filter-input { width: 240px; margin-left: auto; }
@@ -517,40 +490,49 @@ onMounted(async () => {
 .setting-btn:hover { border-color: #3a84ff; color: #3a84ff; }
 .setting-btn .icon-cog { font-size: 16px; }
 
-.group-list { background: #fafbfd; border: 1px solid #DCDEE5; border-radius: 2px; padding: 12px; min-height: 300px; }
-.group-item { margin-bottom: 14px; background: #fff; border: 1px solid #DCDEE5; border-radius: 2px; }
+.group-list { padding: 0; min-height: 300px; }
+.group-item { margin-bottom: 18px; }
 .group-item:last-child { margin-bottom: 0; }
-.group-header { padding: 0; }
-.collapse-group-title {
-  display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px;
-  background: #fafbfd; cursor: pointer; border-bottom: 1px solid #DCDEE5;
-  user-select: none;
+/* 旧版分组头:实心三角 + 名称(数量),操作悬停显示 */
+.group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 0 10px;
+  cursor: pointer; user-select: none;
 }
-.toggle-icon { font-size: 16px; color: #63656e; transition: transform 0.15s; }
-.group-name { font-weight: 500; color: #313238; font-size: 14px; }
-.group-count { color: #979BA5; font-size: 12px; }
-.default-tag { background: #d3d5dd; color: #fff; font-size: 12px; padding: 0 6px; border-radius: 2px; margin-left: 4px; }
-.group-actions { margin-left: auto; display: flex; gap: 4px; }
+.group-arrow { font-size: 12px; color: #63656E; transition: transform 0.15s; }
+.group-arrow.collapsed { transform: rotate(-90deg); }
+.group-name { font-weight: 700; color: #313238; font-size: 14px; }
+.group-actions { margin-left: auto; display: flex; gap: 4px; visibility: hidden; }
+.group-header:hover .group-actions { visibility: visible; }
 
-.field-list { padding: 0; list-style: none; margin: 0; }
-.field-item { border-bottom: 1px solid #F0F1F5; padding: 0; }
-.field-item:last-child { border-bottom: none; }
+/* 旧版字段卡片网格 */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 6px;
+}
 .field-card {
-  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  display: flex; align-items: center; gap: 12px;
+  height: 60px; padding: 0 12px;
+  background: #F5F7FA;
+  border-radius: 2px;
+  cursor: pointer;
   transition: background 0.15s;
 }
 .field-card:hover { background: #F0F8FF; }
-.field-card-main { display: flex; align-items: center; gap: 8px; flex: 1; }
-.field-name { font-weight: 500; color: #313238; }
+.field-type-icon { flex: 0 0 20px; font-size: 20px; color: #979BA5; }
+.field-info { flex: 1; overflow: hidden; }
+.field-name {
+  font-weight: 700; color: #313238; font-size: 14px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.req-star { color: #EA3636; margin-left: 2px; }
 .field-id { color: #C4C6CC; font-size: 12px; }
-.field-card-actions { display: flex; gap: 4px; }
+.card-actions { display: none; flex: 0 0 auto; }
+.field-card:hover .card-actions { display: flex; gap: 4px; }
 
-.field-add { padding: 8px 14px; }
-.field-add .el-button { color: #979BA5; }
-.field-add .el-button:hover { color: #3a84ff; }
-.property-empty { padding: 16px 14px; color: #979BA5; font-size: 12px; text-align: center; }
-
-.add-group { text-align: center; padding: 12px; }
+.add-group { padding: 6px 0 0; }
 
 .dialog-filter { margin-bottom: 12px; }
 .dialog-property {

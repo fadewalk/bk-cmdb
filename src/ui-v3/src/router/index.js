@@ -70,7 +70,7 @@ const router = createRouter({
           const mode = ['module', 'template'].includes(seg[0]) ? seg[0] : 'module'
           return { path: `/business/${to.params.bizId}/host-apply`, query: { ...withoutBiz(to.query), mode, stage: legacyStage(seg) } }
         }, meta: { title: '主机自动应用' } },
-        { path: 'business/:bizId/set/template/create', name: 'SetTplCreateLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'create' } }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/template/create', name: 'SetTplCreate', component: () => import('../views/service/SetTemplateCreate.vue'), meta: { title: '新建集群模板' } },
         { path: 'business/:bizId/set/template/details/:templateId', name: 'SetTplDetailsLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'details', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
         { path: 'business/:bizId/set/template/edit/:templateId', name: 'SetTplEditLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'edit', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
         { path: 'business/:bizId/set/instance/history/:templateId?', name: 'SetTplHistoryLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'history', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
