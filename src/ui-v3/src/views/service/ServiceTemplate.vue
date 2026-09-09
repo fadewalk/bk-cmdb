@@ -1,23 +1,18 @@
 <template>
   <div class="page-card">
     <p class="page-tips">{{ pageTips }}</p>
-    <div class="table-toolbar">
-      <el-tabs v-model="tab" style="flex: 1">
-        <el-tab-pane label="服务模板" name="template" />
-        <el-tab-pane label="集群模板" name="settpl" />
-      </el-tabs>
-    </div>
 
-    <!-- 服务模板 -->
+    <!-- 服务模板(旧版独立页:新建在左,分类/名称筛选在右,无页内 tab) -->
     <template v-if="tab === 'template' && bizId">
       <div class="table-toolbar filter-bar">
+        <el-button type="primary" :icon="'Plus'" @click="tplFormVisible = true">新建</el-button>
+        <div class="spacer" />
         <el-select
           v-model="filterMainCate"
           placeholder="所有一级分类"
           clearable
           filterable
-          size="small"
-          style="width: 180px"
+          style="width: 184px; margin-right: 10px"
           @change="applyTemplateFilter"
         >
           <el-option v-for="c in mainCategories" :key="c.id" :label="c.name" :value="c.id" />
@@ -27,8 +22,7 @@
           placeholder="所有二级分类"
           clearable
           filterable
-          size="small"
-          style="width: 180px"
+          style="width: 184px; margin-right: 10px"
           @change="applyTemplateFilter"
         >
           <el-option v-for="c in subCategories" :key="c.id" :label="c.name" :value="c.id" />
@@ -37,25 +31,34 @@
           v-model="filterName"
           placeholder="请输入模板名称"
           clearable
-          size="small"
-          style="width: 220px"
+          style="width: 210px"
           :prefix-icon="'Search'"
           @input="applyTemplateFilter"
           @clear="applyTemplateFilter"
         />
-        <div class="spacer" />
-        <el-button :icon="'Plus'" type="primary" size="small" @click="tplFormVisible = true">新建</el-button>
       </div>
-      <el-table :data="filteredTemplates" v-loading="tplLoading" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="模板名称" min-width="180" />
-        <el-table-column label="服务分类" width="150">
-          <template #default="{ row }">{{ row.service_category_id ? ('#' + row.service_category_id) : '--' }}</template>
+      <el-table
+        :data="filteredTemplates"
+        v-loading="tplLoading"
+        row-class-name="clickable-row"
+        @row-click="(row) => showTplDetail(row)"
+      >
+        <el-table-column prop="id" label="ID" width="90">
+          <template #default="{ row }">
+            <span :class="['tpl-id', { 'need-sync': svcSyncIds.has(row.id) }]">{{ row.id }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="进程数量" width="100">
-          <template #default="{ row }">{{ row.process_count ?? '-' }}</template>
+        <el-table-column prop="name" label="模板名称" min-width="180" show-overflow-tooltip />
+        <el-table-column label="服务分类" width="180">
+          <template #default="{ row }">{{ categoryName(row.service_category_id) }}</template>
         </el-table-column>
-        <el-table-column label="已应用模块数" width="110">
+        <el-table-column label="进程数量" width="130">
+          <template #default="{ row }">
+            <span v-if="(row.process_count ?? 0) > 0">{{ row.process_count }}</span>
+            <span v-else class="unset-text">{{ row.process_count ?? 0 }}（未配置）</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="已应用模块数" width="120">
           <template #default="{ row }">{{ row.module_count ?? 0 }}</template>
         </el-table-column>
         <el-table-column prop="modifier" label="修改人" width="110">
@@ -64,60 +67,43 @@
         <el-table-column label="修改时间" width="160">
           <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 16) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEditTpl(row)">编辑</el-button>
-            <el-button link type="primary" @click="cloneTpl(row)">克隆</el-button>
-            <el-button link type="primary" @click="showTplDetail(row)">进程</el-button>
-            <el-button link type="danger" @click="removeTpl(row)">删除</el-button>
+            <el-button link type="primary" @click.stop="openEditTpl(row)">编辑</el-button>
+            <el-button link type="primary" @click.stop="cloneTpl(row)">克隆</el-button>
+            <el-button link type="danger" @click.stop="removeTpl(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
       <el-empty v-if="!tplLoading && templates.length === 0" description="该业务暂无服务模板" :image-size="80" />
     </template>
 
-    <!-- 集群模板 -->
+    <!-- 集群模板(旧版独立页:新建在左,名称搜索在右) -->
     <template v-if="tab === 'settpl' && bizId">
-      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
-        title="集群模板需绑定至少一个服务模板;删除集群模板不影响已创建的集群" />
       <div class="table-toolbar filter-bar">
-        <el-select
-          v-model="filterMainCate"
-          placeholder="所有一级分类"
-          clearable
-          filterable
-          size="small"
-          style="width: 180px"
-          @change="applyTemplateFilter"
-        >
-          <el-option v-for="c in mainCategories" :key="c.id" :label="c.name" :value="c.id" />
-        </el-select>
-        <el-select
-          v-model="filterSubCate"
-          placeholder="所有二级分类"
-          clearable
-          filterable
-          size="small"
-          style="width: 180px"
-          @change="applyTemplateFilter"
-        >
-          <el-option v-for="c in subCategories" :key="c.id" :label="c.name" :value="c.id" />
-        </el-select>
+        <el-button type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
+        <div class="spacer" />
         <el-input
           v-model="filterName"
           placeholder="请输入模板名称"
           clearable
-          size="small"
-          style="width: 220px"
+          style="width: 210px"
           :prefix-icon="'Search'"
           @input="applyTemplateFilter"
           @clear="applyTemplateFilter"
         />
-        <div class="spacer" />
-        <el-button size="small" type="primary" :icon="'Plus'" @click="setTplDialog = true">新建</el-button>
       </div>
-      <el-table :data="filteredSetTemplates" v-loading="setLoading" stripe>
-        <el-table-column prop="id" label="ID" width="90" sortable />
+      <el-table
+        :data="filteredSetTemplates"
+        v-loading="setLoading"
+        row-class-name="clickable-row"
+        @row-click="(row) => openSetTplDetail(row)"
+      >
+        <el-table-column prop="id" label="ID" width="90">
+          <template #default="{ row }">
+            <span :class="['tpl-id', { 'need-sync': setSyncIds.has(row.id) }]">{{ row.id }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="apply_count" label="应用数量" width="110">
           <template #default="{ row }">{{ row.apply_count ?? 0 }}</template>
@@ -128,12 +114,10 @@
         <el-table-column label="修改时间" width="170">
           <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openSetTplDetail(row)">详情</el-button>
-            <el-button link type="primary" @click="openSetTplSync(row)">同步</el-button>
-            <el-button link type="primary" @click="loadSetTemplateHistory(row)">历史</el-button>
-            <el-button link type="danger" @click="removeSetTpl(row)">删除</el-button>
+            <el-button link type="primary" @click.stop="openSetTplDetail(row)">详情</el-button>
+            <el-button link type="danger" @click.stop="removeSetTpl(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -148,7 +132,7 @@
             <el-select v-model="setTplForm.service_template_ids" multiple style="width: 100%" placeholder="选择一个或多个服务模板">
               <el-option v-for="t in templates" :key="t.id" :label="t.name" :value="t.id" />
             </el-select>
-            <div class="hint">若无可选模板,请先到「服务模板」Tab 创建</div>
+            <div class="hint">若无可选模板,请先到「服务模板」创建</div>
           </el-form-item>
         </el-form>
         <template #footer>
@@ -163,6 +147,10 @@
     <!-- 集群模板详情 -->
     <el-drawer v-model="setDetailDrawer" :title="`「${setDetail?.name}」集群模板详情`" size="60%">
       <template v-if="setDetail">
+        <div class="detail-actions">
+          <el-button type="primary" size="small" @click="openSetTplSync(setDetail)">同步</el-button>
+          <el-button size="small" @click="loadSetTemplateHistory(setDetail)">同步历史</el-button>
+        </div>
         <el-descriptions :column="2" border size="default" class="set-detail-desc">
           <el-descriptions-item label="模板 ID">{{ setDetail.id }}</el-descriptions-item>
           <el-descriptions-item label="名称">{{ setDetail.name }}</el-descriptions-item>
@@ -735,11 +723,41 @@ async function loadSetTemplates() {
   } finally { setLoading.value = false }
 }
 
-function loadAll() {
+async function loadAll() {
   if (!bizId.value) return
-  loadTemplates()
-  loadCategories()
-  loadSetTemplates()
+  await Promise.all([loadTemplates(), loadCategories(), loadSetTemplates()])
+  loadSyncStatus()
+}
+
+// 列表待同步红点(旧版契约: svc sync_status/biz + set_template_sync_status)
+const svcSyncIds = ref(new Set())
+const setSyncIds = ref(new Set())
+async function loadSyncStatus() {
+  if (templates.value.length) {
+    const resp = await getServiceTemplateSyncStatus(bizId.value, {
+      is_partial: true,
+      service_template_ids: templates.value.map((r) => r.id)
+    }).catch(() => null)
+    svcSyncIds.value = new Set((resp?.service_templates || []).filter((s) => s.need_sync).map((s) => s.service_template_id))
+  } else {
+    svcSyncIds.value = new Set()
+  }
+  if (setTemplates.value.length) {
+    const resp = await http.post(`/findmany/topo/set_template_sync_status/bk_biz_id/${bizId.value}`, {
+      set_template_ids: setTemplates.value.map((r) => r.id)
+    }).catch(() => [])
+    setSyncIds.value = new Set((resp || []).filter((s) => s.need_sync).map((s) => s.set_template_id))
+  } else {
+    setSyncIds.value = new Set()
+  }
+}
+
+// 旧版服务分类列显示 "一级 / 二级" 名称
+function categoryName(id) {
+  const sub = categories.value.find((c) => c.category?.id === id)
+  if (!sub) return '--'
+  const main = categories.value.find((c) => c.category?.id === sub.category?.bk_parent_id)
+  return `${main?.category?.name ?? '--'} / ${sub.category.name}`
 }
 
 async function showTplDetail(row) {
@@ -884,3 +902,51 @@ watch(() => route.path, () => { if (route.params.bizId || route.path.includes('/
 watch(tab, () => { if (bizId.value) loadAll() })
 watch(tplDetailTab, (v) => { if (v === 'instance') loadTplModules() })
 </script>
+
+<style scoped>
+/* 旧版列表 ID 列待同步红点 / 未配置文案 / 行可点击 */
+.tpl-id {
+  position: relative;
+  display: inline-block;
+  padding-right: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tpl-id.need-sync::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #EA3636;
+}
+.unset-text {
+  color: #FF9C01;
+}
+.filter-bar {
+  display: flex;
+  align-items: center;
+}
+.filter-bar .spacer {
+  flex: 1;
+}
+.filter-bar :deep(.el-select),
+.filter-bar :deep(.el-input) {
+  margin-right: 0;
+}
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+</style>
+
+<style>
+.el-table .clickable-row {
+  cursor: pointer;
+}
+</style>

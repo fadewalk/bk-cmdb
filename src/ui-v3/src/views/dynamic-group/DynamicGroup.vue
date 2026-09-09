@@ -3,13 +3,19 @@
     <h1 class="page-title sr-only">动态分组</h1>
     <p class="page-tips">动态分组主要用于定义常用的条件查询，在其他SaaS中可以根据动态分组快速检索目标主机</p>
     <div class="table-toolbar">
+      <el-button type="primary" :icon="'Plus'" :disabled="!bizId" @click="openEditor()">新建</el-button>
       <div class="spacer" />
-      <el-button size="small" type="primary" :icon="'Plus'" :disabled="!bizId" @click="openEditor()">新建</el-button>
-      <el-button :icon="'Refresh'" size="small" :disabled="!bizId" @click="load">刷新</el-button>
+      <el-input
+        v-model="keyword"
+        placeholder="请输入查询名称"
+        clearable
+        :prefix-icon="'Search'"
+        style="width: 210px"
+      />
     </div>
 
     <template v-if="bizId">
-      <el-table :data="groups" v-loading="loading" stripe>
+      <el-table :data="filteredGroups" v-loading="loading" stripe>
         <el-table-column prop="name" label="查询名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="id" label="ID" width="100" />
         <el-table-column label="查询对象" width="120">
@@ -168,6 +174,7 @@ import {
   createDynamicGroup, updateDynamicGroup, getDynamicGroupDetail,
   previewHostsByCondition, searchSetsByFilter, searchModelAttributes
 } from '../../api/cmdb'
+import { useRoute } from 'vue-router'
 import { useBizStore } from '../../stores/biz'
 
 const route = useRoute()
@@ -175,6 +182,13 @@ const bizStore = useBizStore()
 const routeBizId = computed(() => Number(route.params.bizId) || Number(route.query.biz) || null)
 const bizId = computed(() => routeBizId.value || bizStore.bizId)
 const groups = ref([])
+const keyword = ref('')
+// 旧版列表按查询名称本地过滤
+const filteredGroups = computed(() => {
+  const k = keyword.value.trim().toLowerCase()
+  if (!k) return groups.value
+  return groups.value.filter((g) => (g.name || '').toLowerCase().includes(k))
+})
 const loading = ref(false)
 
 const TARGET_NAMES = { host: '主机', set: '集群' }
