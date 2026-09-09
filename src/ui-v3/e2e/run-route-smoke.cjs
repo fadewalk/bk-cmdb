@@ -69,15 +69,28 @@ async function openHash(page, hash, expectHash = hash, timeout = 30000) {
     if (await topoButton.count()) {
       await topoButton.click()
       await page.waitForTimeout(500)
-      assert(routePath(page).startsWith('/business/topo'), `业务列表拓扑错误跳转: ${routePath(page)}`)
-      assert(routePath(page).includes('biz='), `业务列表拓扑丢失 biz query: ${routePath(page)}`)
-      console.log('✓ 业务列表拓扑跳转 /business/topo 并保留 biz')
+      assert(/^\/business\/\d+\/index/.test(routePath(page)), `业务列表拓扑错误跳转: ${routePath(page)}`)
+      console.log('✓ 业务列表拓扑跳转 /business/:bizId/index')
     } else {
       console.log('- 业务列表无数据，跳过行级拓扑入口；canonical 路由已加载')
     }
 
-    await openHash(page, '#/business/topo')
+    // 默认业务 = 守卫解析结果(?biz= → selectedBusiness → 业务列表第一个),smoke 用干净上下文取列表首个
+    const defaultBizId = await page.evaluate(async () => {
+      const resp = await fetch('/api/v3/biz/search/0', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Bkcmdb-User': 'admin', 'X-Bkcmdb-Supplier-Account': '0' },
+        body: JSON.stringify({ page: { start: 0, limit: 1 } })
+      })
+      const body = await resp.json()
+      return body?.data?.info?.[0]?.bk_biz_id || null
+    })
+    assert(defaultBizId, '无法从 API 获取默认业务 ID')
+    await openHash(page, '#/business/topo', `#/business/${defaultBizId}/index`)
     assert(!routePath(page).startsWith('/404'), `业务拓扑 canonical 路由落到 404: ${routePath(page)}`)
+    const bizMenuItems = await page.locator('.the-nav .menu-item').count()
+    assert(bizMenuItems === 7, `业务导航子菜单数量异常: ${bizMenuItems}`)
+    console.log(`✓ 业务平铺路径补齐业务 ID(${defaultBizId})重定向,导航展示七个子菜单`)
     await openHash(page, '#/business/1/index')
     assert(!routePath(page).startsWith('/404'), `旧版业务拓扑深链落到 404: ${routePath(page)}`)
     await openHash(page, '#/resource/host/1')
@@ -112,8 +125,8 @@ async function openHash(page, hash, expectHash = hash, timeout = 30000) {
     assert(routePath(page).startsWith('/platform/global-config'), `旧版平台管理路径未重定向: ${routePath(page)}`)
     await openHash(page, '#/business/1/host-apply/template')
     assert(!routePath(page).startsWith('/404') && routePath(page).includes('mode=template'), `旧版 host-apply 深链未兼容: ${routePath(page)}`)
-    await openHash(page, '#/business/1/set/sync/5', '#/business/set-template?action=sync&templateId=5&biz=1')
-    assert(routePath(page).startsWith('/business/set-template'), `旧版 set-sync 深链未兼容: ${routePath(page)}`)
+    await openHash(page, '#/business/1/set/sync/5', '#/business/1/set/template?action=sync&templateId=5')
+    assert(routePath(page).startsWith('/business/1/set/template'), `旧版 set-sync 深链未兼容: ${routePath(page)}`)
     await openHash(page, '#/business/1/synchronous/module/7/12,13', '#/business/sync?template=7&modules=12,13&biz=1&source=module')
     assert(!routePath(page).startsWith('/404') && routePath(page).includes('/business/sync'), `旧版业务同步深链未兼容: ${routePath(page)}`)
     await openHash(page, '#/business/details/2', '#/resource/business/details/2')
