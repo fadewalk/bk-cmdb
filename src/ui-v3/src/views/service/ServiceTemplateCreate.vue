@@ -431,7 +431,7 @@ function goBusinessTopo() {
 }
 .group-title {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 400;
   color: #313238;
 }
 .group-body {

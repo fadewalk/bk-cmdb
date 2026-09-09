@@ -2,7 +2,7 @@
   <div class="custom-fields-page" v-bkloading="{ isLoading: loading }">
     <!-- 顶部功能提示(对齐原版 cmdb-tips) -->
     <div class="cmdb-tips" v-if="featureTips">
-      <span>自定义字段：创建的业务专有字段，仅在业务内生效 <i class="req-star">*</i>为必填字段</span>
+      <span>自定义字段：创建的业务专有字段，仅在业务内生效（*为必填字段）</span>
       <i class="bk-cmdb-icon icon-cc-tips-close close-x" @click="featureTips = false" />
     </div>
 
@@ -90,8 +90,7 @@
     <el-drawer v-model="previewShow" title="字段预览" size="640px" direction="rtl">
       <preview-field
         v-if="previewShow"
-        :properties="properties"
-        :property-groups="groups"
+        :groups="groupedProperties"
       />
     </el-drawer>
 
@@ -270,6 +269,10 @@ async function loadProperties() {
         groups.value.push(g)
       }
       byGroup.get(gid).properties.push(p)
+    }
+    // 旧版按属性序展示
+    for (const g of groups.value) {
+      g.properties.sort((a, b) => (a.bk_property_index ?? 999) - (b.bk_property_index ?? 999))
     }
     groupedProperties.value = filterGroup(groups.value)
   } finally {
@@ -457,7 +460,7 @@ onMounted(async () => {
 
 .cmdb-tips {
   display: flex; align-items: center; gap: 6px;
-  background: #F0F8FF; border: 1px solid #A3C5FD; padding: 8px 32px 8px 16px;
+  background: #F0F8FF; border: 1px solid #A3C5FD; padding: 10px 32px 10px 16px;
   border-radius: 2px; margin: 15px 20px 10px; position: relative; font-size: 12px; color: #63656E;
 }
 .cmdb-tips::before {
@@ -502,7 +505,7 @@ onMounted(async () => {
 }
 .group-arrow { font-size: 12px; color: #63656E; transition: transform 0.15s; }
 .group-arrow.collapsed { transform: rotate(-90deg); }
-.group-name { font-weight: 700; color: #313238; font-size: 14px; }
+.group-name { font-weight: 400; color: #313238; font-size: 14px; }
 .group-actions { margin-left: auto; display: flex; gap: 4px; visibility: hidden; }
 .group-header:hover .group-actions { visibility: visible; }
 
@@ -526,7 +529,7 @@ onMounted(async () => {
 .field-type-icon { flex: 0 0 20px; font-size: 20px; color: #979BA5; }
 .field-info { flex: 1; min-width: 0; overflow: hidden; }
 .field-name {
-  font-weight: 700; color: #313238; font-size: 14px;
+  font-weight: 400; color: #313238; font-size: 14px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .req-star { color: #EA3636; margin-left: 2px; }
