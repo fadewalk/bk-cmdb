@@ -41,7 +41,7 @@
 
 ## 2. 本轮已完成的 parity 工作
 
-### 2.0 业务导航交互契约批次（2026-09-09 晚，commit 81d3239e2a）
+### 2.0 业务导航交互契约批次（2026-09-09 晚，commit 81d3239e2a / 5d115a0a4f）
 
 业务一级导航下七个二级菜单（业务拓扑/服务模板/集群模板/服务分类/主机自动应用/动态分组/自定义字段）从"仅菜单同名"补齐为旧版交互契约：
 
@@ -49,6 +49,7 @@
 - 复刻旧版 `business-interceptor`：业务视图间切换业务整页刷新；规范路由同步 biz store 与 localStorage。
 - 新增 `BizMixSelector`（对齐旧版 `cmdb-business-mix-selector`）：业务+业务集混合下拉、`name (id)` 展示、业务集角标、收藏星标置顶（`POST /usercustom` 持久化，key `business_selector_collection`）、底部新建业务/业务集入口。切换业务(集)后落到对应拓扑页并整页刷新。
 - 复刻旧版 `dynamic-navigation` 折叠交互：默认 260px；取消固定后 60px 仅图标，悬停展开、移开 300ms 收回；底部固定按钮按旧版 `navStick` localStorage 语义持久化。
+- 标题栏对齐旧版 `dynamic-breadcrumbs`（commit 5d115a0a4f）：仅当前页名的单级标题栏，去掉"业务/X"两级面包屑；子页（模板详情/主机详情等）显示返回箭头回所属菜单规范页；删除服务模板/服务分类/资源目录页内可见 h1 的双重标题；业务同步等无菜单路由按 `meta.title` 显示标题栏，首页除外。
 - 已知取舍：下拉未做旧版的滚动分页与拼音搜索（standalone 数据量小）；业务集列表经 `/findmany/biz_set` 读取。
 
 ### 2.1 主机详情历史记录
