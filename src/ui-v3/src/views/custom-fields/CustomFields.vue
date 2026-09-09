@@ -459,9 +459,10 @@ onMounted(async () => {
 .custom-fields-page { padding: 15px 20px 20px; min-height: 100%; background: #fff; }
 
 .cmdb-tips {
-  display: flex; align-items: center; gap: 6px;
-  background: #F0F8FF; border: 1px solid #A3C5FD; padding: 10px 32px 10px 16px;
-  border-radius: 2px; margin: 15px 20px 10px; position: relative; font-size: 12px; color: #63656E;
+  display: flex; align-items: center; gap: 5px;
+  min-height: 30px;
+  background: #F0F8FF; border: 1px solid #A3C5FD; padding: 0 32px 0 16px;
+  border-radius: 2px; margin: 0 0 10px; position: relative; font-size: 12px; color: #63656E;
 }
 .cmdb-tips::before {
   content: "\e2f0";
@@ -471,7 +472,7 @@ onMounted(async () => {
   line-height: 16px;
   color: #3A84FF;
 }
-.cmdb-tips .close-x { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #979BA5; font-size: 18px; }
+.cmdb-tips .close-x { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #979BA5; font-size: 12px; width: 12px; height: 12px; line-height: 12px; }
 .cmdb-tips .close-x:hover { color: #3a84ff; }
 
 .bk-tab-header {
