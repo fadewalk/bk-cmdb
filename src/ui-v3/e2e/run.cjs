@@ -56,8 +56,8 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     if (pagerVisible) ok('分页器可见')
     else fail('分页器', '不可见')
 
-    // 右键 B8集群
-    const setRow = page.locator('.el-tree-node__content:has(.node-label:text-is("B8集群"))')
+    // 右键第一个真实集群(旧环境通常是 B8集群,新环境不依赖固定测试数据)
+    const setRow = page.locator('.el-tree-node[data-key^="set-"]').filter({ has: page.locator('.node-label') }).first()
     await setRow.click({ button: 'right' })
     await page.waitForTimeout(300)
     const ctxVisible = await page.locator('ul.ctx-menu').isVisible().catch(() => false)
@@ -68,10 +68,10 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.screenshot({ path: path.join(SHOTS, 'B3-topo-ctx.png'), fullPage: true })
     await page.keyboard.press('Escape')
 
-    // 服务实例向导(右键 B8模块)
+    // 服务实例向导(右键第一个真实模块)
     await page.mouse.click(20, 20) // 点击空白处关闭前一个 ctx-menu
     await page.waitForTimeout(200)
-    const modRow = page.locator('.el-tree-node[data-key="module-10"]')
+    const modRow = page.locator('.el-tree-node[data-key^="module-"]').first()
     await modRow.click({ button: 'right' })
     await page.waitForTimeout(300)
     const ctxText = await page.locator('ul.ctx-menu').textContent().catch(() => '')

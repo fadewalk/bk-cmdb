@@ -121,7 +121,27 @@
       </main>
     </div>
 
-    <!-- 步骤条向导(单模块编辑) -->
+    <!-- 未应用主机列表:复用后端 preview plans,对齐老版 conflict-list -->
+    <el-dialog v-model="unappliedVisible" title="未应用主机" width="820px">
+      <el-alert type="warning" :closable="false" style="margin-bottom: 10px"
+        :title="`共 ${unappliedPlans.length} 台主机需要应用`" />
+      <el-table :data="unappliedPlans" v-loading="unappliedLoading" max-height="420" size="small" border>
+        <el-table-column label="主机" min-width="180">
+          <template #default="{ row }">{{ row.bk_host_innerip || row.host?.bk_host_innerip || row.bk_host_id || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="变更字段" min-width="260">
+          <template #default="{ row }">
+            <el-tag v-for="f in (row.update_fields || [])" :key="f.bk_attribute_id" size="small" style="margin-right: 4px">
+              {{ propName(f.bk_attribute_id) }} → {{ f.bk_property_value }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="冲突" width="100">
+          <template #default="{ row }">{{ row.conflict || row.unresolved_conflict ? '有冲突' : '无' }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!unappliedLoading && !unappliedPlans.length" description="暂无未应用主机" :image-size="60" />
+    </el-dialog>
     <el-dialog v-model="wizardVisible" :title="wizardStep === 0 ? `编辑自动应用规则 - ${currentNode?.label}` : (wizardStep === 1 ? '预览变更' : '执行结果')" width="820px" top="6vh" :close-on-click-modal="false" @close="resetWizard">
       <el-steps :active="wizardStep" finish-status="success" simple style="margin-bottom: 16px">
         <el-step title="配置字段" />
@@ -232,6 +252,9 @@ const loadingPreview = ref(false)
 const submitting = ref(false)
 const conflictCount = ref(0)
 const lastEditTime = ref('')
+const unappliedVisible = ref(false)
+const unappliedLoading = ref(false)
+const unappliedPlans = ref([])
 
 const wizardVisible = ref(false)
 const wizardStep = ref(0)
@@ -497,27 +520,51 @@ async function removeRule(row) {
   } catch (e) { ElMessage.error('删除失败') }
 }
 
-function onShowUnapplied() {
-  ElMessage.info('未应用主机列表(独立模式暂未对接,跳转业务拓扑查看)')
+async function onShowUnapplied() {
+  if (!currentNode.value) return
+  unappliedVisible.value = true
+  unappliedLoading.value = true
+  unappliedPlans.value = []
+  try {
+    const payload = isModule.value
+      ? { bk_biz_id: bizStore.bizId, bk_module_ids: [currentNode.value.moduleId] }
+      : { bk_biz_id: bizStore.bizId, service_template_ids: [currentNode.value.templateId] }
+    const data = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
+    unappliedPlans.value = data?.plans || []
+  } catch (e) {
+    ElMessage.error('未应用主机查询失败: ' + (e?.message || '后端异常'))
+  } finally { unappliedLoading.value = false }
 }
 
 async function onBatch(cmd) {
   if (!selectedIds.value.length) { ElMessage.warning('请先在左侧选择模块'); return }
   if (cmd === 'edit') {
-    ElMessage.info(`已选择 ${selectedIds.value.length} 个节点,即将进入批量编辑(简化模式)`)
+    // 批量编辑复用同一配置向导;多目标 additional_rules 会带每个目标 ID
+    const first = treeRef.value?.getNode(selectedIds.value[0])?.data
+    if (!first) return
+    currentNode.value = first
+    await loadRules()
+    openEdit()
+    ElMessage.info(`已载入 ${selectedIds.value.length} 个节点,保存时将应用到当前选择目标`)
   } else if (cmd === 'delete') {
     await ElMessageBox.confirm(`确定批量删除 ${selectedIds.value.length} 个节点的规则?`, '删除确认', { type: 'warning' })
-    for (const id of selectedIds.value) {
-      const node = treeRef.value?.getNode(id)?.data
-      if (!node) continue
-      if (isModule.value && node.type === 'module') {
-        await deleteHostApplyModuleRules(bizStore.bizId, { data: { host_apply_rule_ids: [], bk_module_ids: [node.moduleId] } }).catch(() => {})
-      } else if (!isModule.value && node.type === 'template') {
-        await deleteHostApplyTemplateRules(bizStore.bizId, { data: { host_apply_rule_ids: [], service_template_ids: [node.templateId] } }).catch(() => {})
+    try {
+      for (const id of selectedIds.value) {
+        const node = treeRef.value?.getNode(id)?.data
+        if (!node || (isModule.value && node.type !== 'module') || (!isModule.value && node.type !== 'template')) continue
+        const target = isModule.value ? { bk_module_ids: [node.moduleId] } : { service_template_ids: [node.templateId] }
+        const res = isModule.value
+          ? await searchHostApplyRules(bizStore.bizId, target)
+          : await searchHostApplyTemplateRules({ bk_biz_id: bizStore.bizId, ...target })
+        const ids = (res?.info || []).flatMap((entry) => entry.rules || []).map((r) => r.id).filter(Boolean)
+        if (!ids.length) continue
+        if (isModule.value) await deleteHostApplyModuleRules(bizStore.bizId, { host_apply_rule_ids: ids, ...target })
+        else await deleteHostApplyTemplateRules(bizStore.bizId, { host_apply_rule_ids: ids, ...target })
       }
-    }
-    ElMessage.success('批量删除完成')
-    if (currentNode.value && selectedIds.value.includes(currentNode.value.id)) await loadRules()
+      ElMessage.success('批量删除完成')
+      await loadTree()
+      if (currentNode.value && selectedIds.value.includes(currentNode.value.id)) await loadRules()
+    } catch (e) { ElMessage.error('批量删除失败: ' + (e?.message || '后端异常')) }
   }
 }
 

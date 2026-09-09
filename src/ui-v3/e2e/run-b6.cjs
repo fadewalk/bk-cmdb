@@ -104,11 +104,11 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     // 侧栏树
     const treeNodes = await page.locator('.el-tree .el-tree-node').count()
     if (treeNodes > 0) ok(`侧栏树节点数: ${treeNodes}`)
-    // 点击 B8模块
-    await page.locator('.el-tree-node__content:has(.lbl:has-text("B8模块"))').first().click()
+    // 点击第一个真实模块
+    await page.locator('.el-tree-node[data-key^="module-"] .el-tree-node__content').first().click()
     await page.waitForTimeout(1500)
     const headTitle = await page.locator('.ha-title').textContent().catch(() => '')
-    if (headTitle.includes('B8模块')) ok(`右侧标题: ${headTitle.trim()}`)
+    if (headTitle.trim()) ok(`右侧标题: ${headTitle.trim()}`)
     else fail('HostApply 节点', `title=${headTitle}`)
     // 编辑按钮打开向导
     const editBtn = page.locator('.ha-head button:has-text("编辑")')
