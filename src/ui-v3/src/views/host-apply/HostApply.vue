@@ -534,7 +534,8 @@ watch(() => bizStore.bizId, () => { clearSelection(); loadTree() })
 watch(mode, () => { clearSelection(); loadTree() })
 
 onMounted(async () => {
-  // 旧版深链 /business/:bizId/host-apply/:mode → 顶层切换模块/模板模式
+  const legacyBiz = Number(route.query.biz)
+  if (legacyBiz && bizStore.bizList.some((b) => b.bk_biz_id === legacyBiz)) bizStore.select(legacyBiz)
   const legacyMode = route.query.mode
   if (legacyMode === 'template' || legacyMode === 'module') mode.value = legacyMode
   await bizStore.ensureLoaded()

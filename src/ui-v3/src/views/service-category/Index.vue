@@ -181,6 +181,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { Plus, Edit, Delete, Close, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
@@ -192,8 +193,10 @@ import {
 } from '../../api/cmdb'
 import CategoryInput from './children/CategoryInput.vue'
 
+const route = useRoute()
 const bizStore = useBizStore()
-const bizId = computed(() => bizStore.bizId)
+const routeBizId = computed(() => Number(route.query.biz) || null)
+const bizId = computed(() => routeBizId.value || bizStore.bizId)
 
 const loading = ref(false)
 const keyword = ref('')
@@ -274,6 +277,7 @@ watch(bizId, () => {
 })
 
 onMounted(() => {
+  if (routeBizId.value && bizStore.bizList.some((b) => b.bk_biz_id === routeBizId.value)) bizStore.select(routeBizId.value)
   resetAll()
   loadCategories()
 })

@@ -60,6 +60,7 @@ const route = useRoute()
 
 const bizStore = useBizStore()
 const bizId = ref(bizStore.bizId || null)
+const source = ref('')
 const templateId = ref(null)
 const moduleId = ref(null)
 const templates = ref([])
@@ -161,9 +162,23 @@ watch(() => bizStore.bizId, (v) => {
   bizId.value = v
   loadTemplates()
 })
+watch(() => route.query.biz, async (value) => {
+  const id = Number(value)
+  if (id && bizStore.bizList.some((b) => b.bk_biz_id === id) && id !== bizId.value) {
+    bizStore.select(id)
+    bizId.value = id
+    await loadTemplates()
+  }
+})
 onMounted(async () => {
   await bizStore.ensureLoaded()
   bizId.value = bizStore.bizId
+  const legacyBiz = Number(route.query.biz)
+  if (legacyBiz && bizStore.bizList.some((b) => b.bk_biz_id === legacyBiz)) {
+    bizStore.select(legacyBiz)
+    bizId.value = legacyBiz
+  }
+  source.value = String(route.query.source || '')
   if (bizId.value) await loadTemplates()
   // 旧版深链 /business/:bizId/synchronous/module/:template/:modules
   const legacyTpl = Number(route.query.template)
@@ -171,7 +186,11 @@ onMounted(async () => {
     templateId.value = legacyTpl
     await loadModules()
     const mods = String(route.query.modules || '').split(',').map((n) => Number(n)).filter(Boolean)
-    if (mods.length && modules.value.some((m) => m.id === mods[0])) moduleId.value = mods[0]
+    const first = mods.find((id) => modules.value.some((m) => m.id === id))
+    if (first) {
+      moduleId.value = first
+      await load()
+    }
   }
 })
 </script>

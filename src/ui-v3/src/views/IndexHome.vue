@@ -15,12 +15,12 @@
         <div class="tab-content">
           <div class="host-search-layout">
             <div class="search-bar">
-              <el-input
+              <textarea
                 v-model="keyword"
                 class="search-input"
                 :placeholder="placeholder"
-                size="large"
-                @keyup.enter="handleSearch"
+                rows="1"
+                @keydown.enter.exact.prevent="handleSearch"
               />
               <el-button type="primary" class="search-btn" :loading="searching" @click="handleSearch">
                 <el-icon style="margin-right: 4px"><Search /></el-icon>搜索
@@ -36,7 +36,7 @@
       <img :src="mapUrl" alt="" class="map-img" :style="mapStyle">
     </div>
     <div class="the-footer">
-      <p class="footer-links"><a href="javascript:;">技术支持</a><span>|</span><a href="javascript:;">社区论坛</a><span>|</span><a href="javascript:;">产品官网</a></p>
+      <p class="footer-links"><a href="https://wpa1.qq.com/KziXGWJs?_type=wpa&qidian=true" target="_blank" rel="noopener noreferrer">技术支持</a><span>|</span><a href="https://bk.tencent.com/s-mart/community/" target="_blank" rel="noopener noreferrer">社区论坛</a><span>|</span><a href="https://bk.tencent.com/index/" target="_blank" rel="noopener noreferrer">产品官网</a></p>
       <p class="copyright">Copyright © 2012 Tencent BlueKing. All Rights Reserved. community-v3.14</p>
     </div>
 
@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -78,11 +78,18 @@ function resize() {
   mapWidth.value = Math.max(480, Math.floor(window.innerWidth * 0.66))
 }
 
+function resizeSearchInput() {
+  const input = document.querySelector('.index-home .search-input')
+  if (!input) return
+  input.style.height = 'auto'
+  input.style.height = `${Math.min(400, Math.max(42, input.scrollHeight))}px`
+}
+
 function handleSearch() {
   const kw = keyword.value.trim()
   if (!kw) return
   searching.value = true
-  router.push({ path: '/resource/host', query: { ip: kw } })
+  router.push({ path: '/resource/host', query: { ip: kw, scope: 'all' } })
 }
 
 function goAdvanced() {
@@ -96,7 +103,9 @@ function showFullTip() {
 onMounted(() => {
   resize()
   window.addEventListener('resize', resize)
+  nextTick(resizeSearchInput)
 })
+watch(keyword, () => nextTick(resizeSearchInput))
 onBeforeUnmount(() => window.removeEventListener('resize', resize))
 </script>
 
@@ -152,21 +161,30 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize))
   z-index: 999;
   display: flex;
 }
-.search-input :deep(.el-input__wrapper) {
-  height: 42px;
+.search-input {
+  display: block;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 42px;
+  max-height: 400px;
+  padding: 8px 12px;
+  border: 1px solid #C4C6CC;
+  border-right: 0;
   border-radius: 2px 0 0 2px;
-  box-shadow: 0 0 0 1px #C4C6CC inset;
-}
-.search-input :deep(.el-input__inner) {
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: #fff;
+  font: inherit;
   font-size: 14px;
+  line-height: 26px;
   color: #63656E;
 }
-.search-input :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #3A84FF inset;
-}
+.search-input:focus { border-color: #3A84FF; }
 .search-btn {
   width: 86px;
   height: 42px;
+  flex: 0 0 86px;
   border-radius: 0 2px 2px 0;
 }
 .advanced-link {

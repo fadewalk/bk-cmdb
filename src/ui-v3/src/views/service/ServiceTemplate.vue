@@ -826,7 +826,7 @@ async function loadProcessAttrs() {
 
 // ---------- 旧版深链(/business/:bizId/service/template/... 与 set/template、set/sync) ----------
 function applyDeepLink() {
-  const bizParam = Number(route.params.bizId)
+  const bizParam = Number(route.query.biz || route.params.bizId)
   if (bizParam && bizStore.bizList.some((b) => b.bk_biz_id === bizParam)) bizStore.select(bizParam)
   // 集群模板 tab 深链: ?action=create|details|history|sync&templateId=
   if (tab.value === 'settpl') {

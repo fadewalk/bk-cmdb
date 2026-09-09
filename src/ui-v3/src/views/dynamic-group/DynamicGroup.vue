@@ -170,8 +170,10 @@ import {
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
+const route = useRoute()
 const bizStore = useBizStore()
-const bizId = computed(() => bizStore.bizId)
+const routeBizId = computed(() => Number(route.query.biz) || null)
+const bizId = computed(() => routeBizId.value || bizStore.bizId)
 const groups = ref([])
 const loading = ref(false)
 
@@ -461,6 +463,7 @@ watch(bizId, () => { if (bizId.value) load() })
 
 onMounted(async () => {
   await bizStore.ensureLoaded()
+  if (routeBizId.value && bizStore.bizList.some((b) => b.bk_biz_id === routeBizId.value)) bizStore.select(routeBizId.value)
   if (bizId.value) load()
 })
 </script>
