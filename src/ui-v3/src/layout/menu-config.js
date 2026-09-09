@@ -9,6 +9,14 @@ export const MENUS = [
     path: '/index'
   },
   {
+    id: 'biz-set',
+    name: '业务集',
+    icon: 'icon-cc-business-set',
+    children: [
+      { id: 'biz-set-topo', name: '业务集拓扑', icon: 'icon-cc-nav-business', path: '/biz-set/topo' }
+    ]
+  },
+  {
     id: 'business',
     name: '业务',
     icon: 'icon-cc-nav-business',
@@ -62,8 +70,7 @@ export const MENUS = [
     name: '平台管理',
     icon: 'icon-cc-nav-platform',
     children: [
-      { id: 'global-config', name: '全局配置', icon: 'icon-cc-setting', path: '/platform/global-config' },
-      { id: 'roadmap', name: '功能路线', icon: 'icon-cc-roadmap', path: '/platform/roadmap' }
+      { id: 'global-config', name: '全局配置', icon: 'icon-cc-setting', path: '/platform/global-config' }
     ]
   }
 ]

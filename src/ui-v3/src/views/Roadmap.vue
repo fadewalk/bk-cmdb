@@ -51,6 +51,9 @@ const items = [
 
   { module: '登录与权限(IAM)', desc: '方向已定:对接开源方案体系(OIDC/OAuth2、Casbin 等),不依赖蓝鲸权限中心;另行立项', status: 'doing' },
   { module: '云资源', desc: '云账户/管控区域/云资源发现(cloudserver 已纳入核心,实际同步需云厂商凭据)', status: 'done' },
-  { module: '容器管理', desc: 'K8s 集群纳管、Pod 详情(kube,依赖容器数据链路)', status: 'todo' }
+  { module: '容器管理', desc: 'K8s 集群纳管、Pod 详情(依赖容器数据链路,独立部署与老版一致不可用)', status: 'todo' },
+  { module: '主机转移确认页', desc: '老版 host-operation 1:1:已选主机/转移到/变更确认 tabs/预览+执行,业务拓扑入口已接', status: 'done' },
+  { module: '主机导入', desc: '.xlsx 客户端真实解析(XLSX 库)+服务端导入/导入编辑(/hosts/import、/hosts/update)全支持', status: 'done' },
+  { module: '菜单结构', desc: '与老版可用菜单逐项比对一致(业务集拓扑组、资源八项、模型四项、平台管理单项)', status: 'done' }
 ]
 </script>
