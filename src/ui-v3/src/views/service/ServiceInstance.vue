@@ -10,8 +10,26 @@
     </div>
 
     <template v-if="bizId">
-      <el-table :data="rows" v-loading="loading" stripe>
-        <el-table-column prop="id" label="实例 ID" width="100" />
+      <div class="table-toolbar">
+        <el-button :disabled="!selectedRows.length" @click="copySelectedIPs">复制 IP</el-button>
+        <el-button :disabled="!selectedRows.length" @click="batchDelete">批量删除</el-button>
+        <el-button :disabled="!selectedRows.length" @click="openBatchLabels">批量编辑标签</el-button>
+        <el-button :disabled="!selectedRows.length" @click="syncSelected">同步模板</el-button>
+        <el-button @click="toggleAllExpanded">{{ allExpanded ? '全部收起' : '全部展开' }}</el-button>
+      </div>
+      <el-table ref="serviceTableRef" :data="rows" v-loading="loading" stripe @selection-change="onSelectionChange" @expand-change="onExpandChange" row-key="id">
+        <el-table-column type="selection" width="44" />
+        <el-table-column type="expand" width="48">
+          <template #default="{ row }">
+            <el-table v-if="row.__processes" :data="row.__processes" size="small" border>
+              <el-table-column label="进程名称" prop="property.bk_func_name" min-width="160" />
+              <el-table-column label="监听 IP" prop="property.bk_bind_ip" width="140" />
+              <el-table-column label="端口" prop="property.port" width="100" />
+              <el-table-column label="启动用户" prop="property.user" width="120" />
+            </el-table>
+            <el-empty v-else description="点击全部展开加载进程" :image-size="50" />
+          </template>
+        </el-table-column>        <el-table-column prop="id" label="实例 ID" width="100" />
         <el-table-column prop="name" label="服务实例名称" min-width="220" show-overflow-tooltip />
         <el-table-column label="所属模块" min-width="140">
           <template #default="{ row }">
@@ -78,11 +96,12 @@
             <el-table-column label="启动用户" width="110">
               <template #default="{ row }">{{ row.property?.user || '-' }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="120" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="danger" size="small" @click="removeProcess(row)">删除</el-button>
-              </template>
-            </el-table-column>
+              <el-table-column label="操作" width="150" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" size="small" @click="openEditProcess(row)">编辑</el-button>
+                  <el-button link type="danger" size="small" @click="removeProcess(row)">删除</el-button>
+                </template>
+              </el-table-column>
           </el-table>
           <el-empty v-if="!procLoading && processes.length === 0" description="该实例暂无进程" :image-size="60" />
         </el-tab-pane>
@@ -130,7 +149,20 @@
       </template>
     </el-dialog>
 
-    <!-- 克隆服务实例 -->
+    <el-dialog v-model="batchLabelVisible" title="批量编辑标签" width="520px">
+      <el-alert type="info" :closable="false" :title="`已选择 ${selectedRows.length} 个服务实例`" style="margin-bottom: 12px" />
+      <div v-for="(row, index) in batchLabelRows" :key="index" class="label-edit-row">
+        <el-input v-model="row.key" placeholder="标签键" />
+        <el-input v-model="row.value" placeholder="标签值" />
+        <el-button link type="danger" @click="removeBatchLabelRow(index)">删除</el-button>
+      </div>
+      <el-button link type="primary" @click="addBatchLabelRow">+ 添加标签</el-button>
+      <template #footer>
+        <el-button @click="batchLabelVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchLabelSaving" @click="submitBatchLabels">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="cloneDialog" title="克隆服务实例" width="560px">
       <el-alert type="info" :closable="false" style="margin-bottom: 14px"
         :title="`将把「${cloneSource?.name}」的进程配置复制到目标模块的其他主机上`" />
@@ -166,7 +198,7 @@ import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, deleteInstanceLabels,
-  getBizTopoTree, getBizInternalTopo, http
+  syncServiceInstances, getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
@@ -175,6 +207,7 @@ const bizStore = useBizStore()
 const bizId = ref(bizStore.bizId || null)
 const bizList = ref([])
 const rows = ref([])
+const serviceTableRef = ref(null)
 const page = ref(1)
 const pageSize = 20
 const total = ref(0)
@@ -186,6 +219,12 @@ const procInstName = ref('')
 const procInstId = ref(null)
 const procLoading = ref(false)
 const processes = ref([])
+const expandedRows = ref(new Set())
+const allExpanded = ref(false)
+const selectedRows = ref([])
+const batchLabelVisible = ref(false)
+const batchLabelSaving = ref(false)
+const batchLabelRows = ref([{ key: '', value: '' }])
 
 // 实例标签
 const labels = ref([])
@@ -200,7 +239,13 @@ async function loadProcesses(id) {
   procLoading.value = true
   try {
     const data = await searchProcessInstances(id, { start: 0, limit: 100 })
-    processes.value = data?.info || []
+    const list = data?.info || data || []
+    processes.value = list
+    if (id === procInstId.value) {
+      const target = rows.value.find((row) => row.id === id)
+      if (target) target.__processes = list
+    }
+    return list
   } finally { procLoading.value = false }
 }
 
@@ -374,8 +419,11 @@ async function load() {
     const data = await searchServiceInstances(bizId.value, {
       start: (page.value - 1) * pageSize, limit: pageSize
     })
-    rows.value = data?.info || []
+    rows.value = (data?.info || []).map((row) => ({ ...row, __processes: null }))
     total.value = data?.count || 0
+    selectedRows.value = []
+    expandedRows.value = new Set()
+    allExpanded.value = false
   } finally {
     loading.value = false
   }
@@ -396,9 +444,124 @@ async function showProcesses(row) {
   loadProcesses(row.id)
 }
 
-async function loadLabels() {
-  labels.value = []
+function onExpandChange(row, rowsExpanded) {
+  expandedRows.value = new Set(rowsExpanded.map((item) => item.id))
+  allExpanded.value = rows.value.length > 0 && expandedRows.value.size === rows.value.length
+  if (rowsExpanded.includes(row) && !row.__processes) loadProcesses(row.id).then((list) => { row.__processes = [...list] })
 }
+
+async function syncSelected() {
+  const targets = selectedRows.value.filter((row) => row.service_template_id && row.bk_module_id)
+  if (!targets.length) {
+    ElMessage.warning('所选实例没有可同步的服务模板')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`确定同步选中的 ${targets.length} 个服务实例?`, '模板同步确认', { type: 'warning' })
+  } catch { return }
+  try {
+    const grouped = new Map()
+    for (const row of targets) {
+      const key = `${row.service_template_id}:${row.bk_module_id}`
+      if (!grouped.has(key)) grouped.set(key, { service_template_id: row.service_template_id, bk_module_ids: [row.bk_module_id] })
+    }
+    await Promise.all([...grouped.values()].map((data) => syncServiceInstances({ bk_biz_id: bizId.value, ...data })))
+    ElMessage.success('模板同步已提交')
+    await load()
+  } catch (e) {
+    ElMessage.error('模板同步失败: ' + (e?.message || '后端异常'))
+  }
+}
+
+function addBatchLabelRow() {
+  batchLabelRows.value.push({ key: '', value: '' })
+}
+function removeBatchLabelRow(index) {
+  if (batchLabelRows.value.length > 1) batchLabelRows.value.splice(index, 1)
+}
+function openBatchLabels() {
+  batchLabelRows.value = [{ key: '', value: '' }]
+  batchLabelVisible.value = true
+}
+async function submitBatchLabels() {
+  const labelsToApply = {}
+  for (const row of batchLabelRows.value) {
+    if (row.key.trim()) labelsToApply[row.key.trim()] = row.value.trim()
+  }
+  if (!Object.keys(labelsToApply).length) {
+    ElMessage.warning('请至少填写一个标签')
+    return
+  }
+  batchLabelSaving.value = true
+  try {
+    await createInstanceLabels({
+      bk_biz_id: bizId.value,
+      instance_ids: selectedRows.value.map((row) => row.id),
+      labels: labelsToApply
+    })
+    ElMessage.success('标签已应用')
+    batchLabelVisible.value = false
+    await load()
+  } catch (e) {
+    ElMessage.error('批量标签保存失败: ' + (e?.message || '后端异常'))
+  } finally {
+    batchLabelSaving.value = false
+  }
+}
+async function batchDelete() {
+  if (!selectedRows.value.length) return
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 个服务实例?`, '删除确认', { type: 'warning' })
+  } catch { return }
+  try {
+    await deleteServiceInstances(bizId.value, selectedRows.value.map((row) => row.id))
+    ElMessage.success('批量删除成功')
+    selectedRows.value = []
+    await load()
+  } catch (e) {
+    ElMessage.error('批量删除失败: ' + (e?.message || '后端异常'))
+  }
+}
+async function copySelectedIPs() {
+  const ips = selectedRows.value.map((row) => row.bk_host_innerip || row.host?.bk_host_innerip).filter(Boolean)
+  if (!ips.length) {
+    ElMessage.warning('所选实例没有可复制的 IP')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(ips.join('\n'))
+    ElMessage.success(`已复制 ${ips.length} 个 IP`)
+  } catch (e) {
+    ElMessage.error('复制失败')
+  }
+}
+async function toggleAllExpanded() {
+  if (allExpanded.value) {
+    rows.value.forEach((row) => serviceTableRef.value?.toggleRowExpansion(row, false))
+    expandedRows.value = new Set()
+    allExpanded.value = false
+    return
+  }
+  procLoading.value = true
+  try {
+    const entries = await Promise.all(rows.value.map(async (row) => {
+      const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
+      return [row.id, data?.info || data || []]
+    }))
+    const processMap = new Map(entries)
+    rows.value.forEach((row) => {
+      row.__processes = processMap.get(row.id) || []
+      serviceTableRef.value?.toggleRowExpansion(row, true)
+    })
+    expandedRows.value = new Set(rows.value.map((row) => row.id))
+    allExpanded.value = true
+  } catch (e) {
+    ElMessage.error('加载全部进程失败: ' + (e?.message || '后端异常'))
+  } finally {
+    procLoading.value = false
+  }
+}
+
 
 function openAddLabel() {
   labelForm.value = { key: '', value: '' }
@@ -459,3 +622,8 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.label-edit-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.label-edit-row .el-input { flex: 1; }
+</style>

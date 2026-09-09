@@ -85,8 +85,80 @@
       </template>
 
       <template v-if="tab === 'history'">
-        <el-alert type="info" :closable="false" title="主机变更记录依赖审计数据链路，当前 standalone 尚未接入。" />
+        <div class="history-toolbar">
+          <el-date-picker
+            v-model="historyDateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            :clearable="false"
+            style="width: 260px"
+          />
+          <el-input v-model="historyUser" clearable placeholder="操作账号" style="width: 180px" />
+          <el-button type="primary" @click="reloadHistory">查询</el-button>
+          <el-button @click="resetHistoryFilters">清空</el-button>
+        </div>
+        <el-table
+          :data="historyRows"
+          v-loading="historyLoading"
+          stripe
+          size="small"
+          @row-click="openHistoryDetail"
+        >
+          <el-table-column prop="action" label="动作" min-width="140">
+            <template #default="{ row }">{{ auditActionLabel(row) }}</template>
+          </el-table-column>
+          <el-table-column prop="user" label="操作账号" width="150" />
+          <el-table-column prop="resource_name" label="操作实例" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.resource_name || row.resource_id || '--' }}</template>
+          </el-table-column>
+          <el-table-column prop="operation_time" label="操作时间" min-width="180">
+            <template #default="{ row }">{{ formatHistoryTime(row.operation_time) }}</template>
+          </el-table-column>
+          <el-table-column label="详情" width="90">
+            <template #default="{ row }"><el-button link type="primary" @click.stop="openHistoryDetail(row)">查看</el-button></template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!historyLoading && !historyRows.length" description="暂无变更记录" :image-size="80" />
+        <el-pagination
+          v-model:current-page="historyPage"
+          v-model:page-size="historyLimit"
+          :total="historyTotal"
+          layout="total, sizes, prev, pager, next"
+          :page-sizes="[10, 20, 50]"
+          style="margin-top: 16px; justify-content: flex-end"
+          @current-change="loadHistory"
+          @size-change="onHistorySizeChange"
+        />
       </template>
+
+      <el-drawer v-model="historyDetailVisible" title="变更记录详情" size="58%">
+        <template v-if="historyDetail">
+          <el-descriptions :column="2" border size="small" style="margin-bottom: 16px">
+            <el-descriptions-item label="操作账号">{{ historyDetail.user || '--' }}</el-descriptions-item>
+            <el-descriptions-item label="操作时间">{{ formatHistoryTime(historyDetail.operation_time) }}</el-descriptions-item>
+            <el-descriptions-item label="动作">{{ auditActionLabel(historyDetail) }}</el-descriptions-item>
+            <el-descriptions-item label="操作实例">{{ historyDetail.resource_name || historyDetail.resource_id || '--' }}</el-descriptions-item>
+          </el-descriptions>
+          <el-table v-if="historyChanges.length" :data="historyChanges" border size="small">
+            <el-table-column prop="field" label="字段" min-width="160" />
+            <el-table-column label="变更前" min-width="180">
+              <template #default="{ row }">{{ displayHistoryValue(row.before) }}</template>
+            </el-table-column>
+            <el-table-column label="变更后" min-width="180">
+              <template #default="{ row }">{{ displayHistoryValue(row.after) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="该记录没有结构化字段变更" :image-size="60" />
+          <el-collapse v-if="historyDetail.operation_detail" style="margin-top: 16px">
+            <el-collapse-item title="查看原始详情" name="raw">
+              <pre class="history-json">{{ JSON.stringify(historyDetail.operation_detail, null, 2) }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+      </el-drawer>
 
       <!-- 4. 主机转移 -->
       <template v-if="tab === 'transfer'">
@@ -169,7 +241,7 @@ import {
   http, searchBusiness, searchModelAttributes, getHostInstTopo, searchHostInstAssoc, searchInstAssociations,
   searchHostDetail, getBizTopoTree, getBizInternalTopo, transferHostModule, transferHostToResource,
   searchServiceInstances, searchProcessInstances, deleteServiceInstances, createProcessInstance, updateProcessInstance,
-  listHostsWithoutApp
+  listHostsWithoutApp, getAuditDictionary, searchInstAudit
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -202,6 +274,19 @@ const assocGroups = ref([])
 const assocLoading = ref(false)
 const assocCount = computed(() => assocGroups.value.reduce((s, g) => s + g.items.length, 0))
 
+// 变更记录
+const historyRows = ref([])
+const historyLoading = ref(false)
+const historyTotal = ref(0)
+const historyPage = ref(1)
+const historyLimit = ref(10)
+const historyDateRange = ref(defaultHistoryRange())
+const historyUser = ref('')
+const historyLoaded = ref(false)
+const historyDetailVisible = ref(false)
+const historyDetail = ref(null)
+const auditDict = ref([])
+
 // 进程抽屉
 const procDrawer = ref(false)
 const procLoading = ref(false)
@@ -220,6 +305,39 @@ const isIncrement = ref(false)
 const transferring = ref(false)
 const moduleOptions = ref([])
 
+function defaultHistoryRange() {
+  const today = new Date().toISOString().slice(0, 10)
+  return [today, today]
+}
+function formatHistoryTime(value) {
+  return value ? String(value).replace('T', ' ').slice(0, 19) : '--'
+}
+function auditActionLabel(row) {
+  if (row?.action_name) return row.action_name
+  if (row?.action) {
+    const found = auditDict.value.flatMap((item) => item.operations || []).find((op) => op.id === row.action)
+    return found?.name || row.action
+  }
+  return '--'
+}
+function displayHistoryValue(value) {
+  if (value === undefined || value === null || value === '') return '--'
+  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+function getHistoryDetails(record) {
+  const details = record?.operation_detail?.details || {}
+  const before = details.pre_data || {}
+  const update = details.update_fields || {}
+  const after = { ...(details.cur_data || {}), ...update }
+  const keys = new Set([...Object.keys(before), ...Object.keys(after), ...Object.keys(update)])
+  return [...keys].filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key])).map((key) => ({
+    field: key,
+    before: before[key],
+    after: after[key]
+  }))
+}
+const historyChanges = computed(() => getHistoryDetails(historyDetail.value))
+
 const hostAttrs = computed(() => {
   if (!host.value) return {}
   const out = {}
@@ -229,6 +347,78 @@ const hostAttrs = computed(() => {
   return out
 })
 
+async function loadHistory() {
+  if (!hostId) return
+  historyLoading.value = true
+  try {
+    if (!auditDict.value.length) {
+      const dict = await getAuditDictionary()
+      auditDict.value = dict?.info || dict || []
+    }
+    const [start, end] = historyDateRange.value || defaultHistoryRange()
+    const auditBizId = bizId || 1
+    const data = await searchInstAudit({
+      condition: {
+        bk_biz_id: auditBizId,
+        bk_obj_id: 'host',
+        resource_type: 'host',
+        resource_id: hostId,
+        user: historyUser.value || '',
+        operation_time: {
+          start: `${start} 00:00:00`,
+          end: `${end} 23:59:59`
+        }
+      },
+      page: {
+        start: (historyPage.value - 1) * historyLimit.value,
+        limit: historyLimit.value,
+        sort: '-operation_time'
+      },
+      with_detail: false
+    })
+    historyRows.value = data?.info || []
+    historyTotal.value = data?.count || 0
+    historyLoaded.value = true
+  } catch (e) {
+    historyRows.value = []
+    historyTotal.value = 0
+    ElMessage.error('变更记录加载失败: ' + (e?.message || '后端异常'))
+  } finally {
+    historyLoading.value = false
+  }
+}
+function reloadHistory() {
+  historyPage.value = 1
+  loadHistory()
+}
+function resetHistoryFilters() {
+  historyDateRange.value = defaultHistoryRange()
+  historyUser.value = ''
+  reloadHistory()
+}
+function onHistorySizeChange(size) {
+  historyLimit.value = size
+  historyPage.value = 1
+  loadHistory()
+}
+async function openHistoryDetail(row) {
+  try {
+    const data = await searchInstAudit({
+      condition: {
+        bk_biz_id: bizId || 1,
+        bk_obj_id: 'host',
+        resource_type: 'host',
+        id: [row.id]
+      },
+      page: { start: 0, limit: 1 },
+      with_detail: true
+    })
+    historyDetail.value = data?.info?.[0] || data?.[0] || row
+    historyDetailVisible.value = true
+  } catch (e) {
+    ElMessage.error('变更记录详情加载失败: ' + (e?.message || '后端异常'))
+  }
+}
 async function loadHost() {
   loading.value = true
   try {
@@ -327,7 +517,7 @@ watch(tab, (value) => {
   router.replace({ query: { ...route.query, tab: value } })
   if (value === 'service' && bizId && svcInstances.value.length === 0 && !svcLoading.value) loadSvcInstances()
   if (value === 'association' && assocGroups.value.length === 0 && !assocLoading.value) loadAssoc()
-  if (value === 'history') ElMessage.info('主机变更记录依赖审计数据链路，当前 standalone 尚未接入')
+  if (value === 'history' && !historyLoaded.value && !historyLoading.value) loadHistory()
 })
 
 async function enterEdit() {
@@ -474,11 +664,13 @@ onMounted(async () => {
   loadHost()
   loadBizList()
   if (bizId) loadModuleOptions()
+  if (tab.value === 'history') loadHistory()
 })
 </script>
 
 <style scoped>
-.detail-tabs { margin-bottom: 16px; }
+.history-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.history-json { max-height: 420px; overflow: auto; padding: 12px; background: #f5f7fa; color: #303133; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .attrs { max-height: 60vh; overflow: auto; }
 .edit-form { padding: 8px 0; }

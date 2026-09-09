@@ -54,7 +54,9 @@ export const updateModule = (bizId, setId, moduleId, data) =>
 export const searchServiceInstances = (bizId, page) =>
   http.post('/findmany/proc/service_instance', { bk_biz_id: bizId, page, with_name: true })
 export const deleteServiceInstances = (bizId, ids) =>
-  http.post('/deletemany/proc/service_instance', { bk_biz_id: bizId, service_instance_ids: ids })
+  http.delete('/deletemany/proc/service_instance', {
+    data: { bk_biz_id: bizId, service_instance_ids: ids }
+  })
 export const searchProcessInstances = (serviceInstanceId, page) =>
   http.post('/findmany/proc/process_instance', {
     service_instance_id: serviceInstanceId, page
@@ -448,6 +450,7 @@ export const deleteInstances = (objId, ids) =>
   http.delete(`/deletemany/instance/object/${objId}`, { data: { delete: { inst_ids: ids } } })
 
 // 实例变更历史
+export const getAuditDictionary = () => http.get('/find/audit_dict')
 export const searchInstAudit = (data) => http.post('/find/inst_audit', data)
 
 // 实例导入(multipart,file + params,走 web_server excel 解析;根路径,不在 /api/v3 下)
@@ -518,6 +521,31 @@ export const syncSetTemplateToInstances = (bizId, templateId, data) =>
   http.post(`/updatemany/topo/set_template/${templateId}/bk_biz_id/${bizId}/sync_to_instances`, data)
 
 // ---------- 业务集 ----------
+// 业务集列表及其专用拓扑契约
+export const searchBusinessSets = (page = { start: 0, limit: 200 }) =>
+  http.post('/findmany/biz_set', { page })
+export const listBizSetBusinesses = (bizSetId, page = { start: 0, limit: 200 }, fields = []) =>
+  http.post('/find/biz_set/biz_list', {
+    bk_biz_set_id: bizSetId,
+    fields,
+    page
+  })
+export const listBizSetTopoChildren = (bizSetId, parentObjId, parentId) =>
+  http.post('/find/biz_set/topo_path', {
+    bk_biz_set_id: bizSetId,
+    bk_parent_obj_id: parentObjId,
+    bk_parent_id: parentId
+  })
+export const countBizSetTopoNodes = (bizSetId, condition) =>
+  http.post(`/count/topoinst/host_service_inst/biz_set/${bizSetId}`, { condition })
+export const listBizSetHosts = (bizSetId, params = {}) =>
+  http.post(`/findmany/hosts/biz_set/${bizSetId}`, params)
+export const listBizSetServiceInstances = (bizSetId, params) =>
+  http.post(`/findmany/proc/biz_set/${bizSetId}/service_instance`, params)
+export const listBizSetProcesses = (bizSetId, params) =>
+  http.post(`/findmany/proc/biz_set/${bizSetId}/process_instance`, params)
+
+// 旧版调用保留，供其它页面使用
 export const searchBusinessSetTopology = (bizSetId, data) =>
   http.post(`/find/topoinst/bk_biz_id/${bizSetId}`, data)
 
