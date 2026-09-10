@@ -144,14 +144,15 @@ function note(label) { console.log(`- ${label}`) }
     if (newBtn > 0) ok('"新建模板"按钮')
     if (editBtn > 0) ok(`"编辑"按钮: ${editBtn}`)
     if (bindBtn > 0) ok(`"绑定模型"按钮: ${bindBtn}`)
-    // 新建对话框
-    await page.locator('button:has-text("新建")').click()
-    await page.waitForTimeout(500)
-    const ftDlg = await page.locator('.el-dialog:has-text("新建字段组合模板")').isVisible().catch(() => false)
-    if (ftDlg) ok('FieldTemplate 新建对话框打开')
-    else fail('FieldTemplate 新建', '对话框未出现')
+    // B23 后新建进入两步向导路由(basic → field-settings);页面可能被 keep-alive,限定本页根类名
+    await page.locator('.field-template-page button:has-text("新建")').click()
+    await page.waitForTimeout(1200)
+    const curPath = new URL(page.url()).hash
+    if (curPath.includes('/field-template/create')) ok('字段模板新建进入向导路由(老版两步形态)')
+    else fail('FieldTemplate 新建', `未跳转向导: ${curPath}`)
     await page.screenshot({ path: path.join(SHOTS, 'B8-fieldtemplate.png'), fullPage: true })
-    await page.keyboard.press('Escape')
+    await page.goBack()
+    await page.waitForTimeout(600)
 
     console.log('')
     if (errors.length) {

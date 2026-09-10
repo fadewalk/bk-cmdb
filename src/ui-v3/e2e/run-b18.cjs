@@ -219,8 +219,8 @@ async function api(page, method, url, body) {
     // === 6. 模型域四页加载 smoke ===
     await page.goto(`${BASE}/#/model/management`, { waitUntil: 'networkidle', timeout: 30000 })
     await page.waitForTimeout(1200)
-    if (await page.locator('.model-page').count()) ok('模型管理页加载')
-    else fail('模型管理页', '缺少 .model-page')
+    if ((await page.locator('.model-management, .model-page').count())) ok('模型管理页加载')
+    else fail('模型管理页', '缺少根节点')
     await page.goto(`${BASE}/#/model/topology`, { waitUntil: 'networkidle', timeout: 30000 })
     await page.waitForTimeout(1500)
     if (await page.locator('svg').count()) ok('模型拓扑画布加载')
