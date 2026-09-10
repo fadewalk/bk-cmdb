@@ -25,12 +25,27 @@
               <el-button type="primary" class="search-btn" :loading="searching" @click="handleSearch">
                 <el-icon style="margin-right: 4px"><Search /></el-icon>搜索
               </el-button>
-              <el-link type="primary" class="advanced-link" @click="goAdvanced">高级筛选</el-link>
+              <el-link type="primary" class="advanced-link" @click="handleSetFilters">高级筛选</el-link>
+            </div>
+            <div v-if="isShowPopover" class="picking-popover-content">
+              <p>未在输入的内容中检测到有效IP，请问你希望以哪种方式进行搜索？</p>
+              <div class="popover-actions">
+                <el-button size="small" @click="handleAssetSearch">固资编号</el-button>
+                <el-button size="small" type="primary" @click="handleIpFuzzySearch">IP模糊搜索</el-button>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <AdvancedHostFilter
+      v-model="filterVisible"
+      :properties="properties"
+      :initial="filterInitial"
+      @submit="handleAdvancedSubmit"
+      @reset="handleAdvancedReset"
+    />
 
     <div class="map-wrap">
       <img :src="mapUrl" alt="" class="map-img" :style="mapStyle">
@@ -57,12 +72,24 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import AdvancedHostFilter from '../components/AdvancedHostFilter.vue'
+import { searchUserCustom, saveUserCustom } from '../api/cmdb'
+import {
+  hasValidHostIp, parseHostSearch, serializeIpCondition, splitSearchText,
+  fetchHostFilterProperties, resolveInitialConditions, toUserBehavior, RESOURCE_FILTER_USERCUSTOM_KEY
+} from '../utils/host-filter'
 
 const router = useRouter()
 const tab = ref('host')
 const keyword = ref('')
 const searching = ref(false)
 const fullTipVisible = ref(false)
+const filterVisible = ref(false)
+const isShowPopover = ref(false)
+const properties = ref([])
+const filterUsercustom = ref(null)
+const filterInitial = ref({ IP: { text: '', inner: true, outer: true, exact: true }, conditions: [] })
 const mapWidth = ref(857)
 
 const mapUrl = import.meta.env.BASE_URL + 'map.svg'
@@ -88,21 +115,85 @@ function resizeSearchInput() {
 function handleSearch() {
   const kw = keyword.value.trim()
   if (!kw) return
+  const parsed = parseHostSearch(kw)
+  if (parsed.cloudIdSet.size > 50) { ElMessage.warning('最多支持50个不同管控区域的混合搜索'); return }
+  if (parsed.IPv4List.length + parsed.IPv6List.length + parsed.IPv4WithCloudList.length + parsed.IPv6WithCloudList.length > 10000) {
+    ElMessage.warning('最多支持搜索10000条数据'); return
+  }
   searching.value = true
-  router.push({ path: '/resource/host', query: { ip: kw, scope: 'all' } })
+  sessionStorage.setItem('homeHostSearchContent', JSON.stringify(kw))
+  router.push({ path: '/resource/host', query: { ip: serializeIpCondition({ text: kw, inner: true, outer: true, exact: true }), scope: 'all' } })
 }
 
-function goAdvanced() {
-  router.push({ path: '/resource/host', query: { advanced: 1 } })
+function handleSetFilters() {
+  isShowPopover.value = false
+  const content = keyword.value.trim()
+  if (content && !hasValidHostIp(content)) {
+    isShowPopover.value = true
+    return
+  }
+  openFilter(content)
+}
+
+function openFilter(content = '') {
+  // 旧版 setupNormalProperty:优先用户保存行为,否则预置默认条件行(集群名/模块名/维护人/管控区域)
+  filterInitial.value = {
+    IP: { text: content, inner: true, outer: true, exact: true },
+    conditions: resolveInitialConditions(properties.value, filterUsercustom.value)
+  }
+  filterVisible.value = true
+}
+
+function handleAssetSearch() {
+  const content = keyword.value.trim()
+  isShowPopover.value = false
+  openFilter('')
+  filterInitial.value.conditions = [{
+    id: 'host.bk_asset_id',
+    property: { id: 'host.bk_asset_id', bk_obj_id: 'host', bk_property_id: 'bk_asset_id', bk_property_name: '固资编号', bk_property_type: 'singlechar' },
+    operator: 'in',
+    value: splitSearchText(content)
+  }]
+}
+
+function handleIpFuzzySearch() {
+  const content = keyword.value.trim()
+  isShowPopover.value = false
+  openFilter(content)
+  filterInitial.value.IP.exact = false
+}
+
+function handleAdvancedReset() {
+  filterInitial.value = { IP: { text: '', inner: true, outer: true, exact: true }, conditions: [] }
+}
+
+function handleAdvancedSubmit(result) {
+  // 旧版行为:查询后把本次所选字段保存为用户习惯
+  saveUserCustom({ [RESOURCE_FILTER_USERCUSTOM_KEY]: toUserBehavior(result.conditions) }).catch(() => {})
+  const query = {
+    scope: 'all',
+    adv: '1',
+    ip: serializeIpCondition(result.IP),
+    filter: result.filter || ''
+  }
+  router.push({ path: '/resource/host', query })
 }
 
 function showFullTip() {
   fullTipVisible.value = true
 }
 
-onMounted(() => {
+onMounted(async () => {
   resize()
   window.addEventListener('resize', resize)
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('homeHostSearchContent') || '""')
+    if (typeof saved === 'string') keyword.value = saved
+  } catch { /* ignore invalid browser state */ }
+  try {
+    properties.value = await fetchHostFilterProperties()
+  } catch { properties.value = [] }
+  filterUsercustom.value = await searchUserCustom().catch(() => null)
   nextTick(resizeSearchInput)
 })
 watch(keyword, () => nextTick(resizeSearchInput))
@@ -191,6 +282,21 @@ onBeforeUnmount(() => window.removeEventListener('resize', resize))
   margin-left: 8px;
   font-size: 12px;
 }
+.picking-popover-content {
+  position: absolute;
+  top: 54px;
+  right: 0;
+  z-index: 1000;
+  width: 280px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #DCDEE5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+  color: #63656E;
+  font-size: 12px;
+}
+.picking-popover-content p { margin: 0 0 12px; line-height: 18px; }
+.popover-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .map-wrap {
   /* 对齐老版: fixed 全屏背景层,搜索框叠在地图上方

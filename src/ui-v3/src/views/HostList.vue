@@ -96,29 +96,13 @@
         @keyup.enter="reload"
         @clear="reload"
       />
-      <el-popover placement="bottom-end" :width="320" trigger="click" v-model:visible="filterVisible">
-        <template #reference>
-          <el-button size="small" :icon="'Filter'">筛选({{ activeFilterCount }})</el-button>
-        </template>
-            <div class="filter-panel">
-              <div class="filter-row">
-                <span>操作系统</span>
-                <el-select v-model="filters.os" size="small" multiple collapse-tags clearable style="width: 220px" placeholder="不限">
-                  <el-option v-for="o in osOptions" :key="o" :label="o" :value="o" />
-                </el-select>
-              </div>
-              <div class="filter-row">
-                <span>云区域</span>
-                <el-select v-model="filters.cloudId" size="small" collapse-tags clearable style="width: 220px" placeholder="不限">
-                  <el-option v-for="c in cloudOptions" :key="c.value" :label="c.label" :value="c.value" />
-                </el-select>
-              </div>
-              <div class="filter-actions">
-                <el-button size="small" @click="resetFilters">重置</el-button>
-                <el-button size="small" type="primary" @click="reload">应用</el-button>
-              </div>
-            </div>
-          </el-popover>
+      <el-button
+        size="small"
+        :icon="'Filter'"
+        :class="['option-filter', { active: advActive }]"
+        title="高级筛选"
+        @click="openAdvancedDrawer"
+      />
         </div>
 
         <el-table
@@ -365,6 +349,14 @@
       </template>
     </el-dialog>
 
+    <AdvancedHostFilter
+      v-model="advancedFilterVisible"
+      :properties="advancedProperties"
+      :initial="advancedInitial"
+      @submit="handleAdvancedSubmit"
+      @reset="handleAdvancedReset"
+    />
+
     <!-- 批量编辑主机属性(契约: PUT /hosts/batch {...changed, bk_host_id:"1,2"}) -->
     <el-drawer v-model="batchEditVisible" title="编辑主机属性" size="480px">
       <el-form label-width="120px">
@@ -390,12 +382,17 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
+import AdvancedHostFilter from '../components/AdvancedHostFilter.vue'
+import {
+  parseHostSearch, serializeIpCondition, conditionToHostPropertyFilter,
+  fetchHostFilterProperties, resolveInitialConditions, toUserBehavior, RESOURCE_FILTER_USERCUSTOM_KEY
+} from '../utils/host-filter'
 import {
   http, listHostsWithoutApp, transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   transferHostsToDirectory, importHosts, updateHostsByExcel, downloadHostTemplate, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
-  getBizTopoTree, getBizInternalTopo, searchModelAttributes
+  getBizTopoTree, getBizInternalTopo, searchModelAttributes, searchUserCustom, saveUserCustom
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
 
@@ -436,15 +433,11 @@ const loading = ref(false)
 const refreshText = ref('刚刚刷新')
 
 // 筛选
-const filterVisible = ref(false)
-const filters = ref({ os: [], cloudId: null })
-const activeFilterCount = computed(() => (filters.value.os?.length ? 1 : 0) + (filters.value.cloudId ? 1 : 0))
-const osOptions = computed(() => [...new Set(rows.value.map((r) => r.bk_os_name).filter(Boolean))])
-const cloudOptions = computed(() => {
-  const map = new Map()
-  for (const r of rows.value) if (r.bk_cloud_id !== undefined) map.set(r.bk_cloud_id, cloudName(r.bk_cloud_id))
-  return [...map.entries()].map(([value, label]) => ({ value, label }))
-})
+// 筛选(旧版契约:漏斗按钮直接打开高级筛选侧滑,active 表示存在生效条件)
+const advancedFilterVisible = ref(false)
+const advancedProperties = ref([])
+const advancedInitial = ref({ IP: { text: '', inner: true, outer: true, exact: true }, conditions: [] })
+const advActive = computed(() => !!(route.query.filter || parseIpQuery(route.query.ip).text || route.query.cloudId !== undefined))
 
 // 分配到(多步)
 const transferVisible = ref(false) // 兼容老 el-dialog 名,新版不直接用
@@ -637,21 +630,31 @@ async function load() {
       page: { start: 0, limit: 1000, sort: 'bk_host_id' },
       fields: ['bk_host_id', 'bk_host_innerip', 'bk_host_innerip_v6', 'bk_host_name', 'bk_cloud_id', 'bk_os_name', 'bk_module_id']
     }
-    if (keyword.value) {
-      body.host_property_filter = {
-        condition: 'AND',
-        rules: [{ field: 'bk_host_innerip', operator: 'contains', value: keyword.value }]
-      }
+    const routeIp = parseIpQuery(route.query.ip)
+    const parsedIp = parseHostSearch(routeIp.text)
+    const rules = []
+    if (routeIp.text) {
+      const ipValues = [...parsedIp.IPv4List, ...parsedIp.IPv6List,
+        ...parsedIp.IPv4WithCloudList.map(([, ip]) => ip), ...parsedIp.IPv6WithCloudList.map(([, ip]) => ip)]
+      if (ipValues.length) rules.push({ field: 'bk_host_innerip', operator: routeIp.exact ? 'equal' : 'contains', value: ipValues.length === 1 ? ipValues[0] : ipValues })
+      if (parsedIp.assetList.length) rules.push({ field: 'bk_asset_id', operator: 'in', value: parsedIp.assetList })
+    } else if (keyword.value) {
+      rules.push({ field: 'bk_host_innerip', operator: 'contains', value: keyword.value })
     }
-    if (filters.value.cloudId !== null && filters.value.cloudId !== undefined) {
+    const routeConditions = parseFilterQuery(route.query.filter)
+    const advancedFilter = conditionToHostPropertyFilter(routeConditions.map((item) => {
+      let value = item.value
+      const numeric = ['int', 'float'].includes(item.property.bk_property_type)
+      const multi = ['in', 'nin', 'range'].includes(item.operator)
+      if (multi && !Array.isArray(value)) value = [value]
+      if (numeric) value = Array.isArray(value) ? value.map(Number) : Number(value)
+      return { field: item.property.bk_property_id, operator: item.operator, value }
+    }))
+    if (advancedFilter?.rules?.length) rules.push(...advancedFilter.rules)
+    if (rules.length) body.host_property_filter = { condition: 'AND', rules }
+    if (route.query.cloudId !== undefined) {
       body.host_property_filter = body.host_property_filter || { condition: 'AND', rules: [] }
-      body.host_property_filter.rules.push({ field: 'bk_cloud_id', operator: 'equal', value: filters.value.cloudId })
-    }
-    if (filters.value.os && filters.value.os.length) {
-      body.host_property_filter = body.host_property_filter || { condition: 'AND', rules: [] }
-      for (const os of filters.value.os) {
-        body.host_property_filter.rules.push({ field: 'bk_os_name', operator: 'contains', value: os })
-      }
+      body.host_property_filter.rules.push({ field: 'bk_cloud_id', operator: 'equal', value: Number(route.query.cloudId) })
     }
     const raw = await http.post('/hosts/list_hosts_without_app', body)
     const list = (raw?.info || []).map((h) => h.host || h)
@@ -672,14 +675,117 @@ function reload() {
   load()
 }
 
-function resetFilters() {
-  filters.value = { os: [], cloudId: null }
-  filterVisible.value = false
+function onSelect(rows) {
+  selectedHosts.value = rows
+}
+
+function parseIpQuery(value) {
+  if (!value) return { text: '', inner: true, outer: true, exact: true }
+  const params = new URLSearchParams(String(value).replace(/&amp;/g, '&'))
+  return {
+    // 旧版 setupIPQuery:text 中的逗号还原为换行展示
+    text: (params.get('text') || '').replace(/,/g, '\n'),
+    inner: params.get('inner') !== 'false',
+    outer: params.get('outer') !== 'false',
+    exact: params.get('exact') !== 'false'
+  }
+}
+
+function parseFilterQuery(value) {
+  const conditions = []
+  const params = new URLSearchParams(String(value || '').replace(/&amp;/g, '&'))
+  for (const [key, raw] of params.entries()) {
+    const dot = key.indexOf('.')
+    if (dot < 1) continue
+    const field = key.slice(0, dot)
+    const operator = key.slice(dot + 1)
+    // 旧版 findProperty:数字键按属性 id 匹配,否则按 bk_property_id
+    const isIdKey = /^\d+$/.test(field)
+    const property = advancedProperties.value.find((item) => (
+      isIdKey ? String(item.id) === field : item.bk_property_id === field
+    ))
+    if (!property) continue
+    const values = raw.split(',')
+    conditions.push({
+      id: String(property.id ?? `${property.bk_obj_id}.${field}`),
+      property,
+      operator,
+      value: ['in', 'nin', 'range'].includes(operator) ? values : values[0]
+    })
+  }
+  return conditions
+}
+
+let filterUsercustom = null
+async function ensureFilterUsercustom() {
+  if (filterUsercustom === null) filterUsercustom = await searchUserCustom().catch(() => null)
+  return filterUsercustom
+}
+
+async function ensureAdvancedProperties() {
+  if (!advancedProperties.value.length) {
+    advancedProperties.value = await fetchHostFilterProperties()
+  }
+}
+
+async function buildAdvancedInitial() {
+  await ensureAdvancedProperties()
+  // 旧版顺序:setupNormalProperty 预置默认/用户习惯条件,setupPropertyQuery 用 URL 值回填
+  const conditions = resolveInitialConditions(advancedProperties.value, await ensureFilterUsercustom())
+  for (const urlCondition of parseFilterQuery(route.query.filter)) {
+    const existing = conditions.find((item) => item.property.bk_property_id === urlCondition.property.bk_property_id)
+    if (existing) {
+      existing.operator = urlCondition.operator
+      existing.value = urlCondition.value
+    } else {
+      conditions.push(urlCondition)
+    }
+  }
+  // host-landing 深链的 cloudId 转成等值条件,与旧版漏斗条件一致
+  if (route.query.cloudId !== undefined) {
+    const cloudProp = advancedProperties.value.find((item) => item.bk_property_id === 'bk_cloud_id')
+    if (cloudProp) {
+      const cloudRow = conditions.find((item) => item.property.bk_property_id === 'bk_cloud_id')
+      if (cloudRow) {
+        cloudRow.operator = 'eq'
+        cloudRow.value = Number(route.query.cloudId)
+      } else {
+        conditions.push({
+          id: String(cloudProp.id ?? 'host.bk_cloud_id'),
+          property: cloudProp,
+          operator: 'eq',
+          value: Number(route.query.cloudId)
+        })
+      }
+    }
+  }
+  return { IP: parseIpQuery(route.query.ip), conditions }
+}
+
+async function openAdvancedFromRoute() {
+  if (!(route.query.adv || route.query.advanced)) return
+  advancedInitial.value = await buildAdvancedInitial()
+  advancedFilterVisible.value = true
+}
+
+async function openAdvancedDrawer() {
+  advancedInitial.value = await buildAdvancedInitial()
+  advancedFilterVisible.value = true
+}
+
+async function handleAdvancedReset() {
+  advancedInitial.value = { IP: { text: '', inner: true, outer: true, exact: true }, conditions: [] }
+  await router.replace({ query: { ...route.query, adv: undefined, advanced: undefined, filter: undefined, ip: undefined } })
   reload()
 }
 
-function onSelect(rows) {
-  selectedHosts.value = rows
+async function handleAdvancedSubmit(result) {
+  const filter = result.filter || ''
+  advancedFilterVisible.value = false
+  // 旧版行为:查询后把本次所选字段保存为用户习惯
+  saveUserCustom({ [RESOURCE_FILTER_USERCUSTOM_KEY]: toUserBehavior(result.conditions) }).catch(() => {})
+  await router.replace({ query: { ...route.query, scope: 'all', adv: '1', advanced: undefined, ip: serializeIpCondition(result.IP), filter } })
+  reload()
 }
 
 function goDetail(row) {
@@ -973,13 +1079,19 @@ function switchTab(key) {
   reload()
 }
 
-onMounted(() => {
+// 旧版契约:仅"无 adv → 有 adv"的跳变才自动展开侧滑(对齐 host-options 对 prev._t 的判断),
+// 避免本页查询提交(router.replace 带 adv=1)后把刚关闭的侧滑又重新打开
+const hasAdvQuery = computed(() => !!(route.query.adv || route.query.advanced))
+watch(hasAdvQuery, (val, old) => {
+  if (val && !old) openAdvancedFromRoute()
+})
+
+onMounted(async () => {
   const ip = route.query.ip
-  if (ip) keyword.value = String(ip)
-  if (route.query.cloudId !== undefined) filters.value.cloudId = Number(route.query.cloudId)
-  if (route.query.advanced) filterVisible.value = true
+  if (ip) keyword.value = parseIpQuery(ip).text || String(ip)
+  await openAdvancedFromRoute()
   // 老版默认落在「未分配」;query.scope 可指定
-  const scope = String(route.query.scope || 'unassigned')
+  const scope = ({ '1': 'unassigned', '0': 'assigned' })[String(route.query.scope)] || String(route.query.scope || 'unassigned')
   if (groupTabs.some((t) => t.key === scope)) groupTab.value = scope
   loadDirectoryTree().then(() => {
     // 老版默认选中「空闲机」(directory=1)
@@ -1060,10 +1172,7 @@ onMounted(() => {
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toolbar .spacer { flex: 1; }
 .refresh-time { color: #979ba5; font-size: 12px; margin: 0 4px; }
-.filter-panel { padding: 8px 0; }
-.filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.filter-row span { width: 60px; color: #63656E; font-size: 13px; }
-.filter-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.option-filter.active { color: #3A84FF; border-color: #3A84FF; }
 .table-footer {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 0 0; font-size: 12px; color: #63656E;
