@@ -101,11 +101,16 @@ export function serializeIpCondition(condition = {}) {
 }
 
 export function serializeFilterConditions(conditions = []) {
-  return conditions.filter((item) => item && item.field && item.value !== '' && item.value !== null && item.value !== undefined)
+  // 旧版 getQuery 契约:String(value).length 为 0 的条件不写入 URL(空数组序列化为空串,须整体跳过)
+  return conditions.filter((item) => item && item.field && !isEmptyValue(item.value))
     .map((item) => {
       const value = Array.isArray(item.value) ? item.value.join(',') : item.value
       return `${item.field}.${String(item.operator || 'eq').replace(/^\$/, '')}=${value}`
     }).join('&')
+}
+
+function isEmptyValue(value) {
+  return value === '' || value === null || value === undefined || (Array.isArray(value) && !value.length)
 }
 
 // 前端操作符 → 后端 host_property_filter 操作符(旧版 transformCondition 契约)
@@ -125,7 +130,7 @@ const OPERATOR_TO_API = {
 export function conditionToHostPropertyFilter(conditions = []) {
   const rules = []
   for (const item of conditions) {
-    if (!item || !item.field || item.value === '' || item.value === null || item.value === undefined) continue
+    if (!item || !item.field || isEmptyValue(item.value)) continue
     const operator = OPERATOR_TO_API[String(item.operator || 'eq').replace(/^\$/, '')] || item.operator
     if (operator === 'range') {
       // 旧版 $range 前端拆分为 gte/lte 两条

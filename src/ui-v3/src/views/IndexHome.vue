@@ -93,7 +93,7 @@ const filterInitial = ref({ IP: { text: '', inner: true, outer: true, exact: tru
 const mapWidth = ref(857)
 
 const mapUrl = import.meta.env.BASE_URL + 'map.svg'
-const placeholder = '请输入主机IP,多个以逗号分隔'
+const placeholder = '请输入IP、管控区域ID:IP、固资编号进行搜索,支持搜索多个,使用组合键 Shift + Enter 换行'
 const paddingTop = computed(() => Math.max(40, Math.floor((window.innerHeight - 58) / 3)))
 const mapStyle = computed(() => ({
   width: `${mapWidth.value}px`,

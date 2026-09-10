@@ -73,6 +73,13 @@ function hashQuery(page) {
     await page.waitForTimeout(600)
     const defaultText = await drawer.textContent()
     assert(defaultText.includes('集群名') && defaultText.includes('模块名') && defaultText.includes('主要维护人') && defaultText.includes('管控区域'), `默认条件行缺失: ${defaultText.slice(0, 200)}`)
+    // 旧版值控件形态:字符多值 = tag 输入(占位 请输入xx),用户字段带「我」快捷键
+    assert(defaultText.includes('请输入集群名') && defaultText.includes('请输入模块名'), '字符条件行缺少 请输入xx 占位')
+    assert(await drawer.locator('.item-me').filter({ hasText: '我' }).count() >= 2, '用户字段缺少「我」快捷键')
+    const valueWidths = await drawer.locator('.item-value').evaluateAll((els) => els
+      .filter((el) => el.offsetParent !== null)
+      .map((el) => Math.round(el.getBoundingClientRect().width)))
+    assert(valueWidths.length >= 5 && Math.min(...valueWidths) >= 150, `值控件被压窄: ${valueWidths.join(',')}`)
     await drawer.locator('.field-picker input').click()
     await page.waitForTimeout(600)
     await page.locator('.el-select-dropdown:visible').getByText('操作系统名称', { exact: true }).first().click()

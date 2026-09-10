@@ -697,6 +697,8 @@ function parseFilterQuery(value) {
   for (const [key, raw] of params.entries()) {
     const dot = key.indexOf('.')
     if (dot < 1) continue
+    // 空值条目(field.op=)不还原成条件,避免值里混入空字符串
+    if (raw === '') continue
     const field = key.slice(0, dot)
     const operator = key.slice(dot + 1)
     // 旧版 findProperty:数字键按属性 id 匹配,否则按 bk_property_id
@@ -706,11 +708,14 @@ function parseFilterQuery(value) {
     ))
     if (!property) continue
     const values = raw.split(',')
+    let value = ['in', 'nin', 'range'].includes(operator) ? values : values[0]
+    // bool 经 URL 序列化后是 'true'/'false' 字符串,还原为布尔供是/否下拉回显
+    if (property.bk_property_type === 'bool') value = value === 'true'
     conditions.push({
       id: String(property.id ?? `${property.bk_obj_id}.${field}`),
       property,
       operator,
-      value: ['in', 'nin', 'range'].includes(operator) ? values : values[0]
+      value
     })
   }
   return conditions

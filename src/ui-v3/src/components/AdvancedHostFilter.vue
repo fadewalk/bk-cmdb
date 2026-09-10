@@ -48,34 +48,63 @@
             <el-select v-if="!WITHOUT_OPERATOR.includes(item.property.bk_property_type)" v-model="item.operator" class="item-operator" @change="resetOperatorValue(item)">
               <el-option v-for="operator in operatorsFor(item.property)" :key="operator.value" :label="operator.label" :value="operator.value" />
             </el-select>
+            <!-- 枚举/列表/时区:选项下拉(旧版 getBindProps 仅这几类传 option) -->
             <el-select
-              v-if="item.property.option?.length"
+              v-if="controlKind(item) === 'enum'"
               v-model="item.value"
               class="item-value"
               filterable
               clearable
               :multiple="isMultiOperator(item.operator)"
               collapse-tags
+              :placeholder="placeholderFor(item.property)"
             >
-              <el-option v-for="option in item.property.option" :key="option.id ?? option.name ?? option" :label="option.name ?? option.label ?? option" :value="option.id ?? option.name ?? option" />
+              <el-option v-for="option in item.property.option" :key="String(option.id ?? option.name ?? option)" :label="option.name ?? option.label ?? option" :value="option.id ?? option.name ?? option" />
             </el-select>
+            <!-- 管控区域:云区域下拉(旧版 cmdb-search-foreignkey) -->
             <el-select
-              v-else-if="isMultiOperator(item.operator)"
+              v-else-if="controlKind(item) === 'cloud'"
               v-model="item.value"
               class="item-value"
+              filterable
+              clearable
+              :multiple="isMultiOperator(item.operator)"
+              collapse-tags
+              :placeholder="placeholderFor(item.property)"
+            >
+              <el-option v-for="area in cloudAreas" :key="area.bk_cloud_id" :label="area.bk_cloud_name" :value="area.bk_cloud_id" />
+            </el-select>
+            <!-- bool:是/否选择(旧版 cmdb-search-bool,无操作符) -->
+            <el-select v-else-if="controlKind(item) === 'bool'" v-model="item.value" class="item-value" :placeholder="placeholderFor(item.property)">
+              <el-option label="是" :value="true" />
+              <el-option label="否" :value="false" />
+            </el-select>
+            <el-date-picker v-else-if="controlKind(item) === 'date'" v-model="item.value" class="item-value" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
+            <el-date-picker v-else-if="controlKind(item) === 'time'" v-model="item.value" class="item-value" type="datetimerange" value-format="YYYY-MM-DD HH:mm:ss" range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间" />
+            <!-- 数字范围:两个数字输入 - 连接(旧版 cmdb-search-int multiple) -->
+            <span v-else-if="controlKind(item) === 'number-range'" class="item-value number-range">
+              <el-input :model-value="item.value?.[0]" type="number" @update:model-value="setRangeBound(item, 0, $event)" />
+              <span class="range-grep">-</span>
+              <el-input :model-value="item.value?.[1]" type="number" @update:model-value="setRangeBound(item, 1, $event)" />
+            </span>
+            <el-input v-else-if="controlKind(item) === 'number'" v-model="item.value" class="item-value" type="number" :placeholder="placeholderFor(item.property)" />
+            <!-- 多值 tag 输入(字符/用户/数字 in):旧版 bk-tag-input allow-create 形态 -->
+            <el-select
+              v-else-if="isTagKind(controlKind(item))"
+              v-model="item.value"
+              class="item-value tag-input"
               multiple
               filterable
               allow-create
               default-first-option
               collapse-tags
-              placeholder="输入后回车添加"
+              :placeholder="placeholderFor(item.property)"
             />
-            <el-switch v-else-if="item.property.bk_property_type === 'bool'" v-model="item.value" class="item-value" />
-            <el-date-picker v-else-if="['date', 'time'].includes(item.property.bk_property_type)" v-model="item.value" class="item-value" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
-            <el-input-number v-else-if="['int', 'float'].includes(item.property.bk_property_type)" v-model="item.value" class="item-value" :controls="false" />
-            <el-input v-else v-model="item.value" class="item-value" clearable />
+            <el-input v-else v-model="item.value" class="item-value" clearable :placeholder="placeholderFor(item.property)" />
+            <!-- 用户字段「我」快捷键(旧版 objuser 快捷填入当前用户) -->
+            <el-button v-if="isUserKind(controlKind(item))" class="item-me" link type="primary" @click="fillCurrentUser(item)">我</el-button>
           </div>
-          <el-button class="item-remove" link type="danger" aria-label="删除条件" @click="removeField(item)">×</el-button>
+          <span class="item-remove" aria-label="删除条件" @click="removeField(item)">×</span>
         </el-form-item>
       </el-form>
 
@@ -90,6 +119,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
+import { searchCloudAreas } from '../api/cmdb'
 import { parseHostSearch, serializeFilterConditions } from '../utils/host-filter'
 
 const props = defineProps({
@@ -168,15 +198,63 @@ function makeDraft(initial = {}) {
   }
 }
 function isEmpty(value) { return value === '' || value === null || value === undefined || (Array.isArray(value) && !value.length) }
-// 旧版 getDefaultData:字符/枚举类默认「属于」,数值默认「等于」
+// 旧版 getDefaultData:字符/枚举类默认「属于」,数值/布尔默认「等于」,日期/时间默认「范围」
 function getDefaultOperator(property) {
   const type = property?.bk_property_type
-  if (['singlechar', 'longchar', 'list', 'enum', 'objuser', 'timezone', 'organization'].includes(type)) return 'in'
+  if (['date', 'time'].includes(type)) return 'range'
+  if (['singlechar', 'longchar', 'list', 'enum', 'enummulti', 'enumquote', 'objuser', 'timezone', 'organization'].includes(type)) return 'in'
   return 'eq'
 }
 function initialValueFor(property, operator) {
-  if (property.bk_property_type === 'bool') return false
+  const type = property.bk_property_type
+  if (type === 'bool') return ''
+  if (type === 'date' || type === 'time' || operator === 'range') return []
   return isMultiOperator(operator) ? [] : ''
+}
+// 旧版 getComponentType 契约:按「属性类型 + 操作符」分派值控件,而不是按 option 有无
+function controlKind(item) {
+  const type = item.property.bk_property_type
+  const operator = item.operator
+  if (type === 'bool') return 'bool'
+  if (type === 'date') return 'date'
+  if (type === 'time') return 'time'
+  if (['enum', 'enummulti', 'enumquote', 'list', 'timezone'].includes(type)) return 'enum'
+  if (type === 'foreignkey') return 'cloud'
+  if (type === 'objuser') return isMultiOperator(operator) ? 'user-tag' : 'user-input'
+  if (['int', 'float'].includes(type)) {
+    if (operator === 'range') return 'number-range'
+    if (operator === 'in') return 'number-tag'
+    return 'number'
+  }
+  return isMultiOperator(operator) ? 'tag' : 'input'
+}
+const TAG_KINDS = ['tag', 'number-tag', 'user-tag']
+function isTagKind(kind) { return TAG_KINDS.includes(kind) }
+function isUserKind(kind) { return kind === 'user-tag' || kind === 'user-input' }
+// 旧版 getPlaceholder:选择类「请选择xx」,其余「请输入xx」
+const SELECT_PLACEHOLDER_TYPES = ['list', 'enum', 'enummulti', 'enumquote', 'timezone', 'bool']
+function placeholderFor(property) {
+  const name = property.bk_property_name || property.bk_property_id
+  return SELECT_PLACEHOLDER_TYPES.includes(property.bk_property_type) ? `请选择${name}` : `请输入${name}`
+}
+const cloudAreas = ref([])
+async function loadCloudAreas() {
+  if (cloudAreas.value.length) return
+  const res = await searchCloudAreas({ page: { start: 0, limit: 200 }, condition: {} }).catch(() => [])
+  cloudAreas.value = res?.info || []
+}
+watch(() => props.modelValue, (open) => { if (open) loadCloudAreas() })
+function fillCurrentUser(item) {
+  if (Array.isArray(item.value)) {
+    if (!item.value.includes('admin')) item.value = [...item.value, 'admin']
+  } else {
+    item.value = 'admin'
+  }
+}
+function setRangeBound(item, index, event) {
+  const bounds = Array.isArray(item.value) ? [...item.value] : ['', '']
+  bounds[index] = event
+  item.value = bounds
 }
 // 旧版 filter-form customOperatorTypeMap + defaultTypeMap 契约
 const OPERATOR_TYPE_MAP = {
@@ -245,18 +323,17 @@ async function handleBeforeClose(done) {
 .advanced-host-filter.el-drawer { overflow: visible; }
 .advanced-host-filter .sideslider-collapse {
   position: absolute;
-  left: -12px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: -28px;
+  top: 6px;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 56px;
+  width: 28px;
+  height: 44px;
   background: #3A84FF;
   color: #fff;
-  border-radius: 4px 0 0 4px;
+  border-radius: 2px 0 0 2px;
   cursor: pointer;
 }
 .advanced-host-filter .el-drawer__body { padding: 0; overflow: hidden; }
@@ -274,14 +351,25 @@ async function handleBeforeClose(done) {
 .advanced-host-filter .field-picker .el-select__wrapper { background: transparent; box-shadow: none !important; padding-left: 0; min-height: 24px; }
 .advanced-host-filter .field-picker .el-select__wrapper.is-focused, .advanced-host-filter .field-picker .el-select__wrapper.is-hovering { background: transparent; }
 .advanced-host-filter .field-picker .el-select__placeholder, .advanced-host-filter .field-picker .el-select__selected-item { color: #3A84FF; font-size: 12px; }
-.advanced-host-filter .field-picker .el-select__caret { color: #3A84FF; }
+.advanced-host-filter .field-picker .el-select__caret { display: none; }
 .advanced-host-filter .filter-item { position: relative; margin: 0 -4px; padding: 5px 10px 10px; }
 .advanced-host-filter .filter-item:hover { background: #F5F6FA; }
 .advanced-host-filter .item-label-suffix { margin-left: 4px; color: #979BA5; font-size: 12px; }
-.advanced-host-filter .item-content-wrapper { display: flex; align-items: flex-start; gap: 8px; min-height: 32px; padding-right: 18px; }
-.advanced-host-filter .item-operator { width: 96px; flex: 0 0 96px; }
+.advanced-host-filter .item-content-wrapper { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 8px; min-height: 32px; padding-right: 18px; }
+/* 旧版 item-operator flex:128px 0 0 */
+.advanced-host-filter .item-operator { flex: 128px 0 0; }
+/* 值区显式撑满,防止 el-select 收缩为箭头宽 */
 .advanced-host-filter .item-value { min-width: 0; flex: 1; }
-.advanced-host-filter .item-remove { position: absolute; right: -2px; top: 34px; padding: 2px; font-size: 18px; opacity: 0; }
+.advanced-host-filter .item-value.el-select, .advanced-host-filter .item-value.el-input, .advanced-host-filter .item-value.el-date-editor { width: 100%; }
+.advanced-host-filter .item-value input[type='number']::-webkit-outer-spin-button,
+.advanced-host-filter .item-value input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.advanced-host-filter .item-value.number-range { display: flex; align-items: center; gap: 8px; }
+.advanced-host-filter .item-value.number-range .el-input { flex: 1; }
+.advanced-host-filter .tag-input .el-select__caret { display: none; }
+.advanced-host-filter .item-me { flex: 0 0 auto; padding: 0; height: 32px; }
+/* 旧版 item-remove:行右上角,灰字 hover 变红 */
+.advanced-host-filter .item-remove { position: absolute; right: -10px; top: 3px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #63656E; cursor: pointer; opacity: 0; }
+.advanced-host-filter .item-remove:hover { color: #EA3636; }
 .advanced-host-filter .filter-item:hover .item-remove { opacity: 1; }
 .advanced-host-filter .filter-options { display: flex; align-items: center; padding: 10px 24px; border-top: 1px solid #DCDEE5; background: #fff; }
 .advanced-host-filter .filter-options .search-btn { margin-right: 10px; }
