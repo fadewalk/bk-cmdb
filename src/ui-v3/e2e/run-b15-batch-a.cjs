@@ -201,13 +201,13 @@ async function openHash(page, hash, timeout = 30000, expectPath) {
       const btns = [...document.querySelectorAll('.el-drawer button')]
       btns.find((b) => b.textContent.includes('编辑'))?.click()
     })
-    await page.waitForSelector('.el-dialog__title:has-text("编辑云账户")', { timeout: 5000 })
-    const nameInput = await page.$('.el-dialog .el-form-item:has-text("账户名称") input')
+    await page.waitForSelector('.el-drawer__title:has-text("编辑账户")', { timeout: 5000 })
+    const nameInput = await page.$('.el-drawer .el-form-item:has-text("账户名称") input')
     await nameInput.fill(`E2E账户改${stamp}`)
     const updatePromise = page.waitForResponse((r) => r.url().includes('update/cloud/account'), { timeout: 8000 })
     await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.el-dialog__footer button')]
-      btns.find((b) => b.textContent.includes('保存'))?.click()
+      const btns = [...document.querySelectorAll('.el-drawer button')]
+      btns.find((b) => b.textContent.includes('提交'))?.click()
     })
     const upRes = await updatePromise
     const upBody = await upRes.json()

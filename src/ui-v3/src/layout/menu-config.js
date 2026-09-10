@@ -128,6 +128,8 @@ const LEGACY_ROUTE_FAMILIES = [
   { pattern: /^\/model\/management\/details(?:\/.*)?$/, path: '/model/management' },
   { pattern: /^\/model\/index(?:\/.*)?$/, path: '/model/management' },
   { pattern: /^\/model\/all\/topology(?:\/.*)?$/, path: '/model/topology' },
+  { pattern: /^\/model\/field-template\/(?:create|edit|bind|sync)(?:\/.*)?$/, path: '/model/field-template' },
+  { pattern: /^\/model\/(?:relation|association)(?:\/.*)?$/, path: '/model/association' },
   { pattern: /^\/platform-management(?:\/.*)?$/, path: '/platform/global-config' }
 ]
 

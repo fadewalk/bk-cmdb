@@ -81,8 +81,8 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     await page.waitForSelector('.el-dialog:has-text("新建服务实例")', { timeout: 3000 })
     ok('服务实例向导对话框打开')
     // 验证步骤条 + 选主机表格
-    const stepText = await page.locator('.el-dialog .el-steps').textContent()
-    if (stepText.includes('选择主机')) ok('向导步骤 1:选择主机')
+    const importStepsText = await page.locator('.el-dialog .el-steps').textContent()
+    if (importStepsText.includes('选择主机')) ok('向导步骤 1:选择主机')
     else fail('向导步骤', stepText)
     const candRows = await page.locator('.el-dialog .el-table .el-table__row').count()
     ok(`候选主机表行数: ${candRows}`)
@@ -108,24 +108,23 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     ok('点击"交换机"跳到模型实例页')
     await page.screenshot({ path: path.join(SHOTS, 'B4-resource-index.png'), fullPage: true })
 
-    // === B4 主机列表导入 ===
+    // === B4 主机列表导入(老版两步抽屉) ===
     await page.goto(`http://localhost:8090/?t=${Date.now()+2}#/resource/host`, { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.host-page', { timeout: 10000 })
     ok('主机列表页加载')
 
     await page.locator('button:has-text("导入主机")').click()
-    await page.waitForSelector('.el-dialog:has-text("导入主机")', { timeout: 3000 })
-    const r = Math.floor(Math.random()*250)+1
-    const csv = `10.99.0.${r},0,e2e-host-${r},Linux\n10.99.0.${r+1},0,e2e-host-${r+1},Windows`
-    await page.locator('.el-dialog textarea').fill(csv)
-    await page.waitForTimeout(400)
-    const parsedCount = await page.locator('.el-dialog .el-table .el-table__row').count()
-    if (parsedCount === 2) ok(`CSV 解析 → ${parsedCount} 行预览`)
-    else fail('CSV 解析', `${parsedCount} 行`)
-    // 导入按钮可用
-    const importBtn = await page.locator('.el-dialog button:has-text("导入")').isEnabled()
-    if (importBtn) ok('"导入"按钮启用')
-    else fail('导入按钮', '被禁用')
+    await page.waitForSelector('.el-drawer__title:has-text("导入主机")', { timeout: 3000 })
+    ok('导入抽屉打开(两步:上传文件/选择关联模型)')
+    const twoStepText = await page.locator('.import-steps').textContent()
+    if (twoStepText.includes('上传文件') && twoStepText.includes('选择关联模型')) ok('两步步骤条渲染')
+    else fail("导入步骤条", twoStepText)
+    const uploadArea = await page.locator('.import-upload').count()
+    if (uploadArea) ok('拖拽上传区渲染')
+    else fail('上传区', '缺失')
+    const tplLink = await page.locator('.upload-tips span.link').count()
+    if (tplLink) ok('「下载模板」链接渲染')
+    else fail('下载模板', '缺失')
     await page.screenshot({ path: path.join(SHOTS, 'B4-import.png'), fullPage: true })
     await page.keyboard.press('Escape')
 
