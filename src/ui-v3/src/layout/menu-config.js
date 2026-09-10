@@ -9,14 +9,6 @@ export const MENUS = [
     path: '/index'
   },
   {
-    id: 'biz-set',
-    name: '业务集',
-    icon: 'icon-cc-business-set',
-    children: [
-      { id: 'biz-set-topo', name: '业务集拓扑', icon: 'icon-cc-nav-business', path: '/biz-set/topo' }
-    ]
-  },
-  {
     id: 'business',
     name: '业务',
     icon: 'icon-cc-nav-business',

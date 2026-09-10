@@ -1,12 +1,17 @@
 <template>
   <div class="host-page">
-    <h1 class="page-title sr-only">主机</h1>
+    <!-- 老版头部:返回箭头 + 标题 + 新窗口打开 -->
+    <div class="page-header">
+      <i class="bk-cmdb-icon icon-cc-arrow back-arrow" title="返回" @click="goBack" />
+      <h1 class="page-title">主机</h1>
+      <i class="bk-cmdb-icon icon-cc-jump-link outer-link" title="在新窗口打开" @click="openInNewTab" />
+    </div>
     <!-- 全宽 scope tabs(对齐老版: 未分配/已分配/全部 在内容区顶部) -->
     <div class="scope-tabs">
       <span
         v-for="t in groupTabs" :key="t.key"
         :class="['scope-tab', { active: groupTab === t.key }]"
-        @click="groupTab = t.key"
+        @click="switchTab(t.key)"
       >{{ t.label }}</span>
     </div>
     <div class="host-body">
@@ -32,7 +37,7 @@
             <span class="dir-row">
               <i :class="['bk-cmdb-icon', data.__icon || 'icon-cc-host']" />
               <span class="d-name">{{ data.name }}</span>
-              <span v-if="data.__count" class="d-count">{{ data.__count }}</span>
+              <span v-if="data.__count !== undefined" class="d-count">{{ data.__count }}</span>
             </span>
           </template>
         </el-tree>
@@ -45,7 +50,7 @@
       <!-- 右:列表 -->
       <div class="main-col">
     <div class="toolbar">
-      <el-button size="small" type="primary" :icon="'Plus'" @click="importVisible = true">导入主机</el-button>
+      <el-button size="small" type="primary" @click="openImport">导入主机</el-button>
       <el-button size="small" :disabled="!selectedHosts.length" @click="openTransferWizard">分配到<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
       <el-dropdown trigger="click" @command="onBatchEdit">
         <el-button size="small" :disabled="!selectedHosts.length">编辑<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
@@ -296,31 +301,55 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importVisible" title="导入主机" width="720px" top="6vh">
-      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
-        title="支持 .xlsx/.xls 文件上传,也可直接粘贴 CSV/制表符文本" />
-      <div class="import-toolbar">
-        <el-upload :auto-upload="false" :limit="1" accept=".csv,.xlsx,.xls" :on-change="onFileChange">
-          <el-button size="small" :icon="'Upload'" :loading="parsing">选择 Excel/CSV 并预览</el-button>
-        </el-upload>
-        <el-button size="small" @click="downloadTemplate">下载 Excel 模板</el-button>
-        <el-button size="small" type="primary" :loading="importing" :disabled="!parsedRows.length"
-          @click="submitImport">导入 ({{ parsedRows.length }} 行)</el-button>
+    <!-- 导入主机(老版 import-file 两步抽屉:上传文件 → 解析结果/关联模型) -->
+    <el-drawer v-model="importVisible" title="导入主机" size="720px" :close-on-click-modal="false">
+      <div class="import-steps">
+        <span :class="['step-node', { active: importStep === 0, done: importStep > 0 }]"><i>1</i>上传文件</span>
+        <span class="step-dash" />
+        <span :class="['step-node', { active: importStep === 1 }]"><i>2</i>选择关联模型</span>
       </div>
-      <el-input v-model="importText" type="textarea" :rows="6" placeholder="一行一台主机..." style="margin-top: 8px" @input="parseText" />
-      <el-table :data="parsedRows" max-height="240" size="small" border style="margin-top: 8px">
-        <el-table-column prop="bk_host_innerip" label="内网IP" min-width="130" />
-        <el-table-column prop="bk_cloud_id" label="云区域ID" width="100" />
-        <el-table-column prop="bk_host_name" label="主机名" min-width="140" />
-        <el-table-column prop="bk_os_name" label="操作系统" min-width="120" />
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag v-if="row.__error" type="danger" size="small">{{ row.__error }}</el-tag>
-            <el-tag v-else type="success" size="small">就绪</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
+      <el-alert type="warning" :closable="false" style="margin-bottom: 12px"
+        title="说明：资源池仅支持全新导入主机，不支持对已存在的主机更新" />
+
+      <template v-if="importStep === 0">
+        <el-upload
+          drag
+          :auto-upload="false"
+          :limit="1"
+          accept=".xlsx,.xls"
+          :on-change="onFileChange"
+          class="import-upload"
+        >
+          <div class="upload-area">
+            <el-icon class="upload-icon"><UploadFilled /></el-icon>
+            <div>将文件拖到此处或<span class="link">点击上传</span></div>
+          </div>
+        </el-upload>
+        <div class="upload-tips">
+          20M 以内的 xlsx 文件
+          <span class="link" @click="downloadTemplate">下载模板</span>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="parse-summary">
+          <el-tag v-if="importParseSuccess" type="success" size="small">成功 {{ importParseSuccess.length }} 条</el-tag>
+          <el-tag v-if="importParseError" type="danger" size="small">失败 {{ importParseError.length }} 条</el-tag>
+          <el-tag v-if="!importParseSuccess && !importParseError" size="small">未解析到数据</el-tag>
+        </div>
+        <div class="relation-section">
+          <div class="relation-title">选择关联模型</div>
+          <el-empty description="主机模型无需要关联的模型,可直接导入" :image-size="60" />
+        </div>
+      </template>
+
+      <div class="import-footer">
+        <el-button v-if="importStep === 0" type="primary" :disabled="!importSourceFile" :loading="importing" @click="goImportStep2">下一步</el-button>
+        <el-button v-if="importStep === 1" @click="importStep = 0">上一步</el-button>
+        <el-button v-if="importStep === 1" type="primary" :loading="importing" @click="submitImport">导入</el-button>
+        <el-button @click="importVisible = false">取消</el-button>
+      </div>
+    </el-drawer>
 
     <!-- 导入编辑(老版 host-options 导入编辑:真实 xlsx → /hosts/update) -->
     <el-dialog v-model="importEditVisible" title="导入编辑" width="520px" :close-on-click-modal="false">
@@ -361,7 +390,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import {
   http, listHostsWithoutApp, transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   transferHostsToDirectory, importHosts, updateHostsByExcel, downloadHostTemplate, listResourceDirectory, deleteHostsBatch, exportHosts,
@@ -584,20 +612,21 @@ function onGroupClick(g) {
 async function loadDirectoryTree() {
   try {
     const list = await listResourceDirectory()
-    // 后端返回数组;虚拟根节点
+    // 老版契约:空闲机模块排首位;树形为 主机池(计数=子项合计) → [空闲机, 自定义目录...]
     const items = (list?.info || list || []).map((d) => ({
-      id: d.bk_module_id || d.id,
+      id: String(d.bk_module_id || d.id),
       name: d.bk_module_name || d.name,
-      __count: d.bk_host_count
+      __count: d.host_count ?? 0
     }))
+    const sum = items.reduce((acc, it) => acc + (Number(it.__count) || 0), 0)
     dirTreeData.value = [
       {
-        id: 'default', name: '默认', children: items.length ? items : [{ id: 'empty', name: '(空)' }],
-        __icon: 'icon-cc-host'
+        id: 'default', name: '主机池', __count: sum, __icon: 'icon-cc-host',
+        children: items.length ? items : [{ id: 'empty', name: '(空)' }]
       }
     ]
   } catch (e) {
-    dirTreeData.value = [{ id: 'default', name: '默认', children: [] }]
+    dirTreeData.value = [{ id: 'default', name: '主机池', __count: 0, children: [] }]
   }
 }
 
@@ -864,56 +893,47 @@ async function doTransferToDir() {
   }
 }
 
-// 导入
+// 导入(老版 import-file 两步抽屉)
 const importVisible = ref(false)
-const importText = ref('')
-const parsedRows = ref([])
+const importStep = ref(0)
+const importParseSuccess = ref([])
+const importParseError = ref([])
 const importing = ref(false)
-const parsing = ref(false)
 const importSourceFile = ref(null)
 
-function parseText() {
-  const lines = importText.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const rows = []
-  for (const line of lines) {
-    const parts = line.split(/[,\t]/).map((s) => s.trim())
-    const [ip, cloudId, hostName, os] = parts
-    if (!ip) continue
-    let err = ''
-    if (!/^[\d.]+$/.test(ip)) err = 'IP 格式错'
-    else if (cloudId && !/^\d+$/.test(cloudId)) err = '云区域 ID 需为数字'
-    rows.push({ bk_host_innerip: ip, bk_cloud_id: cloudId ? Number(cloudId) : 0, bk_host_name: hostName || '', bk_os_name: os || '', __error: err })
-  }
-  parsedRows.value = rows
+function openImport() {
+  importStep.value = 0
+  importSourceFile.value = null
+  importParseSuccess.value = []
+  importParseError.value = []
+  importVisible.value = true
 }
 
 async function onFileChange(uploadFile) {
   if (!uploadFile?.raw) return
-  parsing.value = true
+  const file = uploadFile.raw
+  if (!/\.(xlsx|xls)$/i.test(file.name || '')) {
+    ElMessage.warning('仅支持 .xlsx/.xls 文件')
+    return
+  }
+  importSourceFile.value = file
+}
+
+// 下一步:服务端解析(op:1),返回成功/失败明细
+async function goImportStep2() {
+  if (!importSourceFile.value) return
+  importing.value = true
   try {
-    const file = uploadFile.raw
-    importSourceFile.value = file
-    const isSpreadsheet = /\.(xlsx|xls)$/i.test(file.name || '')
-    if (isSpreadsheet) {
-      // 真正解析 Excel(后端也只接受 xlsx/xls),首个工作表按表头映射字段
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const records = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
-      parsedRows.value = records.map((record) => ({
-        bk_host_innerip: record.IP || record['内网IP'] || record.bk_host_innerip || '',
-        bk_cloud_id: Number(record['云区域ID'] || record.bk_cloud_id || 0),
-        bk_host_name: record['主机名'] || record.bk_host_name || '',
-        bk_os_name: record['操作系统'] || record.bk_os_name || '',
-        __error: ''
-      })).filter((r) => r.bk_host_innerip)
-      ElMessage.success(`已识别 ${parsedRows.value.length} 行 Excel 数据`)
-    } else {
-      importText.value = await file.text()
-      parseText()
-      ElMessage.success(`已识别 ${parsedRows.value.length} 行文本数据`)
-    }
-  } catch (e) { ElMessage.error('文件解析失败: ' + (e?.message || '格式不正确')) }
-  finally { parsing.value = false }
+    const params = { op: 1 }
+    if (currentDirId.value && currentDirId.value !== 'default') params.bk_module_id = Number(currentDirId.value)
+    const resp = await importHosts(importSourceFile.value, params)
+    const info = resp?.data?.info || {}
+    importParseSuccess.value = info.success || []
+    importParseError.value = info.error || []
+    importStep.value = 1
+  } catch (e) {
+    ElMessage.error('文件解析失败: ' + (e?.message || '后端异常'))
+  } finally { importing.value = false }
 }
 
 async function downloadTemplate() {
@@ -922,27 +942,35 @@ async function downloadTemplate() {
   } catch (e) { ElMessage.error('模板下载失败: ' + (e?.message || '后端异常')) }
 }
 
+// 导入(op:2,与老版 import-file 两段提交一致)
 async function submitImport() {
-  const valid = parsedRows.value.filter((r) => !r.__error)
-  if (!valid.length) { ElMessage.warning('无可导入的有效行'); return }
   importing.value = true
   try {
-    let file = importSourceFile.value
-    // 文本粘贴仍转换为 CSV 文件;上传的 Excel 原样交给后端 excelize 解析
-    if (!file) {
-      const csv = ['IP,云区域ID,主机名,操作系统', ...valid.map((r) => `${r.bk_host_innerip},${r.bk_cloud_id},${r.bk_host_name},${r.bk_os_name}`)].join('\n')
-      file = new File([csv], 'hosts.csv', { type: 'text/csv' })
-    }
     const params = { op: 2 }
     if (currentDirId.value && currentDirId.value !== 'default') params.bk_module_id = Number(currentDirId.value)
-    await importHosts(file, params)
-    ElMessage.success(`成功导入 ${valid.length} 台主机`)
+    await importHosts(importSourceFile.value, params)
+    ElMessage.success('导入成功')
     importVisible.value = false
-    importText.value = ''
+    importStep.value = 0
     importSourceFile.value = null
-    parsedRows.value = []
+    importParseSuccess.value = []
+    importParseError.value = []
     load()
   } finally { importing.value = false }
+}
+
+function goBack() {
+  router.back()
+}
+
+function openInNewTab() {
+  window.open(window.location.href, '_blank')
+}
+
+function switchTab(key) {
+  groupTab.value = key
+  router.replace({ query: { ...route.query, scope: key } })
+  reload()
 }
 
 onMounted(() => {
@@ -950,17 +978,35 @@ onMounted(() => {
   if (ip) keyword.value = String(ip)
   if (route.query.cloudId !== undefined) filters.value.cloudId = Number(route.query.cloudId)
   if (route.query.advanced) filterVisible.value = true
-  loadDirectoryTree()
+  // 老版默认落在「未分配」;query.scope 可指定
+  const scope = String(route.query.scope || 'unassigned')
+  if (groupTabs.some((t) => t.key === scope)) groupTab.value = scope
+  loadDirectoryTree().then(() => {
+    // 老版默认选中「空闲机」(directory=1)
+    const dir = route.query.directory
+      ? String(route.query.directory)
+      : String((dirTreeData.value[0]?.children || []).find((c) => c.id !== 'empty')?.id || '')
+    if (dir) {
+      currentDirId.value = dir
+      dirTreeRef.value?.setCurrentKey(dir)
+    }
+  })
   load()
 })
 </script>
 
 <style scoped>
 .host-page { height: 100%; display: flex; flex-direction: column; background: #fff; }
+.page-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 20px; height: 50px; flex: 0 0 50px;
+  border-bottom: 1px solid #E7E9EF;
+}
+.back-arrow, .outer-link { font-size: 16px; color: #63656e; cursor: pointer; }
+.back-arrow:hover, .outer-link:hover { color: #3a84ff; }
 .page-title {
   font-size: 16px; color: #313238; font-weight: 400;
-  padding: 0 20px; height: 50px; line-height: 50px;
-  border-bottom: 1px solid #E7E9EF;
+  margin: 0; white-space: nowrap; flex: none;
 }
 .host-body { flex: 1; display: flex; overflow: hidden; }
 .group-col {
@@ -989,6 +1035,27 @@ onMounted(() => {
 .dir-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .dir-row .d-name { flex: 1; }
 .d-count { color: #979ba5; font-size: 12px; }
+.import-steps {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin-bottom: 14px;
+}
+.step-node { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: #63656e; }
+.step-node i {
+  font-style: normal; width: 22px; height: 22px; line-height: 22px; text-align: center;
+  border: 1px solid #c4c6cc; border-radius: 50%; font-size: 12px; color: #63656e;
+}
+.step-node.active { color: #3a84ff; font-weight: 500; }
+.step-node.active i { background: #3a84ff; border-color: #3a84ff; color: #fff; }
+.step-node.done i { border-color: #3a84ff; color: #3a84ff; }
+.step-dash { width: 80px; border-top: 1px dashed #c4c6cc; }
+.import-footer { display: flex; gap: 8px; margin-top: 16px; }
+.upload-area { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #63656e; padding: 18px 0; }
+.upload-area .upload-icon { font-size: 32px; color: #979ba5; }
+.upload-area .link, .upload-tips .link { color: #3a84ff; cursor: pointer; }
+.upload-tips { font-size: 12px; color: #63656e; margin-top: 8px; }
+.parse-summary { display: flex; gap: 8px; margin-bottom: 10px; }
+.relation-section { margin-top: 6px; }
+.relation-title { font-size: 14px; font-weight: 700; color: #313238; margin-bottom: 8px; }
 .main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 16px 12px; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toolbar .spacer { flex: 1; }

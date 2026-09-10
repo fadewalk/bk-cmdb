@@ -4,7 +4,7 @@
     <div class="topo-body">
       <!-- 左:拓扑树(对齐旧版:无卡片边框,顶部关键词过滤) -->
       <div class="tree-col">
-        <el-input v-model="keyword" placeholder="请输入关键词" size="small" clearable style="margin-bottom: 8px" />
+        <el-input v-model="keyword" placeholder="请输入关键词" size="small" clearable suffix-icon="Search" style="margin-bottom: 8px" />
         <el-tree
           ref="treeRef"
           :data="treeData"
@@ -20,7 +20,7 @@
         >
           <template #default="{ data }">
             <span class="tree-node">
-              <i :class="['bk-cmdb-icon', 'node-icon', nodeIconClass(data)]" />
+              <i :class="['bk-cmdb-icon', 'node-icon', nodeIconClass(data), { 'node-icon-biz': data.type === 'biz' }]" />
               <span class="node-label">{{ data.label }}</span>
               <span v-if="data.hostCount != null" class="node-count">{{ data.hostCount }}</span>
               <el-button v-if="canCreate(data)" link size="small" type="primary" class="node-add"
@@ -226,7 +226,22 @@
 
         <!-- 节点信息 -->
         <template v-if="rightTab === 'node'">
-          <el-descriptions :column="1" border size="small" style="max-width: 560px" v-if="currentNode && currentNode.type !== 'biz'">
+          <!-- 业务根节点:基础信息 + 角色(旧版三列 label: value) -->
+          <div v-if="currentNode && currentNode.type === 'biz'" class="node-info" v-loading="bizInfoLoading">
+            <div v-for="grp in bizInfoGroups" :key="grp.bk_group_id" class="info-group">
+              <div class="info-group-header" @click="toggleInfoGroup(grp)">
+                <i :class="['bk-cmdb-icon icon-cc-triangle info-group-arrow', { collapsed: infoGroupCollapse[grp.bk_group_id] }]" />
+                <span class="info-group-title">{{ grp.bk_group_name }}</span>
+              </div>
+              <div v-show="!infoGroupCollapse[grp.bk_group_id]" class="info-grid">
+                <div v-for="p in grp.properties" :key="p.bk_property_id" class="info-item">
+                  <span class="info-label">{{ p.bk_property_name }}：</span>
+                  <span class="info-value">{{ bizFieldValue(p) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <el-descriptions v-else-if="currentNode && currentNode.type !== 'biz'" :column="1" border size="small" style="max-width: 560px">
             <el-descriptions-item label="节点类型">{{ nodeTypeName(currentNode.type) }}</el-descriptions-item>
             <el-descriptions-item label="节点名称">{{ currentNode.label }}</el-descriptions-item>
             <el-descriptions-item label="实例 ID">{{ currentNode.setId || currentNode.moduleId || '-' }}</el-descriptions-item>
@@ -527,6 +542,7 @@ import {
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   searchModelAttributes, exportHosts,
+  searchBusinessById, searchFieldGroups,
   http
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
@@ -550,6 +566,61 @@ const selectedInstances = ref([])
 const instLoading = ref(false)
 const refreshText = ref('')
 const currentNode = ref(null)
+
+// ---------- 业务节点信息(基础信息 + 角色,旧版节点信息 tab) ----------
+const bizInfoLoading = ref(false)
+const bizInfoData = ref(null)
+const bizInfoGroups = ref([])
+const infoGroupCollapse = ref({})
+let bizInfoLoadedFor = null
+
+async function loadBizNodeInfo() {
+  if (!bizId.value) return
+  bizInfoLoading.value = true
+  try {
+    const [detail, grpRes, attrRes] = await Promise.all([
+      searchBusinessById(bizId.value),
+      searchFieldGroups('biz').catch(() => ({ info: [] })),
+      searchModelAttributes('biz').catch(() => [])
+    ])
+    bizInfoData.value = detail?.info?.[0] || null
+
+    const groups = (grpRes?.info || [])
+      .slice()
+      .sort((a, b) => (a.bk_group_index ?? 999) - (b.bk_group_index ?? 999))
+    const byGroup = new Map()
+    for (const g of groups) byGroup.set(g.bk_group_id, { ...g, properties: [] })
+    for (const p of (attrRes || []).slice().sort((a, b) => (a.bk_property_index ?? 999) - (b.bk_property_index ?? 999))) {
+      const gid = p.bk_property_group
+      if (!byGroup.has(gid)) continue
+      byGroup.get(gid).properties.push(p)
+    }
+    bizInfoGroups.value = groups.map((g) => byGroup.get(g.bk_group_id)).filter((g) => g && g.properties.length)
+    for (const g of bizInfoGroups.value) {
+      if (infoGroupCollapse.value[g.bk_group_id] === undefined) infoGroupCollapse.value[g.bk_group_id] = false
+    }
+  } finally {
+    bizInfoLoading.value = false
+  }
+}
+
+function toggleInfoGroup(grp) {
+  infoGroupCollapse.value[grp.bk_group_id] = !infoGroupCollapse.value[grp.bk_group_id]
+}
+
+function bizFieldValue(p) {
+  const v = bizInfoData.value?.[p.bk_property_id]
+  if (v === '' || v === null || v === undefined) return '--'
+  if (p.bk_property_type === 'enum') {
+    const opt = (Array.isArray(p.option) ? p.option : []).find((o) => String(o.id) === String(v))
+    return opt ? (opt.name ?? v) : v
+  }
+  if (p.bk_property_type === 'time' || p.bk_property_type === 'date') {
+    return String(v).replace('T', ' ').slice(0, 19)
+  }
+  if (p.bk_property_type === 'bool') return v ? '是' : '否'
+  return v
+}
 const currentKey = ref('')
 
 const nodeDialog = ref(false)
@@ -1432,6 +1503,12 @@ function onGlobalClick() {
   if (ctxMenu.value.visible) ctxMenu.value.visible = false
 }
 watch(bizId, () => { if (bizId.value) { load(); loadModuleOptions() } })
+watch([rightTab, currentNode], () => {
+  if (rightTab.value === 'node' && currentNode.value?.type === 'biz' && bizInfoLoadedFor !== bizId.value) {
+    bizInfoLoadedFor = bizId.value
+    loadBizNodeInfo()
+  }
+}, { immediate: true })
 
 onMounted(async () => {
   document.addEventListener('click', onGlobalClick)
@@ -1472,7 +1549,13 @@ onBeforeUnmount(() => {
 .node-badge.set { background: #30d878; }
 .node-badge.module { background: #ff9c01; }
 .node-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-count { color: #979BA5; font-size: 12px; }
+.node-count {
+  margin-left: auto;
+  min-width: 22px; height: 16px; line-height: 16px;
+  padding: 0 6px; text-align: center;
+  background: #F0F1F5; border-radius: 8px;
+  color: #63656E; font-size: 12px;
+}
 .node-add { padding: 0 4px; font-size: 16px; line-height: 1; }
 .main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 16px 12px; }
 .right-tabs { margin-bottom: 4px; }

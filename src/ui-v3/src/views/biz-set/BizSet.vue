@@ -49,11 +49,17 @@
 
       <div class="table-footer">
         <span>共计{{ total }}条</span>
-        <span class="page-size">每页 20 条</span>
+        <span class="page-size">
+          每页
+          <el-select v-model="limit" size="small" style="width: 72px" @change="() => { page = 1; load() }">
+            <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n" :value="n" />
+          </el-select>
+          条
+        </span>
         <div class="spacer" />
         <el-pagination
           v-model:current-page="page"
-          :page-size="20"
+          :page-size="limit"
           :total="total"
           layout="prev, pager, next"
           @current-change="load"
@@ -115,6 +121,7 @@ const keyword = ref('')
 const rows = ref([])
 const total = ref(0)
 const page = ref(1)
+const limit = ref(20)
 const loading = ref(false)
 const saving = ref(false)
 const bizList = ref([])
@@ -217,7 +224,7 @@ function goDetail(row) {
 async function load() {
   loading.value = true
   try {
-    const data = await http.post('/findmany/biz_set', { page: { start: (page.value - 1) * 20, limit: 20 } })
+    const data = await http.post('/findmany/biz_set', { page: { start: (page.value - 1) * limit.value, limit: limit.value } })
     rows.value = data?.info || []
     total.value = data?.count ?? rows.value.length
   } catch {

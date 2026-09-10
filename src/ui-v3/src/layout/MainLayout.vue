@@ -29,6 +29,8 @@ const showNav = computed(() => {
 // 旧版所有内页都有标题栏:有菜单上下文,或路由自带 title(如业务同步),首页除外
 const showBreadcrumbs = computed(() => {
   if (isHomeRoute(route)) return false
+  // 主机页自带「← 主机 ↗」标题行(老版形态),不重复渲染面包屑
+  if (route.path === '/resource/host') return false
   return showNav.value || Boolean(route.meta.title)
 })
 

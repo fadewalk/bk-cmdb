@@ -332,6 +332,9 @@ export const searchCloudAccounts = (params) =>
 // 账户连通性状态(老版状态列契约:err_msg 非空即异常)
 export const searchCloudAccountValidity = (accountIds) =>
   http.post('/findmany/cloud/account/validity', { account_ids: accountIds })
+// 连通测试(老版账户表单 Key 旁按钮)
+export const verifyCloudAccount = (data) =>
+  http.post('/cloud/account/verify', data)
 export const deleteCloudAccount = (id) =>
   http.delete(`/delete/cloud/account/${id}`)
 export const listCloudSyncTask = (data) =>

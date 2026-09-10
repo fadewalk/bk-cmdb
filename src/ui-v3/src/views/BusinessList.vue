@@ -54,60 +54,92 @@
       </el-table-column>
     </el-table>
 
-    <el-pagination
-      v-model:current-page="page"
-      :page-size="pageSize"
-      :total="total"
-      layout="total, prev, pager, next"
-      style="margin-top: 16px; justify-content: flex-end"
-      @current-change="load"
-    />
+    <div class="table-footer">
+      <span>共计{{ total }}条</span>
+      <span class="page-size">
+        每页
+        <el-select v-model="pageSize" size="small" style="width: 72px" @change="() => { page = 1; load() }">
+          <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n" :value="n" />
+        </el-select>
+        条
+      </span>
+      <div class="spacer" />
+      <el-pagination
+        v-model:current-page="page"
+        :page-size="pageSize"
+        :total="total"
+        layout="prev, pager, next"
+        @current-change="load"
+      />
+    </div>
 
-    <!-- 新建/编辑业务 -->
-    <el-dialog v-model="formVisible" :title="formBizId ? '编辑业务' : '新建业务'" width="560px">
-      <el-form label-width="100px">
-        <el-form-item label="业务名称" required>
-          <el-input v-model="form.bk_biz_name" />
-        </el-form-item>
-        <el-form-item label="运维人员" required>
-          <el-input v-model="form.bk_biz_maintainer" placeholder="多个用逗号分隔" />
-        </el-form-item>
-        <el-form-item label="开发人员">
-          <el-input v-model="form.bk_biz_developer" placeholder="多个用逗号分隔" />
-        </el-form-item>
-        <el-form-item label="测试人员">
-          <el-input v-model="form.bk_biz_tester" placeholder="多个用逗号分隔" />
-        </el-form-item>
-        <el-form-item label="产品人员">
-          <el-input v-model="form.bk_biz_productor" placeholder="多个用逗号分隔" />
-        </el-form-item>
-        <el-form-item label="生命周期">
-          <el-select v-model="form.life_cycle" style="width: 100%">
-            <el-option label="测试中" value="1" />
-            <el-option label="已上线" value="2" />
-            <el-option label="停运" value="3" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="时区" required>
-          <el-select v-model="form.time_zone" filterable style="width: 100%">
-            <el-option v-for="tz in timeZones" :key="tz" :label="tz" :value="tz" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="语言" required>
-          <el-select v-model="form.language" style="width: 100%">
-            <el-option label="中文" value="1" />
-            <el-option label="English" value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
-      </template>
-    </el-dialog>
+    <!-- 新建/编辑业务(老版 800px sideslider + 属性 tab + 分组两列表单) -->
+    <el-drawer
+      v-model="formVisible"
+      :title="formBizId ? '编辑 业务' : '创建 业务'"
+      size="800px"
+      :close-on-click-modal="false"
+    >
+      <el-tabs v-model="formTab">
+        <el-tab-pane label="属性" name="attribute">
+          <el-form label-position="top" class="biz-form">
+            <div class="form-group">
+              <div class="form-group-title">基础信息</div>
+              <div class="form-grid">
+                <el-form-item label="业务名称" required>
+                  <el-input v-model="form.bk_biz_name" placeholder="请输入业务名称" />
+                </el-form-item>
+                <el-form-item label="生命周期">
+                  <el-select v-model="form.life_cycle" style="width: 100%">
+                    <el-option label="测试中" value="1" />
+                    <el-option label="已上线" value="2" />
+                    <el-option label="停运" value="3" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="时区" required>
+                  <el-select v-model="form.time_zone" filterable style="width: 100%">
+                    <el-option v-for="tz in timeZones" :key="tz" :label="tz" :value="tz" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="语言" required>
+                  <el-select v-model="form.language" style="width: 100%">
+                    <el-option label="中文" value="1" />
+                    <el-option label="English" value="2" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="描述" class="span-2">
+                  <el-input v-model="form.description" type="textarea" :rows="2" />
+                </el-form-item>
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="form-group-title">角色</div>
+              <div class="form-grid">
+                <el-form-item label="运维人员" required>
+                  <el-input v-model="form.bk_biz_maintainer" placeholder="请输入运维人员" />
+                </el-form-item>
+                <el-form-item label="产品人员">
+                  <el-input v-model="form.bk_biz_productor" placeholder="请输入产品人员" />
+                </el-form-item>
+                <el-form-item label="测试人员">
+                  <el-input v-model="form.bk_biz_tester" placeholder="请输入测试人员" />
+                </el-form-item>
+                <el-form-item label="开发人员">
+                  <el-input v-model="form.bk_biz_developer" placeholder="请输入开发人员" />
+                </el-form-item>
+                <el-form-item label="操作人员">
+                  <el-input v-model="form.bk_biz_operator" placeholder="请输入操作人员" />
+                </el-form-item>
+              </div>
+            </div>
+          </el-form>
+          <div class="form-footer">
+            <el-button type="primary" :loading="saving" @click="submitForm">提交</el-button>
+            <el-button @click="formVisible = false">取消</el-button>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-drawer>
 
     <!-- 批量编辑业务(契约: PUT /updatemany/biz/property {properties, condition};只提交修改字段) -->
     <el-drawer v-model="batchVisible" title="批量编辑" size="460px">
@@ -155,7 +187,7 @@ import {
 const router = useRouter()
 const keyword = ref('')
 const page = ref(1)
-const pageSize = 20
+const pageSize = ref(20)
 const total = ref(0)
 const rows = ref([])
 const loading = ref(false)
@@ -170,6 +202,7 @@ const scope = ref('normal')
 const formVisible = ref(false)
 const formBizId = ref(null)
 const form = ref({})
+const formTab = ref('attribute')
 
 const timeZones = [
   'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Singapore',
@@ -189,7 +222,7 @@ async function load() {
   loading.value = true
   try {
     const condition = scope.value === 'archived' ? { bk_data_status: 'disabled' } : {}
-    const data = await searchBusiness({ start: (page.value - 1) * pageSize, limit: pageSize }, condition)
+    const data = await searchBusiness({ start: (page.value - 1) * pageSize.value, limit: pageSize.value }, condition)
     rows.value = data?.info || []
     total.value = data?.count || 0
   } finally {
@@ -221,6 +254,7 @@ function openForm(row) {
       bk_biz_developer: row.bk_biz_developer || '',
       bk_biz_tester: row.bk_biz_tester || '',
       bk_biz_productor: row.bk_biz_productor || '',
+      bk_biz_operator: row.bk_biz_operator || '',
       life_cycle: row.life_cycle || '2',
       time_zone: row.time_zone || 'Asia/Shanghai',
       language: row.language || '1',
@@ -230,10 +264,11 @@ function openForm(row) {
     formBizId.value = null
     form.value = {
       bk_biz_name: '', bk_biz_maintainer: 'admin', bk_biz_developer: '',
-      bk_biz_tester: '', bk_biz_productor: '', life_cycle: '2',
+      bk_biz_tester: '', bk_biz_productor: '', bk_biz_operator: '', life_cycle: '2',
       time_zone: 'Asia/Shanghai', language: '1', description: ''
     }
   }
+  formTab.value = 'attribute'
   formVisible.value = true
 }
 
@@ -340,6 +375,12 @@ onMounted(load)
 <style scoped>
 .table-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 .table-toolbar .spacer { flex: 1; }
+.biz-form :deep(.el-form-item__label) { color: #63656e; }
+.form-group { margin-bottom: 18px; }
+.form-group-title { font-size: 14px; font-weight: 700; color: #313238; margin-bottom: 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
+.form-grid .span-2 { grid-column: span 2; }
+.form-footer { margin-top: 10px; }
 .scope-tab {
   padding: 6px 4px; margin-right: 20px; font-size: 14px;
   color: #63656E; cursor: pointer; border-bottom: 2px solid transparent;

@@ -1,0 +1,187 @@
+/* ============================================================
+   旧版蓝鲸控件像素级复刻(bk-magic-vue 实测值):bk-button / cmdb-tips / cmdb-input
+   供模型族页面与字段组合模板向导复用,取值来源 src/ui 旧源码
+   ============================================================ */
+
+/* ---- bk-button(默认高 32px 圆角 2px) ---- */
+.bk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 13px;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 2px;
+  border: 1px solid #c4c6cc;
+  background: #fff;
+  color: #63656e;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.bk-button:hover {
+  border-color: #3a84ff;
+  color: #3a84ff;
+}
+.bk-button.bk-primary {
+  background: #3a84ff;
+  border-color: #3a84ff;
+  color: #fff;
+}
+.bk-button.bk-primary:hover {
+  background: #699df4;
+  border-color: #699df4;
+  color: #fff;
+}
+.bk-button.is-disabled,
+.bk-button:disabled {
+  cursor: not-allowed;
+  border-color: #dcdee5;
+  color: #c4c6cc;
+  background: #fafbfd;
+}
+.bk-button.bk-primary:disabled,
+.bk-button.bk-primary.is-disabled {
+  background: #a3c5fd;
+  border-color: #a3c5fd;
+  color: #fff;
+}
+.bk-button.bk-text {
+  border: none;
+  background: transparent;
+  padding: 0;
+  height: auto;
+  color: #3a84ff;
+}
+.bk-button.bk-text:hover {
+  color: #699df4;
+}
+.bk-button.bk-text:disabled {
+  color: #c4c6cc;
+  background: transparent;
+}
+/* 小尺寸(全部/启用中/已停用筛选按钮,12px) */
+.bk-button.bk-small {
+  height: 32px;
+  font-size: 12px;
+  padding: 0 11px;
+}
+
+/* ---- cmdb-tips 顶部提示条(30px 蓝色横幅) ---- */
+.cmdb-tips {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  font-size: 12px;
+  background: #F0F8FF;
+  border-radius: 2px;
+  border: 1px solid #A3C5FD;
+  padding: 0 16px;
+}
+.cmdb-tips .tips-icon {
+  flex: 16px 0 0;
+  text-align: center;
+  line-height: 16px;
+  font-size: 16px;
+  color: #3A84FF;
+  margin-right: 5px;
+}
+.cmdb-tips .tips-content {
+  flex: 1;
+  color: #63656e;
+}
+.cmdb-tips .tips-content .more {
+  display: inline-block;
+  margin-left: 20px;
+  color: #3A84FF;
+  cursor: pointer;
+}
+.cmdb-tips .tips-content .more:hover {
+  text-decoration: underline;
+}
+.cmdb-tips .tips-close {
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  color: #979BA5;
+  cursor: pointer;
+}
+.cmdb-tips .tips-close:hover {
+  color: #3a84ff;
+}
+
+/* ---- 旧版表单 label 行(模型弹窗/向导:label 与输入框同行 36px 行高) ---- */
+.legacy-form-row {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0;
+}
+.legacy-form-row:last-child {
+  margin: 0;
+}
+.legacy-form-row .label-title {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 36px;
+  vertical-align: middle;
+  color: #63656e;
+}
+.legacy-form-row .color-danger {
+  display: inline-block;
+  font-size: 14px;
+  width: 15px;
+  text-align: center;
+  vertical-align: middle;
+  color: #ea3636;
+}
+.legacy-form-row .row-icon {
+  font-size: 18px;
+  color: #c4c6cc;
+  vertical-align: middle;
+  margin-left: 8px;
+  cursor: default;
+}
+
+/* ---- 旧版输入框(bk-input:白底 32px 边框 c4c6cc 聚焦蓝) ---- */
+.legacy-input .el-input__wrapper,
+.legacy-textarea .el-textarea__inner {
+  box-shadow: 0 0 0 1px #c4c6cc inset;
+  border-radius: 2px;
+}
+.legacy-textarea .el-textarea__inner {
+  font-size: 12px;
+  color: #63656e;
+}
+.legacy-input .el-input__wrapper.is-focus,
+.legacy-textarea .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px #3a84ff inset;
+}
+.legacy-input .el-input__inner {
+  font-size: 12px;
+  color: #63656e;
+}
+.legacy-input .el-input__inner::placeholder,
+.legacy-textarea .el-textarea__inner::placeholder {
+  color: #c4c6cc;
+}
+
+/* ---- 旧版下拉(el-select 触发器同 bk-select) ---- */
+.legacy-select .el-select__wrapper {
+  min-height: 32px;
+  height: 32px;
+  box-shadow: 0 0 0 1px #c4c6cc inset;
+  border-radius: 2px;
+  font-size: 12px;
+}
+.legacy-select .el-select__wrapper.is-focused,
+.legacy-select .el-select__wrapper.is-hovering {
+  box-shadow: 0 0 0 1px #3a84ff inset;
+}
+.legacy-select .el-select__placeholder {
+  color: #c4c6cc;
+}
+.legacy-select .el-select__selected-item {
+  color: #63656e;
+}

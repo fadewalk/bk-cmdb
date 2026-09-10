@@ -8,7 +8,7 @@
       </el-alert>
 
       <div class="table-toolbar">
-        <el-button type="primary" @click="formVisible = true">新建</el-button>
+        <el-button type="primary" @click="openCreate">新建</el-button>
         <div class="spacer" />
         <el-input
           v-model="keyword"
@@ -55,18 +55,24 @@
         </el-table-column>
         <template #empty>
           <el-empty description="暂无数据" :image-size="60">
-            <el-button link type="primary" @click="formVisible = true">立即创建</el-button>
+            <el-button link type="primary" @click="openCreate">立即创建</el-button>
           </el-empty>
         </template>
       </el-table>
 
       <div v-if="total > 0" class="table-footer">
         <span>共计{{ total }}条</span>
-        <span class="page-size">每页 20 条</span>
+        <span class="page-size">
+          每页
+          <el-select v-model="limit" size="small" style="width: 72px" @change="reloadFromFirst">
+            <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n" :value="n" />
+          </el-select>
+          条
+        </span>
         <div class="spacer" />
         <el-pagination
           v-model:current-page="page"
-          :page-size="20"
+          :page-size="limit"
           :total="total"
           layout="prev, pager, next"
           @current-change="load"
@@ -74,64 +80,50 @@
       </div>
     </div>
 
-    <!-- 新建云账户(独立模式无云厂商对接,仅录入名称/备注) -->
-    <el-dialog v-model="formVisible" title="新建云账户" width="480px">
-      <el-form label-width="100px">
+    <!-- 新建/编辑账户(老版 account-sideslider:账户名称/账户类型/ID/Key+连通测试/备注) -->
+    <el-drawer
+      v-model="formVisible"
+      :title="editingId ? '编辑账户' : '新建账户'"
+      size="720px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-position="top" class="account-form">
         <el-form-item label="账户名称" required>
           <el-input v-model="form.bk_account_name" placeholder="请输入账户名称" />
         </el-form-item>
-        <el-form-item label="云厂商" required>
-          <el-select v-model="form.bk_cloud_vendor" style="width: 100%">
+        <el-form-item label="账户类型" required>
+          <el-select v-model="form.bk_cloud_vendor" :disabled="!!editingId" style="width: 100%">
             <el-option label="AWS" value="1" />
             <el-option label="腾讯云" value="2" />
             <el-option label="阿里云" value="4" />
           </el-select>
         </el-form-item>
-        <el-form-item label="认证类型" required>
-          <el-select v-model="form.bk_account_type" style="width: 100%">
-            <el-option label="密钥认证" value="api_secret_key" />
-          </el-select>
+        <el-form-item label="ID" required>
+          <el-input v-model="form.bk_secret_id" :placeholder="editingId ? '留空则不修改' : '请输入ID'" />
         </el-form-item>
-        <el-form-item label="SecretId" required>
-          <el-input v-model="form.bk_secret_id" placeholder="云账户访问密钥 ID" />
-        </el-form-item>
-        <el-form-item label="SecretKey" required>
-          <el-input v-model="form.bk_secret_key" type="password" show-password placeholder="云账户访问密钥 Key" />
+        <el-form-item label="Key" required>
+          <div class="key-row">
+            <el-input
+              v-model="form.bk_secret_key"
+              type="password"
+              show-password
+              :placeholder="editingId ? '留空则不修改' : '请输入Key'"
+            />
+            <el-button :loading="verifying" @click="verifyKey">连通测试</el-button>
+          </div>
+          <div v-if="verifyResult" :class="['verify-result', verifyResult.connected ? 'ok' : 'bad']">
+            {{ verifyResult.connected ? '连通成功' : `连通失败: ${verifyResult.msg || '未知异常'}` }}
+          </div>
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="form.bk_description" type="textarea" :rows="2" />
+          <el-input v-model="form.bk_description" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
       </el-form>
-      <template #footer>
+      <div class="form-footer">
+        <el-button type="primary" :loading="saving" @click="submitForm">提交</el-button>
         <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitCreate">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 编辑云账户(契约: PUT /update/cloud/account/{id};密钥留空则不修改) -->
-    <el-dialog v-model="editVisible" title="编辑云账户" width="480px">
-      <el-form label-width="100px">
-        <el-form-item label="账户名称" required>
-          <el-input v-model="editForm.bk_account_name" />
-        </el-form-item>
-        <el-form-item label="云厂商">
-          <el-input :model-value="vendorName(editForm.bk_cloud_vendor)" disabled />
-        </el-form-item>
-        <el-form-item label="SecretId">
-          <el-input v-model="editForm.bk_secret_id" placeholder="留空则不修改" />
-        </el-form-item>
-        <el-form-item label="SecretKey">
-          <el-input v-model="editForm.bk_secret_key" type="password" show-password placeholder="留空则不修改" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="editForm.bk_description" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitEdit">保存</el-button>
-      </template>
-    </el-dialog>
+      </div>
+    </el-drawer>
 
     <!-- 账户详情(字段 + 关联的同步任务) -->
     <el-drawer v-model="detailVisible" :title="`账户详情 【${detailRow?.bk_account_name || ''}】`" size="560px">
@@ -175,21 +167,22 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchCloudAccounts, createCloudAccount, deleteCloudAccount,
-  updateCloudAccount, searchCloudTasks, searchCloudAccountValidity
+  updateCloudAccount, searchCloudTasks, searchCloudAccountValidity, verifyCloudAccount
 } from '../../api/cmdb'
 
 const keyword = ref('')
 const rows = ref([])
 const total = ref(0)
 const page = ref(1)
+const limit = ref(20)
 const loading = ref(false)
 const saving = ref(false)
 const sort = ref('bk_account_id')
 const formVisible = ref(false)
-const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_account_type: 'api_secret_key', bk_secret_id: '', bk_secret_key: '', bk_description: '' })
-
-const editVisible = ref(false)
-const editForm = ref({ id: null, bk_account_name: '', bk_cloud_vendor: '', bk_secret_id: '', bk_secret_key: '', bk_description: '' })
+const editingId = ref(null)
+const verifying = ref(false)
+const verifyResult = ref(null)
+const form = ref({ bk_account_name: '', bk_cloud_vendor: '2', bk_secret_id: '', bk_secret_key: '', bk_description: '' })
 
 const detailVisible = ref(false)
 const detailRow = ref(null)
@@ -219,7 +212,7 @@ async function load() {
   try {
     const kw = keyword.value.trim()
     const data = await searchCloudAccounts({
-      page: { start: (page.value - 1) * 20, limit: 20, sort: sort.value },
+      page: { start: (page.value - 1) * limit.value, limit: limit.value, sort: sort.value },
       condition: kw ? { bk_account_name: kw } : {},
       ...(kw ? { is_fuzzy: true } : {})
     })
@@ -253,45 +246,66 @@ async function loadStatus() {
   }
 }
 
-async function submitCreate() {
-  if (!String(form.value.bk_account_name || '').trim()) { ElMessage.warning('请填写账户名称'); return }
-  saving.value = true
-  try {
-    await createCloudAccount({ ...form.value })
-    ElMessage.success('云账户已创建')
-    formVisible.value = false
-
-    await load()
-  } catch (e) {
-    ElMessage.error('创建失败: ' + (e?.message || '后端异常'))
-  } finally { saving.value = false }
+function openCreate() {
+  editingId.value = null
+  form.value = {
+    bk_account_name: '', bk_cloud_vendor: '2',
+    bk_secret_id: '', bk_secret_key: '', bk_description: ''
+  }
+  verifyResult.value = null
+  formVisible.value = true
 }
 
 function openEdit(row) {
-  editForm.value = {
-    id: row.bk_account_id,
+  editingId.value = row.bk_account_id
+  form.value = {
     bk_account_name: row.bk_account_name || '',
-    bk_cloud_vendor: row.bk_cloud_vendor || '',
+    bk_cloud_vendor: row.bk_cloud_vendor || '2',
     bk_secret_id: '',
     bk_secret_key: '',
     bk_description: row.bk_description || ''
   }
-  editVisible.value = true
+  verifyResult.value = null
+  formVisible.value = true
 }
 
-async function submitEdit() {
-  if (!String(editForm.value.bk_account_name || '').trim()) { ElMessage.warning('请填写账户名称'); return }
+// 连通测试(老版 verify 契约)
+async function verifyKey() {
+  const { bk_cloud_vendor: vendor, bk_secret_id: sid, bk_secret_key: key } = form.value
+  if (!String(sid || '').trim() || !String(key || '').trim()) { ElMessage.warning('请先填写 ID 和 Key'); return }
+  verifying.value = true
+  try {
+    const resp = await verifyCloudAccount({ bk_cloud_vendor: vendor, bk_secret_id: sid, bk_secret_key: key })
+    verifyResult.value = { connected: !!resp?.result, msg: resp?.bk_error_msg }
+  } catch (e) {
+    verifyResult.value = { connected: false, msg: e?.message || '后端异常' }
+  } finally { verifying.value = false }
+}
+
+async function submitForm() {
+  if (!String(form.value.bk_account_name || '').trim()) { ElMessage.warning('请填写账户名称'); return }
+  if (!editingId.value && (!String(form.value.bk_secret_id || '').trim() || !String(form.value.bk_secret_key || '').trim())) {
+    ElMessage.warning('请填写 ID 和 Key'); return
+  }
   saving.value = true
   try {
-    const data = { bk_account_name: editForm.value.bk_account_name, bk_description: editForm.value.bk_description }
-    if (String(editForm.value.bk_secret_id || '').trim()) data.bk_secret_id = editForm.value.bk_secret_id
-    if (String(editForm.value.bk_secret_key || '').trim()) data.bk_secret_key = editForm.value.bk_secret_key
-    await updateCloudAccount(editForm.value.id, data)
-    ElMessage.success('云账户已更新')
-    editVisible.value = false
+    if (editingId.value) {
+      const data = { bk_account_name: form.value.bk_account_name, bk_description: form.value.bk_description }
+      if (String(form.value.bk_secret_id || '').trim()) data.bk_secret_id = form.value.bk_secret_id
+      if (String(form.value.bk_secret_key || '').trim()) data.bk_secret_key = form.value.bk_secret_key
+      await updateCloudAccount(editingId.value, data)
+      ElMessage.success('云账户已更新')
+    } else {
+      await createCloudAccount({
+        ...form.value,
+        bk_account_type: 'api_secret_key'
+      })
+      ElMessage.success('云账户已创建')
+    }
+    formVisible.value = false
     await load()
   } catch (e) {
-    ElMessage.error('更新失败: ' + (e?.message || '后端异常'))
+    ElMessage.error('提交失败: ' + (e?.message || '后端异常'))
   } finally { saving.value = false }
 }
 
@@ -352,4 +366,11 @@ onMounted(load)
 }
 .status-dot.err { background: #EA3636; }
 .detail-footer { display: flex; justify-content: center; gap: 8px; padding-top: 20px; }
+.account-form { max-width: 460px; }
+.account-form :deep(.el-form-item__label) { color: #63656e; }
+.key-row { display: flex; gap: 8px; width: 100%; }
+.verify-result { font-size: 12px; line-height: 20px; margin-top: 4px; }
+.verify-result.ok { color: #2dcb56; }
+.verify-result.bad { color: #ea3636; }
+.form-footer { margin-top: 10px; }
 </style>
