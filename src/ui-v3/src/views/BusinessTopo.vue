@@ -585,7 +585,8 @@ async function loadBizNodeInfo() {
     ])
     bizInfoData.value = detail?.info?.[0] || null
 
-    const groups = (grpRes?.info || [])
+    // 该接口 data 直接为数组
+    const groups = (Array.isArray(grpRes) ? grpRes : grpRes?.info || [])
       .slice()
       .sort((a, b) => (a.bk_group_index ?? 999) - (b.bk_group_index ?? 999))
     const byGroup = new Map()
@@ -596,6 +597,11 @@ async function loadBizNodeInfo() {
       byGroup.get(gid).properties.push(p)
     }
     bizInfoGroups.value = groups.map((g) => byGroup.get(g.bk_group_id)).filter((g) => g && g.properties.length)
+    // 旧版首项显示 ID(模型属性不含主键,单独插入)
+    const basic = bizInfoGroups.value.find((g) => g.bk_group_id === 'default')
+    if (basic && !basic.properties.some((p) => p.bk_property_id === 'bk_biz_id')) {
+      basic.properties.unshift({ bk_property_id: 'bk_biz_id', bk_property_name: 'ID', bk_property_type: 'int' })
+    }
     for (const g of bizInfoGroups.value) {
       if (infoGroupCollapse.value[g.bk_group_id] === undefined) infoGroupCollapse.value[g.bk_group_id] = false
     }
@@ -616,7 +622,10 @@ function bizFieldValue(p) {
     return opt ? (opt.name ?? v) : v
   }
   if (p.bk_property_type === 'time' || p.bk_property_type === 'date') {
-    return String(v).replace('T', ' ').slice(0, 19)
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return v
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
   if (p.bk_property_type === 'bool') return v ? '是' : '否'
   return v
@@ -1549,6 +1558,26 @@ onBeforeUnmount(() => {
 .node-badge.set { background: #30d878; }
 .node-badge.module { background: #ff9c01; }
 .node-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-col :deep(.el-tree-node__expand-icon) { color: #63656E; font-size: 12px; padding: 4px; }
+.tree-col :deep(.el-tree-node__expand-icon.is-leaf) { color: transparent; }
+.node-icon-biz {
+  width: 22px; height: 22px; line-height: 22px; text-align: center;
+  font-size: 12px; color: #fff !important;
+  background: #3A84FF; border-radius: 50%; flex: 0 0 22px;
+}
+.info-group { margin-bottom: 20px; }
+.info-group-header {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; cursor: pointer; user-select: none;
+}
+.info-group-arrow { font-size: 12px; color: #63656E; transition: transform 0.15s; }
+.info-group-arrow.collapsed { transform: rotate(-90deg); }
+.info-group-title { font-size: 14px; font-weight: 400; color: #313238; }
+.info-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 24px; padding: 2px 0 4px 24px;
+}
+.info-item { font-size: 14px; color: #313238; line-height: 22px; }
 .node-count {
   margin-left: auto;
   min-width: 22px; height: 16px; line-height: 16px;
