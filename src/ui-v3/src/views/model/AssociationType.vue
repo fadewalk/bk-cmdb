@@ -1,22 +1,24 @@
 <template>
   <div class="page-card association-page">
     <h1 class="page-title sr-only">关联类型</h1>
-    <div class="feature-tip" v-if="tipVisible">
-      “关联类型”是模型关联的分类，如主机于交换机、路由之间的关系都可以分类为“上联”类型
-      <el-link type="primary" :underline="false" style="font-size: 12px; margin-left: 8px">更多详情 &gt;&gt;</el-link>
-      <i class="bk-icon icon-close" @click="tipVisible = false" />
+    <div class="feature-tip cmdb-tips" v-if="tipVisible">
+      <i class="bk-cmdb-icon icon-cc-exclamation-tips tips-icon" />
+      <p class="tips-content">
+        “关联类型”是模型关联的分类，如主机于交换机、路由之间的关系都可以分类为“上联”类型
+        <a class="more">更多详情 &gt;&gt;</a>
+      </p>
+      <i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipVisible = false" />
     </div>
 
     <div class="relation-toolbar">
-      <el-button type="primary" size="small" :icon="'Plus'" @click="openCreate">新建</el-button>
+      <button class="bk-button bk-primary" @click="openCreate">新建</button>
       <div class="toolbar-spacer" />
       <el-input
         v-model="keyword"
         clearable
-        size="small"
-        class="search-input"
+        class="legacy-input search-input"
         placeholder="请输入关联类型名称"
-        :prefix-icon="'Search'"
+        :suffix-icon="'Search'"
         @keyup.enter="reload"
         @clear="reload"
       />
@@ -287,13 +289,12 @@ onMounted(load)
 </script>
 
 <style scoped>
-.association-page { padding: 15px 20px 0; }
-.feature-tip {
-  position: relative; margin-bottom: 12px; padding: 10px 34px 10px 14px;
-  color: #63656E; font-size: 12px; line-height: 20px;
-  background: #F0F5FF; border: 1px solid #D6E8FF; border-radius: 2px;
-}
-.feature-tip .icon-close { position: absolute; right: 12px; top: 12px; color: #979BA5; cursor: pointer; }
+.association-page { padding: 15px 20px 0; background: #fff; }
+.feature-tip { margin-bottom: 12px; }
+.feature-tip .tips-icon { font-size: 16px; color: #3A84FF; margin-right: 5px; }
+.feature-tip .tips-content { color: #63656E; font-size: 12px; }
+.feature-tip .tips-content .more { color: #3A84FF; margin-left: 20px; cursor: pointer; }
+.feature-tip .tips-close { color: #979BA5; cursor: pointer; font-size: 12px; }
 .relation-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .toolbar-spacer { flex: 1; }
 .search-input { width: 300px; }

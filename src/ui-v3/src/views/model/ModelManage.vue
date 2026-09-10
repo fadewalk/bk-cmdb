@@ -1,253 +1,481 @@
 <template>
-  <div class="model-page">
-    <h1 class="page-title sr-only">模型管理</h1>
-    <div class="model-tips" v-if="tipsVisible">
-      <el-icon class="tips-icon"><InfoFilled /></el-icon>
-      <span class="tips-text">
-        通过模型可以对CMDB中当前的所纳管资源的数据结构进行管理，例如新增了一种设备需要通过记录到CMDB，可以通过新建对应的模型实现。
-      </span>
-      <el-link type="primary" :underline="false" style="font-size: 12px">更多详情 &gt;&gt;</el-link>
-      <el-icon class="tips-close" @click="tipsVisible = false"><Close /></el-icon>
-    </div>
-
-    <div class="model-body">
-      <div class="toolbar">
-        <el-button type="primary" :icon="'Plus'" @click="openCreateModel">新建模型</el-button>
-        <el-button :icon="'Plus'" plain @click="clsDialog = true">新建分组</el-button>
-        <el-button :icon="'Upload'" @click="importDialog = true">导入</el-button>
-        <el-button :icon="'Download'" :disabled="exportSelecting" @click="startExportSelect">导出</el-button>
-        <div class="spacer" />
-        <el-button :type="statusFilter === 'all' ? 'primary' : 'default'" size="small" @click="statusFilter = 'all'">全部</el-button>
-        <el-button :type="statusFilter === 'on' ? 'primary' : 'default'" size="small" @click="statusFilter = 'on'">启用中</el-button>
-        <el-button :type="statusFilter === 'off' ? 'primary' : 'default'" size="small" @click="statusFilter = 'off'">已停用</el-button>
-        <el-input v-model="keyword" placeholder="请输入关键字" clearable size="small" style="width: 220px" :prefix-icon="'Search'" />
+  <div class="model-management" :class="{ 'is-model-selectable': isModelSelectable }">
+    <div class="model-management-header">
+      <div v-if="tipsVisible" class="cmdb-tips model-tips">
+        <i class="bk-cmdb-icon icon-cc-exclamation-tips tips-icon" />
+        <p class="tips-content">
+          通过模型可以对CMDB中当前的所纳管资源的数据结构进行管理，例如新增了一种设备需要通过记录到CMDB，可以通过新建对应的模型实现。
+          <a class="more">更多详情 &gt;&gt;</a>
+        </p>
+        <i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipsVisible = false" />
       </div>
 
-      <div class="group-list" v-loading="loading">
-        <div v-for="cls in filteredGroups" :key="cls.clsId" class="model-group">
+      <div class="model-management-options">
+        <div class="model-export-label">请选择需要导出的模型</div>
+
+        <div class="model-operation-options">
+          <button class="bk-button bk-primary" :disabled="modelType === 'disabled'" @click="showModelDialog('')">新建模型</button>
+          <button class="bk-button" :disabled="modelType === 'disabled'" @click="showGroupDialog(false)">新建分组</button>
+          <button class="bk-button" :disabled="modelType === 'disabled'" @click="importDialog = true">导入</button>
+          <button class="bk-button" :disabled="modelType === 'disabled'" @click="startExportSelect">导出</button>
+        </div>
+
+        <div class="model-type-options">
+          <button :class="['bk-button', 'bk-small', 'model-type-button', { 'is-active': modelType === '' }]" @click="modelType = ''">全部</button>
+          <button :class="['bk-button', 'bk-small', 'model-type-button', { 'is-active': modelType === 'enable' }]" @click="modelType = 'enable'">启用中</button>
+          <el-tooltip content="没有已停用的模型" :disabled="!!disabledClassifications.length" placement="top">
+            <span class="type-disabled-span">
+              <button
+                :class="['bk-button', 'bk-small', 'model-type-button', 'disabled', { 'is-active': modelType === 'disabled' }]"
+                :disabled="!disabledClassifications.length"
+                @click="modelType = 'disabled'"
+              >已停用</button>
+            </span>
+          </el-tooltip>
+        </div>
+
+        <div class="model-search-options">
+          <el-input
+            v-model="keyword"
+            class="legacy-input model-search-input"
+            placeholder="请输入关键字"
+            clearable
+            :suffix-icon="'Search'"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="model-management-body">
+      <ul class="group-list">
+        <li v-for="cls in currentClassifications" :key="cls.bk_classification_id" class="group-item">
           <div class="group-header">
-            <span class="group-name"><el-icon style="margin-right:4px;vertical-align:-2px"><CaretBottom /></el-icon>{{ cls.clsName }} ( {{ cls.models.length }} )</span>
-            <el-dropdown
-              v-if="!cls.bk_ispre"
-              class="group-menu"
-              trigger="click"
-              size="small"
-              @command="(cmd) => onGroupCmd(cmd, cls)"
+            <div
+              :class="['collapse-group-title', { 'is-collapse': collapsedState[cls.id] }]"
+              :title="isBuiltinClass(cls) ? '内置模型组不支持删除和修改' : ''"
+              @click="toggleCollapse(cls)"
             >
-              <span class="group-more" @click.stop>
-                <el-icon><MoreFilled /></el-icon>
-              </span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="rename">重命名分组</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>删除分组</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-          <div class="model-cards">
-            <div v-for="(m, mi) in cls.models" :key="m.bk_obj_id" :class="['model-card', { checked: exportSelecting && checkedModels.includes(m.id) }]" @click="goDetail(m)">
-              <label v-if="exportSelecting" class="card-check" @click.stop>
-                <el-checkbox :model-value="checkedModels.includes(m.id)" :disabled="!!m.bk_ispre" @change="(v) => toggleCheck(m, v)" />
-              </label>
-              <div class="card-top">
-                <span class="model-icon" :style="{ background: iconBg(m), color: iconfg(m) }">
-                  <el-icon><component :is="iconName(m)" /></el-icon>
+              <i class="group-collapse-icon" />
+              <p class="group-title-text">{{ cls.bk_classification_name }} ( {{ modelsOf(cls).length }} )</p>
+              <el-dropdown trigger="click" placement="bottom-start" @command="(cmd) => onGroupCmd(cmd, cls)">
+                <span class="more-operation-btn" @click.stop>
+                  <i class="more-dots" />
                 </span>
-                <div class="card-text">
-                  <div class="model-name">{{ m.bk_obj_name }}</div>
-                  <div class="card-id">{{ m.bk_obj_id }}</div>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="create">新建模型</el-dropdown-item>
+                    <template v-if="!isBuiltinClass(cls)">
+                      <el-dropdown-item command="edit" divided>编辑分组</el-dropdown-item>
+                      <el-dropdown-item command="delete" :disabled="modelsOf(cls).length > 0">
+                        删除分组
+                      </el-dropdown-item>
+                    </template>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <el-checkbox
+              v-if="isModelSelectable"
+              class="full-selection-checkbox"
+              :model-value="!!clsSelectionState[cls.bk_classification_id]"
+              :disabled="modelsOf(cls).length === 0"
+              @change="onGroupSelectAll(cls, $event)"
+            >全选</el-checkbox>
+          </div>
+          <div
+            v-show="!collapsedState[cls.id]"
+            class="model-list"
+            @dragover.prevent
+            @drop="onDropToGroup(cls, $event)"
+          >
+            <div
+              v-for="model in modelsOf(cls)"
+              :key="model.bk_obj_id"
+              :class="['model-item', { 'is-paused': model.bk_ispaused, 'is-builtin': model.ispre, 'is-dragging': dragObjId === model.bk_obj_id }]"
+              :draggable="isModelSelectable ? 'false' : 'true'"
+              @dragstart="onDragStart(model, $event)"
+              @dragend="onDragEnd"
+              @mouseenter="fetchInstanceCount(model.bk_obj_id)"
+            >
+              <div class="model-info" @click="handleModelClick(model)">
+                <div class="drag-icon"><span class="bar" /><span class="bar" /></div>
+                <div class="model-icon">
+                  <i class="bk-cmdb-icon icon" :class="model.bk_obj_icon || 'icon-cc-default'" />
                 </div>
+                <div class="model-details">
+                  <p class="model-name" :title="model.bk_obj_name">{{ model.bk_obj_name }}</p>
+                  <p class="model-id" :title="model.bk_obj_id">{{ model.bk_obj_id }}</p>
+                </div>
+                <el-checkbox
+                  v-if="isModelSelectable"
+                  class="model-checkbox"
+                  :model-value="!!modelSelectionState[model.bk_obj_id]"
+                  :disabled="!!model.ispre"
+                  @click.stop
+                  @change="onModelCheck(cls, $event)"
+                />
               </div>
-              <div class="card-actions" @click.stop>
-                <el-button link type="primary" size="small" @click="openEditModel(m)">编辑</el-button>
-                <el-button v-if="!m.bk_ispre" link type="danger" size="small" @click="removeModel(m)">删除</el-button>
+              <div
+                v-if="!model.bk_ispaused && !isNoInstanceModel(model.bk_obj_id)"
+                class="model-instance-count"
+                @click.stop="goInstance(model)"
+              >
+                <span class="count-number">{{ countText(model.bk_obj_id) }}</span>
               </div>
             </div>
-            <div v-if="cls.models.length === 0" class="empty-group">
-              <el-icon style="margin-right: 6px"><InfoFilled /></el-icon>
+            <div v-if="modelsOf(cls).length === 0" class="group-empty-model">
+              <i class="bk-cmdb-icon icon-cc-exclamation-tips" />
               该分组暂无模型，请
-              <el-button link type="primary" size="small" @click="openCreateModel">立即添加</el-button>
+              <button class="bk-button bk-text empty-add" @click="showModelDialog(cls.bk_classification_id)">立即添加</button>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- 导出选择模式底部操作栏 -->
+    <div v-if="isModelSelectable" class="export-action-bar">
+      <el-checkbox v-model="isAllSelected" class="full-selection" @change="toggleAllSelection">全选</el-checkbox>
+      <span class="selected-count">已选：<em>{{ exportModelsLen }}</em></span>
+      <button class="bk-button cancel-button" @click="cancelExportSelect">取消</button>
+      <button class="bk-button bk-primary next-step-button" :disabled="exportModelsLen === 0" @click="exportDialog = true">下一步</button>
+    </div>
+
+    <!-- 新建/编辑模型弹窗(旧版 _create-model 复刻) -->
+    <create-model-dialog
+      v-model:is-show="modelDialogShow"
+      :title="editingModel ? '编辑模型' : '新建模型'"
+      :editing="!!editingModel"
+      :group-id="modelDialogGroupId"
+      :operating="saving"
+      :classifications="dialogClassifications"
+      @confirm="saveModel"
+    />
+
+    <!-- 新建/编辑分组弹窗(旧版 group-dialog 复刻) -->
+    <teleport to="body">
+      <transition name="bk-fade">
+        <div v-if="clsDialog" class="bk-dialog-mask" @click.self="clsDialog = false">
+          <div class="bk-dialog-box group-dialog">
+            <div class="dialog-content">
+              <p class="dialog-title">{{ editingCls ? '编辑分组' : '新建分组' }}</p>
+              <div class="legacy-form-row">
+                <span class="label-title">唯一标识</span>
+                <span class="color-danger">*</span>
+                <el-input
+                  v-model.trim="clsForm.bk_classification_id"
+                  class="legacy-input row-input"
+                  placeholder="请填写英文开头，下划线，数字，英文的组合"
+                  :disabled="!!editingCls"
+                />
+                <i class="bk-cmdb-icon icon-cc-exclamation-tips row-icon" title="请填写英文开头，下划线，数字，英文的组合" />
+              </div>
+              <div class="legacy-form-row">
+                <span class="label-title">名称</span>
+                <span class="color-danger">*</span>
+                <el-input v-model.trim="clsForm.bk_classification_name" class="legacy-input row-input" placeholder="请输入名称" />
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="bk-button bk-primary" :disabled="saving" @click="saveClassification">{{ editingCls ? '保存' : '提交' }}</button>
+              <button class="bk-button" :disabled="saving" @click="clsDialog = false">取消</button>
             </div>
           </div>
         </div>
-      </div>
+      </transition>
+    </teleport>
 
-      <!-- 导出选择模式底部操作栏(对齐老版 model-management-footer) -->
-      <div v-if="exportSelecting" class="export-action-bar">
-        <el-checkbox v-model="exportSelectAll" @change="toggleExportAll">全选</el-checkbox>
-        <span class="selected-count">已选：<em>{{ checkedModels.length }}</em></span>
-        <div class="spacer" />
-        <el-button @click="cancelExportSelect">取消</el-button>
-        <el-button type="primary" :disabled="!checkedModels.length" @click="exportDialog = true">下一步</el-button>
-      </div>
-    </div>
+    <!-- 模型创建成功(旧版 400px 无头弹窗) -->
+    <teleport to="body">
+      <transition name="bk-fade">
+        <div v-if="createdDialog" class="bk-dialog-mask" @click.self="createdDialog = false">
+          <div class="bk-dialog-box success-dialog">
+            <div class="success-content">
+              <i class="success-check" />
+              <p>模型创建成功</p>
+              <div class="btn-box">
+                <button class="bk-button bk-primary" @click="goDetail(createdModel)">配置字段</button>
+                <button class="bk-button" @click="createdDialog = false">返回列表</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
 
-    <el-dialog v-model="modelDialog" :title="editing ? '编辑模型' : '新建模型'" width="480px">
-      <el-form :model="modelForm" label-width="90px">
-        <el-form-item label="模型 ID" required>
-          <el-input v-model="modelForm.bk_obj_id" :disabled="editing" placeholder="英文唯一标识" />
-        </el-form-item>
-        <el-form-item label="模型名称" required>
-          <el-input v-model="modelForm.bk_obj_name" />
-        </el-form-item>
-        <el-form-item label="所属分组" required>
-          <el-select v-model="modelForm.bk_classification_id" style="width: 100%">
-            <el-option v-for="c in classifications" :key="c.bk_classification_id"
-              :label="c.bk_classification_name" :value="c.bk_classification_id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="modelDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveModel">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="clsDialog" :title="clsDialogTitle" width="440px">
-      <el-form label-width="90px">
-          <el-form-item label="分组 ID" required v-if="!editingCls">
-            <el-input v-model="clsForm.bk_classification_id" placeholder="英文唯一标识" />
-          </el-form-item>
-          <el-form-item label="分组名称" required>
-            <el-input v-model="clsForm.bk_classification_name" />
-          </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="clsDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveClassification">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 模型导入(对齐老版: 上传 .zip/.yaml 包 → 解析预览 → 导入) -->
-    <el-dialog v-model="importDialog" title="导入模型" width="560px" :close-on-click-modal="false">
-      <el-alert v-if="importResult" :type="importResult.success ? 'success' : 'error'" :closable="false" style="margin-bottom: 12px"
-        :title="importResult.message" />
-      <el-upload
-        drag
-        action=""
-        accept=".zip"
-        :auto-upload="false"
-        :limit="1"
-        :on-change="onImportFileChange"
-        :file-list="importFileList"
-      >
+    <!-- 导入模型 -->
+    <el-dialog v-model="importDialog" title="导入模型" width="560px" :close-on-click-modal="false" class="legacy-el-dialog">
+      <el-alert v-if="importResult" :type="importResult.success ? 'success' : 'error'" :closable="false" style="margin-bottom: 12px" :title="importResult.message" />
+      <el-upload drag action="" accept=".zip" :auto-upload="false" :limit="1" :on-change="onImportFileChange" :file-list="importFileList">
         <el-icon style="font-size: 40px; color: #C4C6CC"><UploadFilled /></el-icon>
         <div class="el-upload__text">将模型包文件拖到此处,或<em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持 .zip 格式的模型导出包</div>
-        </template>
+        <template #tip><div class="el-upload__tip">支持 .zip 格式的模型导出包</div></template>
       </el-upload>
       <template #footer>
-        <el-button @click="importDialog = false">取消</el-button>
-        <el-button type="primary" :loading="importing" :disabled="!importFile" @click="doImport">开始导入</el-button>
+        <button class="bk-button" @click="importDialog = false">取消</button>
+        <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="!importFile" @click="doImport">开始导入</button>
       </template>
     </el-dialog>
 
-    <!-- 模型导出(选择密码/有效期) -->
-    <el-dialog v-model="exportDialog" title="导出模型" width="480px" :close-on-click-modal="false">
-      <el-form label-width="100px">
-        <el-form-item label="已选模型">
-          <span>{{ checkedModels.length }} 个</span>
-        </el-form-item>
-        <el-form-item label="导出文件名">
-          <el-input v-model="exportForm.fileName" placeholder="models" />
-        </el-form-item>
-        <el-form-item label="文件密码">
-          <el-input v-model="exportForm.password" placeholder="可选,用于加密导出包" />
-        </el-form-item>
-        <el-form-item label="密码有效期">
-          <el-input-number v-model="exportForm.expiration" :min="0" :max="30" style="width: 160px" />
-          <span style="margin-left: 8px; color: #979BA5">天,0 为无限期</span>
-        </el-form-item>
-      </el-form>
+    <!-- 导出模型 -->
+    <el-dialog v-model="exportDialog" title="导出模型" width="480px" :close-on-click-modal="false" class="legacy-el-dialog">
+      <div class="export-form">
+      <div class="legacy-form-row">
+        <span class="label-title">导出文件名</span>
+        <el-input v-model="exportForm.fileName" class="legacy-input row-input" placeholder="models" />
+      </div>
+      <div class="legacy-form-row">
+        <span class="label-title">文件密码</span>
+        <el-input v-model="exportForm.password" class="legacy-input row-input" placeholder="可选,用于加密导出包" />
+      </div>
+      <div class="legacy-form-row">
+        <span class="label-title">密码有效期</span>
+        <el-input v-model.number="exportForm.expiration" class="legacy-input row-input" placeholder="天,0 为无限期" />
+      </div>
+      </div>
       <template #footer>
-        <el-button @click="exportDialog = false">取消</el-button>
-        <el-button type="primary" :loading="exporting" @click="doExport">导出</el-button>
+        <button class="bk-button" @click="exportDialog = false">取消</button>
+        <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="exporting" @click="doExport">导出</button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-// 模型管理列表页:对齐旧版(说明文案 + 工具栏 + 分类分组模型卡片)
+// 模型管理列表页:按旧版 src/ui/src/views/model-manage 像素级复刻
+// (工具栏/分组折叠/卡片网格/实例数悬浮/导出选择模式/拖拽换组/新建模型图标弹窗)
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Search, UploadFilled } from '@element-plus/icons-vue'
-import { http } from '../../api/cmdb'
+import { MoreFilled, UploadFilled } from '@element-plus/icons-vue'
 import {
-  searchClassificationWithObjects, searchClassifications, createClassification, deleteClassification,
-  updateClassification,
-  createModel, updateModel, deleteModel
+  searchClassificationWithObjects, searchClassifications, createClassification,
+  updateClassification, deleteClassification,
+  createModel, updateModel, countInstances
 } from '../../api/cmdb'
+import CreateModelDialog from '../../components/model/CreateModelDialog.vue'
 
-// ---------- 模型导入/导出(对齐老版 service/model/import-export.js) ----------
+const router = useRouter()
+const tipsVisible = ref(true)
+const loadingDone = ref(false)
+const saving = ref(false)
+
+const rawGroups = ref([]) // find/classificationobject 原始数据
+const dialogClassifications = ref([]) // find/objectclassification(弹窗下拉)
+
+// 顶部筛选
+const modelType = ref('')
+const keyword = ref('')
+
+// 分组折叠(以分类自增 id 为键,与旧版一致)
+const collapsedState = ref({})
+
+// 实例数缓存(hover 时按需拉取)
+const statMap = ref({})
+
+// 导出选择模式
+const isModelSelectable = ref(false)
+const clsSelectionState = ref({})
+const modelSelectionState = ref({})
+const isAllSelected = ref(false)
+const exportDialog = ref(false)
+const exporting = ref(false)
+const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
+
+// 导入
 const importDialog = ref(false)
 const importFile = ref(null)
 const importFileList = ref([])
 const importing = ref(false)
 const importResult = ref(null)
-const exportDialog = ref(false)
-const exporting = ref(false)
-const exportSelecting = ref(false) // 导出选择模式(点「导出」进入,checkbox 才显示)
-const exportSelectAll = ref(false)
-const checkedModels = ref([]) // 勾选的模型 id(数字 id,导出接口要的是 id 不是 bk_obj_id)
-const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
 
+// 弹窗
+const modelDialogShow = ref(false)
+const modelDialogGroupId = ref('')
+const editingModel = ref(null)
+const clsDialog = ref(false)
+const editingCls = ref(null)
+const clsForm = ref({ bk_classification_id: '', bk_classification_name: '' })
+const createdDialog = ref(false)
+const createdModel = ref(null)
+
+// 拖拽换组
+const dragObjId = ref(null)
+
+// ---------- 数据整形(旧版 allClassifications:过滤隐藏 + 停用排后 + 未分类最后) ----------
+const allClassifications = computed(() => rawGroups.value
+  .filter((cls) => !cls.bk_ishidden)
+  .map((cls) => ({
+    ...cls,
+    models: (cls.bk_objects || [])
+      .filter((m) => !m.bk_ishidden)
+      .sort((a, b) => (a.bk_ispaused ? 1 : 0) - (b.bk_ispaused ? 1 : 0))
+  })))
+
+const enableClassifications = computed(() => allClassifications.value
+  .map((cls) => ({ ...cls, models: cls.models.filter((m) => !m.bk_ispaused) }))
+  .filter((cls) => cls.models.length))
+
+const disabledClassifications = computed(() => allClassifications.value
+  .map((cls) => ({ ...cls, models: cls.models.filter((m) => m.bk_ispaused) }))
+  .filter((cls) => cls.models.length))
+
+const currentClassifications = computed(() => {
+  let list = allClassifications.value
+  if (modelType.value === 'enable') list = enableClassifications.value
+  else if (modelType.value === 'disabled') list = disabledClassifications.value
+  if (keyword.value) {
+    const kw = keyword.value.toLowerCase()
+    list = list
+      .map((cls) => ({
+        ...cls,
+        models: cls.models.filter((m) =>
+          (m.bk_obj_name || '').toLowerCase().includes(kw) || (m.bk_obj_id || '').toLowerCase().includes(kw))
+      }))
+      .filter((cls) => cls.models.length)
+  }
+  // 未分类(none)固定最后,与旧版一致
+  return [...list].sort((a, b) => (b.bk_classification_id === 'none' ? -1 : 0))
+})
+
+function modelsOf(cls) {
+  return currentClassifications.value.find((c) => c.bk_classification_id === cls.bk_classification_id)?.models
+    ?? cls.models ?? []
+}
+
+function isBuiltinClass(cls) {
+  return cls.bk_classification_type === 'inner' || !!cls.bk_ispre
+}
+function isNoInstanceModel(objId) {
+  return ['set', 'module'].includes(objId)
+}
+
+// ---------- 实例数(hover 拉取) ----------
+async function fetchInstanceCount(objId) {
+  if (statMap.value[objId] !== undefined) return
+  statMap.value[objId] = null
+  try {
+    const data = await countInstances(objId, {})
+    statMap.value[objId] = data?.count ?? 0
+  } catch { statMap.value[objId] = '--' }
+}
+function countText(objId) {
+  const v = statMap.value[objId]
+  if (v === null || v === undefined) return '...'
+  if (v === '--') return '--'
+  return v > 999 ? '999+' : v
+}
+
+// ---------- 加载 ----------
+async function load() {
+  const [groupData, clsData] = await Promise.all([
+    searchClassificationWithObjects(),
+    searchClassifications().catch(() => [])
+  ])
+  rawGroups.value = groupData || []
+  dialogClassifications.value = (clsData?.info || clsData || []).filter((c) => !c.bk_ishidden)
+  loadingDone.value = true
+}
+
+// ---------- 交互 ----------
+function toggleCollapse(cls) {
+  collapsedState.value[cls.id] = !collapsedState.value[cls.id]
+}
+function handleModelClick(model) {
+  if (isModelSelectable.value) {
+    modelSelectionState.value[model.bk_obj_id] = !modelSelectionState.value[model.bk_obj_id] && !model.ispre
+    syncGroupSelection()
+  } else {
+    router.push({ path: `/model/management/details/${model.bk_obj_id}` })
+  }
+}
+function goDetail(model) {
+  createdDialog.value = false
+  router.push({ path: `/model/management/details/${model.bk_obj_id}` })
+}
+function goInstance(model) {
+  if (model.bk_obj_id === 'host') router.push({ path: '/resource/host', query: { scope: 'all' } })
+  else if (model.bk_obj_id === 'biz') router.push({ path: '/resource/business' })
+  else router.push({ path: `/resource/instance/${model.bk_obj_id}` })
+}
+
+// ---------- 导出选择(旧版导出第一步) ----------
 function startExportSelect() {
-  exportSelecting.value = true
-  checkedModels.value = []
-  exportSelectAll.value = false
+  isModelSelectable.value = true
+  clsSelectionState.value = {}
+  modelSelectionState.value = {}
+  isAllSelected.value = false
 }
 function cancelExportSelect() {
-  exportSelecting.value = false
-  checkedModels.value = []
-  exportSelectAll.value = false
+  isModelSelectable.value = false
+  clsSelectionState.value = {}
+  modelSelectionState.value = {}
+  isAllSelected.value = false
 }
-function toggleExportAll(v) {
-  if (v) {
-    // 全选所有非内置模型(内置模型不允许导出)
-    checkedModels.value = groups.value.flatMap((g) => g.models).filter((m) => !m.bk_ispre).map((m) => m.id)
-  } else {
-    checkedModels.value = []
-  }
+function onGroupSelectAll(cls, checked) {
+  clsSelectionState.value[cls.bk_classification_id] = checked
+  modelsOf(cls).forEach((m) => {
+    modelSelectionState.value[m.bk_obj_id] = checked && !m.ispre
+  })
+  syncAllSelection()
 }
+function onModelCheck(cls) {
+  const models = modelsOf(cls)
+  clsSelectionState.value[cls.bk_classification_id] = models.every((m) => modelSelectionState.value[m.bk_obj_id])
+  syncAllSelection()
+}
+function syncGroupSelection() {
+  currentClassifications.value.forEach((cls) => {
+    clsSelectionState.value[cls.bk_classification_id] =
+      modelsOf(cls).length > 0 && modelsOf(cls).every((m) => modelSelectionState.value[m.bk_obj_id])
+  })
+  syncAllSelection()
+}
+function syncAllSelection() {
+  isAllSelected.value = currentClassifications.value.length > 0
+    && currentClassifications.value.every((cls) => clsSelectionState.value[cls.bk_classification_id])
+}
+function toggleAllSelection(checked) {
+  currentClassifications.value.forEach((cls) => {
+    clsSelectionState.value[cls.bk_classification_id] = modelsOf(cls).length > 0 && checked
+    modelsOf(cls).forEach((m) => {
+      modelSelectionState.value[m.bk_obj_id] = checked && !m.ispre
+    })
+  })
+}
+const exportModelsLen = computed(() =>
+  Object.values(modelSelectionState.value).filter(Boolean).length)
 
-function toggleCheck(m, v) {
-  if (v) {
-    if (!checkedModels.value.includes(m.id)) checkedModels.value.push(m.id)
-  } else {
-    checkedModels.value = checkedModels.value.filter((x) => x !== m.id)
-  }
-}
-
+// ---------- 导入/导出 ----------
 function onImportFileChange(file, fileList) {
   importFile.value = file.raw
   importFileList.value = fileList
   importResult.value = null
 }
-
 async function doImport() {
   if (!importFile.value) return
   importing.value = true
   importResult.value = null
   try {
-    // 1. 解析文件(web_server /object/importmany/analysis)
     const analysisForm = new FormData()
     analysisForm.append('file', importFile.value)
-    const analysisResp = await http.post('/object/importmany/analysis', analysisForm, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    const analysisResp = await fetch('/api/v3/object/importmany/analysis', {
+      method: 'POST',
+      headers: { 'X-Bkcmdb-User': 'admin', 'X-Bkcmdb-Supplier-Account': '0' },
+      body: analysisForm
     })
-    const analysis = analysisResp?.data || analysisResp
+    const analysis = (await analysisResp.json())?.data || {}
     const objects = analysis?.import_object || analysis?.object || {}
     const assts = analysis?.import_asst || analysis?.asst || {}
     if (!Object.keys(objects).length) {
       importResult.value = { success: false, message: '解析结果为空,请确认文件格式' }
       return
     }
-    // 2. 确认导入(web_server /object/importmany)
-    await http.post('/object/importmany', { import_object: objects, import_asst: assts })
+    await fetch('/api/v3/object/importmany', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Bkcmdb-User': 'admin', 'X-Bkcmdb-Supplier-Account': '0' },
+      body: JSON.stringify({ import_object: objects, import_asst: assts })
+    })
     importResult.value = { success: true, message: `导入成功,共导入 ${Object.keys(objects).length} 个模型` }
     ElMessage.success('导入成功')
     await load()
@@ -255,16 +483,10 @@ async function doImport() {
     importResult.value = { success: false, message: '导入失败: ' + (e?.message || '后端异常') }
   } finally { importing.value = false }
 }
-
-async function exportModels() {
-  if (!checkedModels.value.length) return
-  exportDialog.value = true
-}
-
 async function doExport() {
   exporting.value = true
   try {
-    // web_server /object/exportmany 是 POST 下载
+    const selectedIds = Object.entries(modelSelectionState.value).filter(([, v]) => v).map(([objId]) => objId)
     const resp = await fetch('/api/v3/object/exportmany', {
       method: 'POST',
       headers: {
@@ -273,7 +495,7 @@ async function doExport() {
         'X-Bkcmdb-Supplier-Account': '0'
       },
       body: JSON.stringify({
-        object_id: checkedModels.value,
+        object_id: selectedIds,
         excluded_asst_id: [],
         password: exportForm.value.password || '',
         expiration: exportForm.value.expiration || 0,
@@ -295,233 +517,564 @@ async function doExport() {
   } finally { exporting.value = false }
 }
 
-const router = useRouter()
-const keyword = ref('')
-const statusFilter = ref('all')
-const tipsVisible = ref(true)
-const loading = ref(false)
-const saving = ref(false)
-const groups = ref([])
-const classifications = ref([])
-
-const modelDialog = ref(false)
-const editing = ref(null)
-const modelForm = ref({ bk_obj_id: '', bk_obj_name: '', bk_classification_id: '' })
-const clsDialog = ref(false)
-const clsDialogTitle = ref('新建分组')
-const editingCls = ref(null)
-const clsForm = ref({ bk_classification_id: '', bk_classification_name: '' })
-
-const filteredGroups = computed(() => {
-  return groups.value
-    .map((g) => ({
-      ...g,
-      models: g.models.filter((m) => {
-        if (statusFilter.value === 'on' && m.bk_ispre) return false
-        if (statusFilter.value === 'off' && !m.bk_ispre) return false
-        if (!keyword.value) return true
-        const kw = keyword.value.toLowerCase()
-        return (
-          (m.bk_obj_id || '').toLowerCase().includes(kw) ||
-          (m.bk_obj_name || '').toLowerCase().includes(kw)
-        )
-      })
-    }))
-})
-
-// 模型图标色板(对齐老版多彩图标)
-const PALETTE = [
-  { bg: '#EDE1FA', fg: '#8E3EEB', icon: 'Collection' },
-  { bg: '#E1ECFF', fg: '#3A84FF', icon: 'Monitor' },
-  { bg: '#E7F7EF', fg: '#2DCB56', icon: 'Share' },
-  { bg: '#FFF3E1', fg: '#FF9C01', icon: 'OfficeBuilding' },
-  { bg: '#E1F7F7', fg: '#14A5A5', icon: 'Connection' },
-  { bg: '#FDECF0', fg: '#EA3636', icon: 'Warning' }
-]
-function iconBg(m) { return PALETTE[hashIconKey(m.bk_obj_id)].bg }
-function iconfg(m) { return PALETTE[hashIconKey(m.bk_obj_id)].fg }
-function iconName(m) { return PALETTE[hashIconKey(m.bk_obj_id)].icon }
-function hashIconKey(key) {
-  let h = 0
-  for (let i = 0; i < (key || '').length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
-  return Math.abs(h) % PALETTE.length
+// ---------- 新建/编辑模型 ----------
+function showModelDialog(groupId) {
+  editingModel.value = null
+  modelDialogGroupId.value = groupId || ''
+  modelDialogShow.value = true
 }
-
-function goDetail(m) {
-  router.push({ path: `/model/management/details/${m.bk_obj_id}` })
-}
-
-async function load() {
-  loading.value = true
-  try {
-    const [groupData, clsData] = await Promise.all([searchClassificationWithObjects(), searchClassifications()])
-    classifications.value = clsData || []
-    groups.value = (groupData || []).map((item) => ({
-      clsId: item.bk_classification_id,
-      clsName: item.bk_classification_name,
-      bk_ispre: item.bk_ispre,
-      models: item.bk_objects || item.objects || []
-    }))
-  } finally {
-    loading.value = false
-  }
-}
-
-async function saveModel() {
+async function saveModel(data) {
   saving.value = true
   try {
-    if (editing.value) {
-      await updateModel(editing.value.id, {
-        bk_obj_name: modelForm.value.bk_obj_name,
-        bk_classification_id: modelForm.value.bk_classification_id
+    if (editingModel.value) {
+      await updateModel(editingModel.value.id, {
+        bk_obj_name: data.bk_obj_name,
+        bk_obj_icon: data.bk_obj_icon,
+        bk_classification_id: data.bk_classification_id
       })
-      ElMessage.success('模型已更新')
+      ElMessage.success('修改成功')
     } else {
-      await createModel(modelForm.value)
-      ElMessage.success('模型已创建')
+      const created = await createModel(data)
+      createdModel.value = created || { ...data }
+      createdDialog.value = true
     }
-    modelDialog.value = false
-    load()
-  } finally {
-    saving.value = false
-  }
+    modelDialogShow.value = false
+    modelDialogGroupId.value = ''
+    keyword.value = ''
+    await load()
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
+  } finally { saving.value = false }
 }
 
-function openCreateModel() {
-  editing.value = null
-  modelForm.value = { bk_obj_id: '', bk_obj_name: '', bk_classification_id: groups.value[0]?.clsId || '' }
-  modelDialog.value = true
-}
-
-function openEditModel(row) {
-  editing.value = row
-  modelForm.value = {
-    bk_obj_id: row.bk_obj_id,
-    bk_obj_name: row.bk_obj_name,
-    bk_classification_id: row.bk_classification_id
-  }
-  modelDialog.value = true
-}
-
-async function removeModel(row) {
-  await ElMessageBox.confirm(`确定删除模型「${row.bk_obj_name}」?其下字段与实例将被删除`, '删除确认', { type: 'warning' })
-  await deleteModel(row.id)
-  ElMessage.success('已删除')
-  load()
-}
-
+// ---------- 分组 ----------
 function onGroupCmd(cmd, cls) {
-  if (cmd === 'rename') {
-    editingCls.value = cls
-    clsDialogTitle.value = '重命名分组'
-    clsForm.value = { bk_classification_id: cls.clsId, bk_classification_name: cls.clsName }
-    clsDialog.value = true
-  } else if (cmd === 'delete') {
-    removeClassification(cls)
-  }
+  if (cmd === 'create') showModelDialog(cls.bk_classification_id)
+  else if (cmd === 'edit') showGroupDialog(true, cls)
+  else if (cmd === 'delete') removeClassification(cls)
 }
-
+function showGroupDialog(isEdit, cls) {
+  if (isEdit) {
+    editingCls.value = cls
+    clsForm.value = {
+      bk_classification_id: cls.bk_classification_id,
+      bk_classification_name: cls.bk_classification_name
+    }
+  } else {
+    editingCls.value = null
+    clsForm.value = { bk_classification_id: '', bk_classification_name: '' }
+  }
+  clsDialog.value = true
+}
 async function saveClassification() {
+  if (!clsForm.value.bk_classification_id || !clsForm.value.bk_classification_name) return
+  if (!editingCls.value && !/^[A-Za-z][A-Za-z0-9_]*$/.test(clsForm.value.bk_classification_id)) {
+    ElMessage.warning('请填写英文开头，下划线，数字，英文的组合')
+    return
+  }
   saving.value = true
   try {
     if (editingCls.value) {
-      await updateClassification(editingCls.value.clsId, { bk_classification_name: clsForm.value.bk_classification_name })
-      ElMessage.success('分组已重命名')
+      await updateClassification(editingCls.value.bk_classification_id, {
+        bk_classification_name: clsForm.value.bk_classification_name
+      })
+      ElMessage.success('编辑成功')
     } else {
       await createClassification(clsForm.value)
-      ElMessage.success('分组已创建')
+      ElMessage.success('新建成功')
     }
     clsDialog.value = false
-    clsForm.value = { bk_classification_id: '', bk_classification_name: '' }
-    editingCls.value = null
-    load()
-  } finally {
-    saving.value = false
+    keyword.value = ''
+    await load()
+  } catch (e) {
+    ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
+  } finally { saving.value = false }
+}
+async function removeClassification(cls) {
+  if (modelsOf(cls).length) {
+    ElMessage.warning('分组下有模型，不能删除')
+    return
+  }
+  try {
+    await ElMessageBox.confirm('确认要删除此分组？', '删除分组', { type: 'warning' })
+  } catch { return }
+  try {
+    // 后端按自增 id 删除;分组数据里带 id 字段
+    await deleteClassification(cls.id ?? cls.bk_classification_id)
+    ElMessage.success('删除成功')
+    keyword.value = ''
+    await load()
+  } catch (e) {
+    ElMessage.error('删除失败: ' + (e?.message || '后端异常'))
   }
 }
 
-async function removeClassification(cls) {
-  await ElMessageBox.confirm(`确定删除分组「${cls.clsName}」?`, '删除确认', { type: 'warning' })
-  await deleteClassification(cls.clsId)
-  ElMessage.success('已删除')
-  load()
+// ---------- 拖拽换组(旧版 vuedraggable) ----------
+function onDragStart(model, evt) {
+  if (isModelSelectable.value || model.ispre) {
+    evt.preventDefault()
+    return
+  }
+  dragObjId.value = model.bk_obj_id
+  evt.dataTransfer.effectAllowed = 'move'
+  evt.dataTransfer.setData('text/plain', model.bk_obj_id)
+}
+function onDragEnd() {
+  dragObjId.value = null
+}
+async function onDropToGroup(cls, evt) {
+  const objId = evt.dataTransfer.getData('text/plain')
+  dragObjId.value = null
+  if (!objId) return
+  const model = allClassifications.value.flatMap((c) => c.models).find((m) => m.bk_obj_id === objId)
+  if (!model || model.bk_classification_id === cls.bk_classification_id) return
+  try {
+    await updateModel(model.id, { bk_classification_id: cls.bk_classification_id })
+    ElMessage.success('修改成功')
+    await load()
+  } catch (e) {
+    ElMessage.error('移动失败: ' + (e?.message || '后端异常'))
+  }
 }
 
 onMounted(load)
 </script>
 
 <style scoped>
-.model-page { height: 100%; display: flex; flex-direction: column; background: #fff; overflow-y: auto; }
-.page-title {
-  font-size: 16px; color: #313238; font-weight: 400;
-  padding: 0 20px; height: 50px; line-height: 50px;
-  border-bottom: 1px solid #E7E9EF; margin: 0; flex: 0 0 50px;
+.model-management {
+  height: 100%;
+  background-color: #fafbfd;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.model-management-header {
+  flex: 0 0 auto;
+  padding: 15px 24px 20px;
+  background-color: #fafbfd;
 }
 .model-tips {
-  margin: 0 20px; margin-top: 12px; padding: 8px 12px;
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: #63656E;
-  background: #F0F7FF;
-  border: 1px solid #C5DAFF; border-radius: 2px;
+  margin-bottom: 10px;
 }
-.tips-icon { color: #3A84FF; }
-.tips-text { flex: 1; }
-.tips-close { cursor: pointer; color: #979BA5; }
-.model-body { padding: 16px 20px; }
-.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
-.toolbar .spacer { flex: 1; }
-.model-group { margin-bottom: 26px; }
-.group-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding-bottom: 8px; border-bottom: 1px solid #E7E9EF; margin-bottom: 12px;
+.model-management-options {
+  display: flex;
+  align-items: center;
+  height: 32px;
 }
-.group-name { font-size: 14px; font-weight: 600; color: #313238; }
-.group-menu { margin-left: auto; }
-.group-more {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; border-radius: 2px; cursor: pointer;
-  color: #979BA5; font-size: 16px;
+.model-operation-options {
+  display: flex;
 }
-.group-more:hover { background: #eaebf0; color: #3a84ff; }
-.model-cards { display: flex; flex-wrap: wrap; gap: 12px; }
-.model-card {
-  width: 236px; padding: 10px 14px;
-  border: 1px solid #F0F1F5; border-radius: 4px;
-  background: #fff;
-  cursor: pointer; position: relative;
-  transition: border-color 0.2s;
+.model-operation-options .bk-button {
+  margin-right: 10px;
 }
-.model-card:hover { border-color: #3A84FF; }
-.card-top { display: flex; align-items: center; gap: 10px; }
-.card-check {
-  position: absolute; left: 10px; top: 10px;
-  display: inline-flex; align-items: center;
+.is-model-selectable .model-operation-options {
+  display: none;
 }
-.model-card.checked { border-color: #3A84FF; background: #F0F5FF; }
+.model-export-label {
+  display: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: #313238;
+}
+.is-model-selectable .model-export-label {
+  display: block;
+}
+.model-type-options {
+  margin-left: auto;
+  display: flex;
+}
+.is-model-selectable .model-type-options {
+  display: none;
+}
+.model-type-button {
+  position: relative;
+  margin: 0;
+  border-radius: 0;
+}
+.model-type-button:first-child {
+  border-radius: 2px 0 0 2px;
+}
+.model-type-button + .model-type-button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.model-type-button.last-child,
+.type-disabled-span .model-type-button {
+  border-radius: 0 2px 2px 0;
+}
+.model-type-button:hover:not(:disabled),
+.model-type-button.is-active {
+  border-color: #3a84ff;
+  color: #3a84ff;
+  position: relative;
+  z-index: 2;
+}
+.type-disabled-span {
+  display: inline-block;
+  outline: 0;
+}
+.model-search-options {
+  margin-left: 10px;
+  width: 240px;
+}
+.is-model-selectable .model-search-options {
+  margin-left: auto;
+}
+.model-search-input {
+  width: 240px;
+}
 
-.export-action-bar {
-  position: sticky; bottom: 0;
-  display: flex; align-items: center; gap: 16px;
-  background: #FAFBFD; border-top: 1px solid #DCDEE5;
-  padding: 10px 20px;
+.model-management-body {
+  flex: 1;
+  overflow-y: auto;
 }
-.export-action-bar .selected-count { color: #63656E; font-size: 13px; }
-.export-action-bar .selected-count em { color: #3A84FF; font-style: normal; font-weight: bold; padding: 0 2px; }
-.export-action-bar .spacer { flex: 1; }
+.is-model-selectable .model-management-body {
+  margin-bottom: 50px;
+}
+.group-list {
+  padding: 0 24px 25px;
+  list-style: none;
+  margin: 0;
+}
+.group-item + .group-item {
+  margin-top: 20px;
+}
+
+/* 分组标题(旧版 collapse-group-title) */
+.group-header {
+  display: flex;
+  align-items: center;
+  color: #313238;
+  font-size: 14px;
+}
+.collapse-group-title {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  padding-right: 2px;
+}
+.collapse-group-title:hover {
+  background-color: #f0f1f5;
+}
+.group-collapse-icon {
+  margin: 0 8px 0 4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #63656e;
+  transition: transform 200ms ease;
+}
+.collapse-group-title.is-collapse .group-collapse-icon {
+  transform: rotate(-90deg);
+}
+.group-title-text {
+  max-width: 300px;
+  margin-right: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.more-operation-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 2px;
+}
+.more-dots {
+  width: 3px;
+  height: 13px;
+  background-image: radial-gradient(circle, #979ba5 1px, transparent 1.2px);
+  background-size: 3px 5px;
+  background-position: center;
+  background-repeat: repeat-y;
+}
+.more-operation-btn:hover {
+  background-color: #eaebf0;
+  color: #3a84ff;
+}
+.full-selection-checkbox {
+  margin-left: auto;
+}
+
+/* 模型卡片网格(旧版 grid minmax(256px,1fr)) */
+.model-list {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
+  width: 100%;
+  align-content: flex-start;
+  margin-top: 6px;
+}
+.model-item {
+  display: flex;
+  height: 60px;
+  background-color: #fff;
+  border-radius: 2px;
+  box-shadow: 0 2px 4px 0 rgba(25, 25, 41, .05);
+  cursor: pointer;
+  overflow: hidden;
+}
+.model-item:hover {
+  transition: all 200ms ease;
+  box-shadow: 0 2px 4px 0 rgba(25, 25, 41, .05), 0 2px 4px 0 rgba(0, 0, 0, .1);
+}
+.model-item.is-paused {
+  opacity: .4;
+}
+.model-item.is-dragging {
+  opacity: .5;
+}
+.model-info {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  border-radius: 2px 0 0 2px;
+}
+.model-info:hover {
+  background-color: #eff5ff;
+}
+.drag-icon {
+  flex-shrink: 0;
+  visibility: hidden;
+  margin-left: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.drag-icon .bar {
+  width: 3px;
+  height: 10px;
+  background-image: radial-gradient(circle, #c4c6cc 1px, transparent 1.2px);
+  background-size: 3px 4px;
+}
+.model-item:hover .drag-icon {
+  visibility: visible;
+}
 .model-icon {
-  width: 32px; height: 32px; border-radius: 4px;
-  display: flex; align-items: center; justify-content: center;
-  flex: 0 0 32px;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  margin-left: 5px;
+  line-height: 40px;
+  text-align: center;
+  border-radius: 50%;
+  background-color: #e1ecff;
+  transition: background-color 200ms ease;
 }
-.card-text { min-width: 0; }
-.model-name { font-size: 14px; color: #313238; font-weight: 700; line-height: 18px; }
-.card-id { font-size: 12px; color: #C4C6CC; line-height: 16px; }
-.card-actions { display: none; position: absolute; top: 8px; right: 8px; background: #fff; }
-.model-card:hover .card-actions { display: block; }
-.empty-group {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; padding: 14px 0;
-  background: #FAFBFD; border-radius: 2px;
-  color: #979BA5; font-size: 12px;
+.model-icon .icon {
+  color: #3a84ff;
+  font-size: 16px;
+  vertical-align: 1px;
+}
+.model-item.is-builtin .model-icon {
+  background-color: #f5f7fa;
+}
+.model-item.is-builtin .model-icon .icon {
+  color: #798aad;
+}
+.model-item.is-builtin:hover .model-icon {
+  background-color: #fff;
+}
+.model-details {
+  margin: 0 10px;
+  overflow: hidden;
+  min-width: 0;
+}
+.model-name {
+  line-height: 19px;
+  font-size: 14px;
+  margin: 0;
+  color: #313238;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-id {
+  line-height: 16px;
+  font-size: 12px;
+  color: #bfc7d2;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-checkbox {
+  flex: 0 0 auto;
+  margin: auto 10px auto auto;
+}
+.model-instance-count {
+  display: none;
+  flex: 0 0 60px;
+  width: 60px;
+  height: 60px;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  border-radius: 0 2px 2px 0;
+  color: #3a84ff;
+}
+.model-instance-count:hover {
+  background-color: #eff5ff;
+}
+.model-item:hover .model-instance-count {
+  display: flex;
+}
+.count-number {
+  font-size: 14px;
+}
+
+.group-empty-model {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 60px;
+  line-height: 60px;
+  background-color: #fff;
+  font-size: 14px;
+  color: #63656e;
+  border: 1px dashed #dcdee5;
+  text-align: center;
+  vertical-align: middle;
+  margin-top: 12px;
+}
+.group-empty-model .bk-cmdb-icon {
+  margin-right: 4px;
+  color: #979ba5;
+}
+.empty-add {
+  font-size: 14px;
+}
+
+/* 导出底栏(旧版 export-action-bar 50px) */
+.export-action-bar {
+  flex: 0 0 50px;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-top: 1px solid #e2e2e2;
+  font-size: 14px;
+}
+.export-action-bar .full-selection {
+  margin-left: 24px;
+}
+.export-action-bar .selected-count {
+  margin-left: auto;
+  margin-right: 33px;
+  color: #63656e;
+}
+.export-action-bar .selected-count em {
+  font-weight: 600;
+  font-style: normal;
+}
+.export-action-bar .cancel-button {
+  width: 86px;
+  margin-right: 10px;
+}
+.export-action-bar .next-step-button {
+  margin-right: 24px;
+  width: 120px;
+}
+
+/* 弹窗(bk-dialog 复刻) */
+.bk-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  z-index: 3000;
+}
+.bk-dialog-box {
+  position: absolute;
+  left: 50%;
+  top: 20vh;
+  transform: translateX(-50%);
+  width: 600px;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .2);
+}
+.success-dialog {
+  width: 400px;
+}
+.bk-fade-enter-active,
+.bk-fade-leave-active {
+  transition: opacity .18s ease;
+}
+.bk-fade-enter-from,
+.bk-fade-leave-to {
+  opacity: 0;
+}
+.dialog-content {
+  padding: 20px 15px 20px 28px;
+}
+.dialog-title {
+  font-size: 20px;
+  color: #333948;
+  line-height: 1;
+  padding-bottom: 14px;
+  margin: 0;
+}
+.row-input {
+  vertical-align: middle;
+  width: 519px;
+  max-width: 100%;
+}
+.export-form .row-input {
+  width: calc(100% - 105px);
+}
+.dialog-footer {
+  padding: 12px 24px;
+  text-align: right;
+  font-size: 0;
+  border-top: 1px solid #dcdee5;
+  background: #fafbfd;
+  border-radius: 0 0 2px 2px;
+}
+.dialog-footer .bk-primary {
+  margin-right: 10px;
+}
+.success-content {
+  text-align: center;
+  padding: 40px 20px 46px;
+}
+.success-content p {
+  color: #444;
+  font-size: 24px;
+  padding: 10px 0 20px;
+  margin: 0;
+}
+.success-check {
+  display: inline-block;
+  position: relative;
+  width: 58px;
+  height: 58px;
+  background: #2dcb56;
+  border-radius: 50%;
+}
+.success-check::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 22px;
+  width: 26px;
+  height: 13px;
+  border-bottom: 5px solid #fff;
+  border-left: 5px solid #fff;
+  transform: rotate(-45deg);
+}
+.success-content .btn-box {
+  font-size: 0;
+}
+.success-content .btn-box .bk-button {
+  margin: 0 5px;
 }
 </style>
