@@ -65,10 +65,12 @@ async function openHash(page, path, expected = path) {
 
     await openHash(page, '/resource/project')
     await page.getByRole('button', { name: '新建' }).click()
-    if (!await page.locator('.el-dialog:visible').isVisible()) throw new Error('项目新建弹窗未打开')
-    if (!await page.locator('.el-dialog:visible').getByText('新建项目').count()) throw new Error('项目新建标题不匹配')
+    if (!await page.locator('.el-drawer:visible').isVisible()) throw new Error('项目新建抽屉未打开')
+    if (!await page.locator('.el-drawer:visible').getByText('创建 项目').count()) throw new Error('项目新建标题不匹配')
+    if (!await page.locator('.el-drawer:visible').getByText('基础信息').count()) throw new Error('项目新建缺少基础信息分组')
+    if (!await page.locator('.el-drawer:visible').getByRole('button', { name: '提交' }).count()) throw new Error('项目新建缺少提交按钮')
     await page.keyboard.press('Escape')
-    ok('项目新建弹窗动线')
+    ok('项目新建抽屉动线(老版 800px sideslider 形态)')
 
     await openHash(page, '/resource/business')
     await page.getByRole('button', { name: '新建' }).click()

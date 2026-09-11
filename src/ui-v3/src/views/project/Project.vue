@@ -62,32 +62,55 @@
       </div>
     </div>
 
-    <!-- 新建/编辑项目 -->
-    <el-dialog v-model="formVisible" :title="formId ? '编辑项目' : '新建项目'" width="520px">
-      <el-form label-width="100px">
-        <el-form-item label="项目名称" required>
-          <el-input v-model="form.bk_project_name" />
-        </el-form-item>
-        <el-form-item label="项目英文名" required>
-          <el-input v-model="form.bk_project_code" :disabled="!!formId" placeholder="英文唯一标识" />
-        </el-form-item>
-        <el-form-item label="项目负责人" required>
-          <el-input v-model="form.bk_project_owner" placeholder="多个用逗号分隔" />
-        </el-form-item>
-        <el-form-item label="项目类型" required>
-          <el-select v-model="form.bk_project_type" style="width: 100%">
-            <el-option v-for="o in projectTypeOptions" :key="o.id" :label="o.name" :value="o.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="项目描述">
-          <el-input v-model="form.bk_project_desc" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
-      </template>
-    </el-dialog>
+    <!-- 新建/编辑项目(老版 800px sideslider + 属性 tab + 基础信息分组两列表单) -->
+    <el-drawer
+      v-model="formVisible"
+      :title="formId ? '编辑 项目' : '创建 项目'"
+      size="800px"
+      :close-on-click-modal="false"
+    >
+      <el-tabs v-model="formTab">
+        <el-tab-pane label="属性" name="attribute">
+          <el-form label-position="top" class="project-form">
+            <div class="form-group">
+              <div class="form-group-title" @click="basicCollapsed = !basicCollapsed">
+                <el-icon class="group-caret" :class="{ collapsed: basicCollapsed }"><CaretBottom /></el-icon>
+                基础信息
+              </div>
+              <div v-show="!basicCollapsed" class="form-grid">
+                <el-form-item v-for="f in formFields" :key="f.bk_property_id">
+                  <template #label>
+                    <span class="form-label">{{ f.bk_property_name }}<i v-if="f.isrequired" class="req-star">*</i></span>
+                  </template>
+                  <el-select v-if="enumOptions(f).length" v-model="form[f.bk_property_id]" style="width: 100%">
+                    <el-option v-for="o in enumOptions(f)" :key="o.id" :label="o.name" :value="o.id" />
+                  </el-select>
+                  <el-switch v-else-if="f.bk_property_type === 'bool'" v-model="form[f.bk_property_id]" />
+                  <el-input-number
+                    v-else-if="['int', 'float'].includes(f.bk_property_type)"
+                    v-model="form[f.bk_property_id]"
+                    :controls="false"
+                    style="width: 100%"
+                  />
+                  <el-input
+                    v-else-if="f.bk_property_type === 'longchar'"
+                    v-model="form[f.bk_property_id]"
+                    type="textarea"
+                    :rows="3"
+                    :placeholder="`请输入${f.bk_property_name}`"
+                  />
+                  <el-input v-else v-model="form[f.bk_property_id]" :placeholder="`请输入${f.bk_property_name}`" />
+                </el-form-item>
+              </div>
+            </div>
+          </el-form>
+          <div class="form-footer">
+            <el-button type="primary" :loading="saving" @click="submitForm">提交</el-button>
+            <el-button @click="formVisible = false">取消</el-button>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-drawer>
 
     <!-- 批量编辑(契约与单条编辑相同: PUT /updatemany/project {ids, data},只提交修改过的字段) -->
     <el-drawer v-model="batchVisible" title="批量编辑" size="480px">
@@ -135,7 +158,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, CaretBottom } from '@element-plus/icons-vue'
 import { http, searchModelAttributes } from '../../api/cmdb'
 
 const router = useRouter()
@@ -146,11 +169,11 @@ const page = ref(1)
 const loading = ref(false)
 const saving = ref(false)
 const selected = ref([])
-const projectTypeOptions = computed(() => attrs.value.find((a) => a.bk_property_id === 'bk_project_type')?.option || [])
-
 const formVisible = ref(false)
 const formId = ref(null)
 const form = ref({})
+const formTab = ref('attribute')
+const basicCollapsed = ref(false)
 
 const filtered = computed(() => rows.value)
 
@@ -182,6 +205,26 @@ function enumOptions(f) {
     return out
   }
   return []
+}
+
+// ---------- 创建/编辑表单(老版通用模型表单:按 bk_property_index 排序,剔除系统字段) ----------
+const formFields = computed(() => attrs.value
+  .filter((f) => !SYSTEM_FIELDS.includes(f.bk_property_id))
+  .sort((a, b) => (a.bk_property_index ?? 0) - (b.bk_property_index ?? 0)))
+
+function defaultFormValues() {
+  const values = {}
+  for (const f of formFields.value) {
+    const options = enumOptions(f)
+    if (options.length) {
+      values[f.bk_property_id] = (options.find((o) => o.is_default) || options[0]).id
+    } else if (f.bk_property_type === 'bool') {
+      values[f.bk_property_id] = false
+    } else {
+      values[f.bk_property_id] = ''
+    }
+  }
+  return values
 }
 
 // ---------- 批量编辑 ----------
@@ -306,25 +349,32 @@ async function load() {
 }
 
 function openForm(row) {
+  const defaults = defaultFormValues()
   if (row) {
     formId.value = row.id ?? row.bk_project_id
-    form.value = {
-      bk_project_name: row.bk_project_name || '',
-      bk_project_code: row.bk_project_code || '',
-      bk_project_owner: row.bk_project_owner || '',
-      bk_project_type: row.bk_project_type || '',
-      bk_project_desc: row.bk_project_desc || ''
+    const values = { ...defaults }
+    for (const f of formFields.value) {
+      const value = row[f.bk_property_id]
+      if (value !== null && value !== undefined) values[f.bk_property_id] = value
     }
+    form.value = values
   } else {
     formId.value = null
-    form.value = { bk_project_name: '', bk_project_code: '', bk_project_owner: 'admin', bk_project_type: projectTypeOptions.value[0]?.id || '', bk_project_desc: '' }
+    form.value = defaults
   }
+  formTab.value = 'attribute'
   formVisible.value = true
 }
 
 async function submitForm() {
-  if (!String(form.value.bk_project_name || '').trim()) { ElMessage.warning('请填写项目名称'); return }
-  if (!String(form.value.bk_project_code || '').trim()) { ElMessage.warning('请填写项目英文名'); return }
+  for (const f of formFields.value) {
+    if (!f.isrequired) continue
+    const v = form.value[f.bk_property_id]
+    if (v === '' || v === null || v === undefined) {
+      ElMessage.warning(`请填写${f.bk_property_name}`)
+      return
+    }
+  }
   saving.value = true
   try {
     if (formId.value) {
@@ -403,4 +453,21 @@ onMounted(async () => {
 }
 .table-footer .spacer { flex: 1; }
 .col-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; }
+</style>
+
+<!-- 项目创建/编辑抽屉 teleport 到 body,样式需非 scoped(对齐老版 management-form 两列表单) -->
+<style>
+.project-form .form-group { margin-bottom: 4px; }
+.project-form .form-group-title {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 14px; font-weight: 700; color: #313238;
+  cursor: pointer; user-select: none; margin-bottom: 12px;
+}
+.project-form .group-caret { font-size: 12px; color: #63656E; transition: transform 0.2s; }
+.project-form .group-caret.collapsed { transform: rotate(-90deg); }
+.project-form .form-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; }
+.project-form .form-label { font-size: 12px; color: #63656E; line-height: 20px; }
+.project-form .req-star { color: #EA3636; font-style: normal; margin-left: 4px; font-family: sans-serif; }
+.project-form .form-footer { margin-top: 10px; }
+.project-form .form-footer .el-button + .el-button { margin-left: 8px; }
 </style>
