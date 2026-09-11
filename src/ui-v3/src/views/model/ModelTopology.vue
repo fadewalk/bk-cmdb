@@ -113,14 +113,25 @@
               <path d="M8,1 L1,4 L8,7 Q6.2,4 8,1 Z" fill="#3c96ff" />
             </marker>
           </defs>
-          <line
+          <path
             v-for="edge in visibleEdges"
             :key="edge.key"
-            :x1="edge.x1" :y1="edge.y1" :x2="edge.x2" :y2="edge.y2"
-            :class="['topo-edge', { hover: edge.hover || hoverEdgeKey === edge.key, mask: isEdgeMask(edge) }]"
-            :stroke-width="edge.hover || hoverEdgeKey === edge.key ? 3 : 2"
+            :d="edge.path"
+            :class="['topo-edge', {
+              hover: edge.hover || hoverEdgeKey === edge.key,
+              linked: isEdgeLinked(edge),
+              dimmed: isEdgeDimmed(edge),
+              mask: isEdgeMask(edge)
+            }]"
             :marker-end="['src_to_dest', 'bidirectional'].includes(edge.direction) ? edgeMarker(edge, 'end') : undefined"
             :marker-start="['dest_to_src', 'bidirectional'].includes(edge.direction) ? edgeMarker(edge, 'start') : undefined"
+          />
+          <!-- 加宽透明命中区:交叉线也容易悬停/点出关系详情 -->
+          <path
+            v-for="edge in visibleEdges"
+            :key="`hit-${edge.key}`"
+            :d="edge.path"
+            class="edge-hit"
             @mouseenter="hoverEdgeKey = edge.key"
             @mouseleave="hoverEdgeKey = null"
             @click.stop="onEdgeClick(edge)"
@@ -131,7 +142,12 @@
         <div
           v-for="edge in visibleEdges"
           :key="`l-${edge.key}`"
-          :class="['edge-label', { hover: edge.hover || hoverEdgeKey === edge.key, mask: isEdgeMask(edge) }]"
+          :class="['edge-label', {
+            hover: edge.hover || hoverEdgeKey === edge.key,
+            linked: isEdgeLinked(edge),
+            dimmed: isEdgeDimmed(edge),
+            mask: isEdgeMask(edge)
+          }]"
           :style="{ left: edge.mx + 'px', top: edge.my + 'px' }"
           @mouseenter="hoverEdgeKey = edge.key"
           @mouseleave="hoverEdgeKey = null"
@@ -232,6 +248,7 @@ const relationTypes = ref([])
 const asstNameMap = ref({})
 const asstDirectionMap = ref({})
 const NODE_RADIUS = 27.5
+const EDGE_FAN_SPACING = 44
 
 const topoNav = reactive({
   activeGroupId: '',
@@ -327,20 +344,16 @@ const visibleNodes = computed(() => modelList.value
 
 const visibleEdges = computed(() => {
   const pos = Object.fromEntries(visibleNodes.value.map((n) => [n.bk_obj_id, n]))
-  const out = []
+  const raw = []
   assocList.value.forEach((a, i) => {
     const s = pos[a.bk_obj_id]
     const t = pos[a.bk_asst_obj_id]
     if (!s || !t) return
-    const dx = t.x - s.x
-    const dy = t.y - s.y
-    const distance = Math.hypot(dx, dy)
-    const offsetX = distance ? (dx / distance) * NODE_RADIUS : 0
-    const offsetY = distance ? (dy / distance) * NODE_RADIUS : 0
-    out.push({
+    raw.push({
       key: `e-${a.id ?? i}`,
-      x1: s.x + offsetX, y1: s.y + offsetY, x2: t.x - offsetX, y2: t.y - offsetY,
-      mx: (s.x + t.x) / 2, my: (s.y + t.y) / 2,
+      source: a.bk_obj_id,
+      target: a.bk_asst_obj_id,
+      s, t,
       label: asstNameMap.value[a.bk_asst_id] || a.bk_asst_name || a.bk_asst_id,
       direction: asstDirectionMap.value[a.bk_asst_id] || 'src_to_dest',
       g1: s.bk_classification_id, g2: t.bk_classification_id,
@@ -352,23 +365,74 @@ const visibleEdges = computed(() => {
     const s = pos[MAIN_LINE_ORDER[i]]
     const t = pos[MAIN_LINE_ORDER[i + 1]]
     if (!s || !t) continue
-    const dx = t.x - s.x
-    const dy = t.y - s.y
-    const distance = Math.hypot(dx, dy)
-    const offsetX = distance ? (dx / distance) * NODE_RADIUS : 0
-    const offsetY = distance ? (dy / distance) * NODE_RADIUS : 0
-    out.push({
+    raw.push({
       key: `m-${MAIN_LINE_ORDER[i]}-${MAIN_LINE_ORDER[i + 1]}`,
-      x1: s.x + offsetX, y1: s.y + offsetY, x2: t.x - offsetX, y2: t.y - offsetY,
-      mx: (s.x + t.x) / 2, my: (s.y + t.y) / 2,
+      source: MAIN_LINE_ORDER[i],
+      target: MAIN_LINE_ORDER[i + 1],
+      s, t,
       label: '拓扑组成',
       direction: asstDirectionMap.value.bk_mainline || 'src_to_dest',
       g1: s.bk_classification_id, g2: t.bk_classification_id,
       hover: false
     })
   }
-  return out
+  // 同一对模型间的多条关联按序号侧向展开成弧线(旧版 Cytoscape bezier 语义),避免直线重叠
+  const fanIndex = {}
+  const fanTotal = {}
+  raw.forEach((edge) => {
+    const pairKey = [edge.source, edge.target].sort().join('|')
+    fanIndex[pairKey] = fanIndex[pairKey] ?? 0
+    edge.pairKey = pairKey
+    edge.fanIdx = fanIndex[pairKey]
+    fanIndex[pairKey] += 1
+    fanTotal[pairKey] = (fanTotal[pairKey] ?? 0) + 1
+  })
+  return raw.map((edge) => buildEdgeCurve(edge, fanTotal[edge.pairKey]))
 })
+
+// 二次贝塞尔弧线:端点收缩到节点圆周并朝向控制点,平行边按 fanIdx 侧移,自关联画节点顶部圆环
+function buildEdgeCurve(edge, fanTotal) {
+  const { s, t, fanIdx } = edge
+  if (s.bk_obj_id === t.bk_obj_id) {
+    const loopTop = s.y - NODE_RADIUS
+    return {
+      ...edge,
+      path: `M ${s.x} ${loopTop} C ${s.x + 64} ${loopTop - 56} ${s.x - 64} ${loopTop - 56} ${s.x} ${loopTop}`,
+      mx: s.x,
+      my: loopTop - 32
+    }
+  }
+  const dx = t.x - s.x
+  const dy = t.y - s.y
+  const distance = Math.hypot(dx, dy) || 1
+  const offset = (fanIdx - (fanTotal - 1) / 2) * EDGE_FAN_SPACING
+  const nx = -dy / distance
+  const ny = dx / distance
+  const cx = (s.x + t.x) / 2 + nx * offset
+  const cy = (s.y + t.y) / 2 + ny * offset
+  const startLen = Math.hypot(cx - s.x, cy - s.y) || 1
+  const endLen = Math.hypot(t.x - cx, t.y - cy) || 1
+  const x1 = s.x + ((cx - s.x) / startLen) * NODE_RADIUS
+  const y1 = s.y + ((cy - s.y) / startLen) * NODE_RADIUS
+  const x2 = t.x + ((cx - t.x) / endLen) * NODE_RADIUS
+  const y2 = t.y + ((cy - t.y) / endLen) * NODE_RADIUS
+  return {
+    ...edge,
+    path: `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`,
+    mx: 0.25 * x1 + 0.5 * cx + 0.25 * x2,
+    my: 0.25 * y1 + 0.5 * cy + 0.25 * y2
+  }
+}
+
+// 节点聚焦(悬浮/选中)时高亮相连边、弱化无关边,便于在交叉关系中追踪单条关联
+function isEdgeLinked(edge) {
+  const focus = hoverNodeKey.value || selectedNodeId.value
+  return Boolean(focus) && (edge.source === focus || edge.target === focus)
+}
+function isEdgeDimmed(edge) {
+  const focus = hoverNodeKey.value || selectedNodeId.value
+  return Boolean(focus) && !isEdgeLinked(edge)
+}
 
 // ---------- 分组遮罩(旧版 mask:opacity .16) ----------
 function isNodeMask(node) {
@@ -617,7 +681,8 @@ async function loadData() {
       condition: { $or: [{ bk_obj_id: { $in: modelList.value.map((m) => m.bk_obj_id) } }, { bk_asst_obj_id: { $in: modelList.value.map((m) => m.bk_obj_id) } }] },
       page: { start: 0, limit: 2000 }
     })
-    assocList.value = data?.info || []
+    // 该接口响应 data 直接是数组(区别于分页型 {count, info})
+    assocList.value = Array.isArray(data) ? data : (data?.info || [])
     loadCachedPositions()
     nodePositions.value = buildLayout()
     resizeFit()
@@ -908,11 +973,25 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 .topo-edge {
+  fill: none;
   stroke: #c3cdd7;
-  cursor: pointer;
+  stroke-width: 2;
+  transition: opacity .15s;
 }
-.topo-edge.hover {
+.topo-edge.hover,
+.topo-edge.linked {
   stroke: #3c96ff;
+  stroke-width: 3;
+}
+.topo-edge.dimmed {
+  opacity: .12;
+}
+.edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
 }
 .topo-edge.mask,
 .edge-label.mask,
@@ -941,6 +1020,15 @@ onBeforeUnmount(() => {
   border-color: #3c96ff;
   font-weight: bold;
   background: #fff;
+}
+.edge-label.linked {
+  color: #3c96ff;
+  border-color: #3c96ff;
+  font-weight: bold;
+  background: #fff;
+}
+.edge-label.dimmed {
+  opacity: .12;
 }
 
 /* 节点(55px 圆 + 名称) */
