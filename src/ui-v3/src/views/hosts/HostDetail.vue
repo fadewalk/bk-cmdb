@@ -69,6 +69,13 @@
 
       <!-- 3. 关联实例(按模型分组) -->
       <template v-if="tab === 'association'">
+        <div class="toolbar">
+          <el-tooltip content="当前模型暂未定义可用关联" :disabled="hasHostAssociation" placement="top">
+            <span>
+              <el-button type="primary" size="small" :disabled="!hasHostAssociation" @click="newAssocVisible = true">新增关联</el-button>
+            </span>
+          </el-tooltip>
+        </div>
         <el-card v-for="g in assocGroups" :key="g.objId" shadow="never" style="margin-bottom: 12px">
           <template #header>
             <div class="card-head">
@@ -220,6 +227,10 @@
       </el-table>
       <el-empty v-if="!procLoading && processes.length === 0" description="该实例暂无进程" :image-size="60" />
     </el-drawer>
+    <!-- 新增关联抽屉(老版 800px sideslider) -->
+    <el-drawer v-model="newAssocVisible" title="新增关联" size="800px" :destroy-on-close="true">
+      <NewAssociation v-if="newAssocVisible" :host-id="hostId" @change="loadAssoc" />
+    </el-drawer>
     <ProcessFormDialog
       :visible="procFormVisible"
       title="新增进程"
@@ -237,8 +248,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
+import NewAssociation from './NewAssociation.vue'
 import {
-  http, searchBusiness, searchModelAttributes, getHostInstTopo, searchHostInstAssoc, searchInstAssociations,
+  http, searchBusiness, searchModelAttributes, getInstTopo, searchHostInstAssoc, searchInstAssociations,
+  searchObjectAssociations, searchMainlineModels,
   searchHostDetail, getBizTopoTree, getBizInternalTopo, transferHostModule, transferHostToResource,
   searchServiceInstances, searchProcessInstances, deleteServiceInstances, createProcessInstance, updateProcessInstance,
   listHostsWithoutApp, getAuditDictionary, searchInstAudit
@@ -273,6 +286,9 @@ const filteredSvcInstances = computed(() => {
 const assocGroups = ref([])
 const assocLoading = ref(false)
 const assocCount = computed(() => assocGroups.value.reduce((s, g) => s + g.items.length, 0))
+// 新增关联(老版: 主机无可用模型关联时按钮禁用)
+const newAssocVisible = ref(false)
+const hasHostAssociation = ref(false)
 
 // 变更记录
 const historyRows = ref([])
@@ -461,10 +477,11 @@ async function loadSvcInstances() {
     const data = await searchServiceInstances(bizId, { start: 0, limit: 200 })
     // 过滤:这台主机的服务实例(后端返回的 rows 含 host 内嵌信息不直接挂 host_id,只能前端 bk_host_id 匹配)
     const all = data?.info || []
-    // 尝试关联查询 host_inst_topo,只过滤与本主机相关的
+    // 尝试实例拓扑查询(真实接口返回数组,老版契约 find/instassttopo/object/{objId}/inst/{instId}),只过滤与本主机相关的
     try {
-      const topo = await getHostInstTopo(hostId, { bk_biz_id: bizId, page: { start: 0, limit: 200 } })
-      const ids = new Set((topo?.info || []).map((x) => x.bk_inst_id || x.id))
+      const topo = await getInstTopo('host', hostId, { bk_biz_id: bizId, page: { start: 0, limit: 200 } })
+      const topoItems = Array.isArray(topo) ? topo : (topo?.info || [])
+      const ids = new Set(topoItems.map((x) => x.bk_inst_id || x.id))
       svcInstances.value = all.filter((r) => ids.has(r.id) || (r.bk_host_id === hostId))
     } catch (e) {
       svcInstances.value = all.filter((r) => r.bk_host_id === hostId)
@@ -516,9 +533,34 @@ async function loadAssoc() {
 watch(tab, (value) => {
   router.replace({ query: { ...route.query, tab: value } })
   if (value === 'service' && bizId && svcInstances.value.length === 0 && !svcLoading.value) loadSvcInstances()
-  if (value === 'association' && assocGroups.value.length === 0 && !assocLoading.value) loadAssoc()
+  if (value === 'association') {
+    if (assocGroups.value.length === 0 && !assocLoading.value) loadAssoc()
+    if (!hasHostAssociation.value) loadAssocAvailability()
+  }
   if (value === 'history' && !historyLoaded.value && !historyLoading.value) loadHistory()
 })
+
+async function loadAssocAvailability() {
+  try {
+    // 老版契约:模型关联需先剔除主线模型(除 biz/host)关系再判定可用性
+    const [asSource, asTarget, mainline] = await Promise.all([
+      searchObjectAssociations({ condition: { bk_obj_id: 'host' } }).catch(() => []),
+      searchObjectAssociations({ condition: { bk_asst_obj_id: 'host' } }).catch(() => []),
+      searchMainlineModels().catch(() => [])
+    ])
+    const toList = (v) => (Array.isArray(v) ? v : v?.info || [])
+    // 独立后端无 bk_mainline 边(topomodelmainline 返回空),回退内置主线模型
+    const mainlineRaw = toList(mainline)
+    const mainlineIds = (mainlineRaw.length ? mainlineRaw.map((m) => m.bk_obj_id) : ['biz', 'set', 'module', 'host'])
+      .filter((id) => !['biz', 'host'].includes(id))
+    const available = toList(asSource).concat(toList(asTarget)).filter(
+      (r) => !mainlineIds.includes(r.bk_obj_id) && !mainlineIds.includes(r.bk_asst_obj_id)
+    )
+    hasHostAssociation.value = available.length > 0
+  } catch {
+    hasHostAssociation.value = false
+  }
+}
 
 async function enterEdit() {
   if (!host.value) return
@@ -541,8 +583,8 @@ async function saveEdit() {
   saving.value = true
   try {
     const targetBizId = bizId || host.value?.bk_biz_id || 0
-    // table 路由挂在根路径,不在 /api/v3 下
-    await http.post(`/table/update/instance/object/host/bk_biz_id/${targetBizId}/inst/${hostId}`, editMap.value, { baseURL: '' })
+    // table 路由挂在根路径,不在 /api/v3 下(老版契约 PUT,路径无 biz 段)
+    await http.put(`/table/update/instance/object/host/inst/${hostId}`, { ...editMap.value, bk_biz_id: targetBizId }, { baseURL: '' })
     ElMessage.success('属性已更新')
     editing.value = false
     await loadHost()

@@ -144,11 +144,11 @@ export const transferHostToIdle = (bizId, hostIds) =>
 // 主机详情 + 快照
 export const getHostBase = (hostId) => http.get(`/hosts/0/${hostId}`)
 export const getHostSnapshot = (hostId) => http.get(`/hosts/snapshot/${hostId}`)
-// 复杂条件搜索
-export const searchHosts = (data) => http.post('/hosts/search', data)
-// 主机实例关联查询
-export const getHostInstTopo = (hostId, data) =>
-  http.post(`/find/instassttopo/host/${hostId}`, data)
+// 复杂条件搜索(老版 noauth 契约,/hosts/search 在独立后端未注册,勿用)
+export const searchHostsWithNoAuth = (data) => http.post('/findmany/hosts/search/noauth', data)
+// 实例拓扑(老版契约: find/instassttopo/object/{objId}/inst/{instId},响应为数组)
+export const getInstTopo = (objId, instId, data) =>
+  http.post(`/find/instassttopo/object/${objId}/inst/${instId}`, data)
 export const searchHostInstAssoc = (data) =>
   http.post('/findmany/inst/association', data)
 // 实例关联(老版契约: 按 obj_id/inst_id 分页查询关联关系及对端实例)
@@ -172,9 +172,9 @@ export const deleteResourceDirectory = (moduleId) =>
   http.delete(`/delete/resource/directory/${moduleId}`)
 export const transferHostsToDirectory = (data) =>
   http.post('/host/transfer/resource/directory', data)
-// 主机属性更新(table 路由挂在根路径,不在 /api/v3 下)
-export const updateHostProperties = (hostId, bizId, data) =>
-  http.post(`/table/update/instance/object/host/bk_biz_id/${bizId || 0}/inst/${hostId}`, data, { baseURL: '' })
+// 实例属性更新(table 路由挂在根路径,不在 /api/v3 下;老版契约 PUT)
+export const updateInstProperties = (objId, instId, data) =>
+  http.put(`/table/update/instance/object/${objId}/inst/${instId}`, data, { baseURL: '' })
 
 // ---------- 资源池主机列表 ----------
 export const searchHostsResource = (data) =>
@@ -392,14 +392,6 @@ export const updateAttributeSort = (objId, propId, data) =>
   http.post(`/update/objectattr/index/${objId}/${propId}`, data)
 
 // ---------- 字段分组 ----------
-export const searchObjectAttributeGroups = (objId) =>
-  http.post('/find/objectattributeparent', { bk_obj_id: objId, bk_supplier_account: '0' })
-export const createObjectAttributeGroup = (objId, data) =>
-  http.post('/create/objectattributeparent', { bk_obj_id: objId, bk_supplier_account: '0', ...data })
-export const updateObjectAttributeGroup = (objId, id, data) =>
-  http.put(`/update/objectattributeparent/${id}`, { bk_obj_id: objId, bk_supplier_account: '0', ...data })
-export const deleteObjectAttributeGroup = (objId, id) =>
-  http.delete(`/delete/objectattributeparent/${id}`)
 export const searchFieldGroups = (objId, data) =>
   http.post(`/find/objectattgroup/object/${objId}`, data || {})
 export const createFieldGroup = (data) =>
@@ -454,6 +446,19 @@ export const updateObjectAssociation = (id, data) =>
   http.put(`/update/objectassociation/${id}`, data)
 export const deleteObjectAssociation = (id) =>
   http.delete(`/delete/objectassociation/${id}`)
+
+// ---------- 实例关联(老版契约) ----------
+export const searchInstanceAssociations = (objId, data) =>
+  http.post(`/search/instance_associations/object/${objId}`, data)
+export const countInstanceAssociations = (objId, data) =>
+  http.post(`/count/instance_associations/object/${objId}`, data)
+export const createInstAssociation = (data) =>
+  http.post('/create/instassociation', data)
+export const deleteInstAssociation = (objId, id) =>
+  http.delete(`/delete/instassociation/${objId}/${id}`)
+// 主线模型(老版 find/topomodelmainline;用于关联创建时排除主线模型关系)
+export const searchMainlineModels = (data = {}) =>
+  http.post('/find/topomodelmainline', data)
 
 // ---------- 通用模型实例(自定义模型;内置模型后端拒绝) ----------
 export const searchInstances = (objId, data = {}) =>
@@ -529,8 +534,8 @@ export const createSetTemplate = (bizId, data) =>
   http.post(`/create/topo/set_template/bk_biz_id/${bizId}`, data)
 export const updateSetTemplate = (bizId, templateId, data) =>
   http.put(`/update/topo/set_template/${templateId}/bk_biz_id/${bizId}`, data)
-export const deleteSetTemplates = (bizId) =>
-  http.post(`/deletemany/topo/set_template/bk_biz_id/${bizId}`, { data: { ids: [bizId] } })
+export const deleteSetTemplates = (bizId, ids) =>
+  http.delete(`/deletemany/topo/set_template/bk_biz_id/${bizId}/`, { data: { set_template_ids: ids } })
 export const getSetTemplateServices = (bizId, templateId) =>
   http.get(`/findmany/topo/set_template/${templateId}/bk_biz_id/${bizId}/service_templates`)
 export const searchSetTemplateStatus = (bizId, data) =>
@@ -539,6 +544,15 @@ export const searchSetTemplateSyncHistory = (bizId, data) =>
   http.post(`/findmany/topo/set_template_sync_history/bk_biz_id/${bizId}`, data)
 export const syncSetTemplateToInstances = (bizId, templateId, data) =>
   http.post(`/updatemany/topo/set_template/${templateId}/bk_biz_id/${bizId}/sync_to_instances`, data)
+// 集群模板同步差异(老版 set-sync 契约)
+export const diffSetTemplateWithInstances = (bizId, templateId, data) =>
+  http.post(`/findmany/topo/set_template/${templateId}/bk_biz_id/${bizId}/diff_with_instances`, data)
+// 被移除模块是否含主机(含主机则该集群不可同步)
+export const getSetTemplateRemovedModuleStatus = (bizId, templateId, data) =>
+  http.post(`/findmany/topo/set_template/${templateId}/bk_biz_id/${bizId}/host_with_instances`, data)
+// 模板关联的集群实例列表(web)
+export const searchSetTemplateSets = (bizId, templateId, data = {}) =>
+  http.post(`/findmany/topo/set_template/${templateId}/bk_biz_id/${bizId}/sets/web`, data)
 
 // ---------- 业务集 ----------
 // 业务集列表及其专用拓扑契约
@@ -564,10 +578,6 @@ export const listBizSetServiceInstances = (bizSetId, params) =>
   http.post(`/findmany/proc/biz_set/${bizSetId}/service_instance`, params)
 export const listBizSetProcesses = (bizSetId, params) =>
   http.post(`/findmany/proc/biz_set/${bizSetId}/process_instance`, params)
-
-// 旧版调用保留，供其它页面使用
-export const searchBusinessSetTopology = (bizSetId, data) =>
-  http.post(`/find/topoinst/bk_biz_id/${bizSetId}`, data)
 
 // ---------- 字段组合模板 ----------
 export const searchFieldTemplates = (data = {}) =>
@@ -692,6 +702,17 @@ export const getLabelHistory = (data) =>
 // ---------- 业务同步 ----------
 export const getServiceTemplateDiff = (data) =>
   http.post('/find/proc/service_template/general_difference', data)
+// 业务同步差异(老版契约;注意独立后端仅注册 general_difference/difference 三件套,
+// 老版 find/proc/service_instance/difference 未注册勿用)
+// 取某进程模板差异涉及的服务实例
+export const getDifferenceServiceInstances = (data) =>
+  http.post('/find/proc/difference/service_instances', data)
+// 取单个服务实例的对比详情
+export const getServiceInstanceDifferenceDetail = (data) =>
+  http.post('/find/proc/service_instance/difference_detail', data)
+// 单个进程模板详情(变更内容回显)
+export const getProcessTemplateById = (id) =>
+  http.post(`/find/proc/proc_template/id/${id}`, {})
 export const syncServiceInstances = (data) =>
   http.put('/update/proc/service_instance/sync', data)
 // ---------- 动态分组(契约对齐老版 dynamicGroup store) ----------

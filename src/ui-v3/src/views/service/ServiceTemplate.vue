@@ -188,23 +188,21 @@
       </template>
     </el-drawer>
 
-    <!-- 集群模板同步对话框 -->
+    <!-- 集群模板同步对话框(老版:选集群 → 差异确认页) -->
     <el-dialog v-model="setSyncDialog" :title="`同步集群模板「${syncTarget?.name}」`" width="540px">
-      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
-        title="将模板同步到绑定服务模板已部署的模块;异步任务,可到「同步历史」查看进度" />
       <el-form label-width="100px">
         <el-form-item label="模板名称">
           <span>{{ syncTarget?.name }}</span>
         </el-form-item>
-        <el-form-item label="目标模块">
-          <el-select v-model="syncModuleIds" multiple style="width: 100%" placeholder="留空则同步所有关联模块">
-            <el-option v-for="m in syncModules" :key="m.bk_module_id" :label="m.bk_module_name" :value="m.bk_module_id" />
+        <el-form-item label="选择集群">
+          <el-select v-model="syncSetIds" multiple style="width: 100%" placeholder="选择要同步的集群实例" v-loading="syncSetsLoading">
+            <el-option v-for="s in syncSets" :key="s.bk_set_id" :label="s.bk_set_name" :value="s.bk_set_id" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="setSyncDialog = false">取消</el-button>
-        <el-button type="primary" :loading="syncing" @click="doSyncSetTpl">开始同步</el-button>
+        <el-button type="primary" :disabled="!syncSetIds.length" @click="goSetSyncDiff">下一步</el-button>
       </template>
     </el-dialog>
 
@@ -283,24 +281,6 @@
       @save="saveProcTpl"
     />
 
-    <!-- 编辑服务模板 -->
-    <el-dialog v-model="editDialog" title="编辑服务模板" width="440px">
-      <el-form label-width="90px">
-        <el-form-item label="模板名称" required>
-          <el-input v-model="editForm.name" />
-        </el-form-item>
-        <el-form-item label="服务分类">
-          <el-select v-model="editForm.service_category_id" style="width: 100%">
-            <el-option v-for="c in leafCategories" :key="c.category.id" :label="c.category.name" :value="c.category.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveEditTpl">保存</el-button>
-      </template>
-    </el-dialog>
-
     <!-- 新建服务模板 -->
     <el-dialog v-model="tplFormVisible" title="新建服务模板" width="440px">
       <el-form label-width="90px">
@@ -329,7 +309,7 @@ import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http,
-  getSetTemplateDetail, searchSetTemplateStatus, syncSetTemplateToInstances, searchSetTemplateSyncHistory,
+  getSetTemplateDetail, searchSetTemplateStatus, searchSetTemplateSyncHistory, searchSetTemplateSets,
   createProcTemplate, updateProcTemplate, deleteProcTemplate,
   listModulesByServiceTemplate, getServiceTemplateSyncStatus,
   searchModelAttributes
@@ -404,31 +384,9 @@ function tplRowToForm(row) {
   return form
 }
 
-// 编辑 / 克隆服务模板
-const editDialog = ref(false)
-const editingTpl = ref(null)
-const editForm = ref({ name: '', service_category_id: null })
-
+// 编辑服务模板:老版为整页编辑表单(service/template/edit/:templateId),跳转到同构页面
 function openEditTpl(row) {
-  editingTpl.value = row
-  editForm.value = { name: row.name, service_category_id: row.service_category_id || null }
-  editDialog.value = true
-}
-
-async function saveEditTpl() {
-  if (!editForm.value.name) { ElMessage.warning('请输入模板名称'); return }
-  saving.value = true
-  try {
-    await http.put('/update/proc/service_template', {
-      bk_biz_id: bizId.value,
-      id: editingTpl.value.id,
-      name: editForm.value.name,
-      service_category_id: editForm.value.service_category_id || 0
-    })
-    ElMessage.success('已更新')
-    editDialog.value = false
-    loadTemplates()
-  } finally { saving.value = false }
+  router.push(`/business/${bizId.value}/service/template/edit/${row.id}`)
 }
 
 async function cloneTpl(row) {
@@ -656,9 +614,9 @@ const setDetailStatus = ref([])
 const setDetailLoading = ref(false)
 const setSyncDialog = ref(false)
 const syncTarget = ref(null)
-const syncModuleIds = ref([])
-const syncModules = ref([])
-const syncing = ref(false)
+const syncSetIds = ref([])
+const syncSets = ref([])
+const syncSetsLoading = ref(false)
 
 async function openSetTplDetail(row) {
   setDetail.value = row
@@ -685,32 +643,28 @@ async function openSetTplDetail(row) {
 
 async function openSetTplSync(row) {
   syncTarget.value = row
-  syncModuleIds.value = []
-  syncModules.value = []
+  syncSetIds.value = []
+  syncSets.value = []
   setSyncDialog.value = true
-  // 拉已部署的模块作为可选目标
+  // 老版契约:拉模板关联的集群实例作为同步对象
+  syncSetsLoading.value = true
   try {
-    const statusResp = await searchSetTemplateStatus(bizId.value, { bk_biz_id: bizId.value, set_template_ids: [row.id] }).catch(() => ({}))
-    const list = statusResp?.info || statusResp?.modules || []
-    syncModules.value = list.map((m) => ({ bk_module_id: m.bk_module_id, bk_module_name: m.bk_module_name || m.bk_module_id }))
-  } catch (e) { /* 容忍 */ }
+    const data = await searchSetTemplateSets(bizId.value, row.id, { bk_biz_id: bizId.value }).catch(() => null)
+    const list = data?.info || data?.list || (Array.isArray(data) ? data : [])
+    syncSets.value = list.map((s) => ({
+      bk_set_id: s.bk_set_id ?? s.set?.bk_set_id ?? s.id,
+      bk_set_name: s.bk_set_name ?? s.set?.bk_set_name ?? s.name
+    })).filter((s) => s.bk_set_id != null)
+  } catch (e) { /* 容忍 */ } finally {
+    syncSetsLoading.value = false
+  }
 }
 
-async function doSyncSetTpl() {
-  if (!syncTarget.value) return
-  syncing.value = true
-  try {
-    await syncSetTemplateToInstances(bizId.value, syncTarget.value.id, {
-      bk_biz_id: bizId.value,
-      bk_module_ids: syncModuleIds.value
-    })
-    ElMessage.success('同步任务已提交,可在「同步历史」查看进度')
-    setSyncDialog.value = false
-  } catch (e) {
-    ElMessage.error('同步失败: ' + (e?.message || '后端异常'))
-  } finally {
-    syncing.value = false
-  }
+// 老版契约:选择集群后进入差异确认页(set/sync/:setTemplateId)
+function goSetSyncDiff() {
+  if (!syncTarget.value || !syncSetIds.value.length) return
+  setSyncDialog.value = false
+  router.push(`/business/${bizId.value}/set/sync/${syncTarget.value.id}?sets=${syncSetIds.value.join(',')}`)
 }
 
 async function loadSetTemplateHistory(row) {

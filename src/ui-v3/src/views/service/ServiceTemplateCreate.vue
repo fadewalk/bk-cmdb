@@ -123,7 +123,7 @@
 
     <!-- 底部操作(旧版 sticky footer) -->
     <div class="create-footer">
-      <el-button type="primary" :loading="saving" @click="submit">提交</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{ editId ? '保存' : '提交' }}</el-button>
       <el-button @click="cancel">取消</el-button>
     </div>
 
@@ -170,6 +170,8 @@ const bizStore = useBizStore()
 
 const bizId = computed(() => Number(route.params.bizId) || bizStore.bizId)
 const cloneId = computed(() => Number(route.query.clone) || null)
+// 编辑模式:老版 /edit/:templateId 深链整页复刻
+const editId = computed(() => Number(route.params.templateId) || Number(route.query.edit) || null)
 
 const collapse = reactive({ basic: false, property: false, process: false })
 const saving = ref(false)
@@ -273,6 +275,37 @@ async function loadClone() {
   })
 }
 
+// 编辑模式:老版 find/proc/service_template/all_info 回填(基础信息/属性设置/服务进程)
+async function loadEdit() {
+  const data = await http.post('/find/proc/service_template/all_info', {
+    bk_biz_id: bizId.value,
+    id: editId.value
+  }).catch(() => null)
+  if (!data) return
+  form.value.name = data.name
+  form.value.secCategory = data.service_category_id
+  const sec = allCategories.value.find((c) => c.id === data.service_category_id)
+  if (sec) form.value.primaryCategory = sec.bk_parent_id
+  // 属性设置:已配置的模块属性回填为行
+  propertyRows.value = (data.attributes || []).map((item) => {
+    const prop = moduleAttrs.value.find((p) => p.id === item.bk_attribute_id) || {}
+    return { id: item.bk_attribute_id, bk_property_name: prop.bk_property_name || item.bk_attribute_id, bk_property_id: prop.bk_property_id || '', value: item.bk_property_value ?? '' }
+  })
+  // 服务进程:展平为表单行并保留进程 id(提交时随 payload 携带)
+  processList.value = (data.processes || []).map((t) => {
+    const flat = { process_id: t.id }
+    for (const [k, v] of Object.entries(t.property || {})) {
+      if (v && typeof v === 'object' && 'value' in v) flat[k] = (v.value && typeof v.value === 'object' && 'value' in v.value) ? v.value.value : v.value
+      else flat[k] = v
+    }
+    const bind = t.property?.bind_info?.value?.[0]
+    if (bind?.port?.value) flat.__bind_port = String(bind.port.value?.value ?? bind.port.value)
+    if (bind?.ip?.value) flat.__bind_ip = String(bind.ip.value?.value ?? bind.ip.value)
+    if (bind?.protocol?.value) flat.__bind_protocol = String(bind.protocol.value?.value ?? bind.protocol.value)
+    return flat
+  })
+}
+
 onMounted(async () => {
   await bizStore.ensureLoaded()
   try {
@@ -283,7 +316,8 @@ onMounted(async () => {
     ])
     moduleAttrs.value = moduleProps || []
     processAttrs.value = processProps || []
-    await loadClone()
+    if (editId.value) await loadEdit()
+    else await loadClone()
   } catch (e) {
     ElMessage.error('数据加载失败: ' + (e?.message || '后端异常'))
   }
@@ -335,26 +369,44 @@ async function submit() {
   }
   if (!processList.value.length) {
     try {
-      await ElMessageBox.confirm('服务模板尚未添加进程，没有进程的服务模板无法创建服务实例', '确认提交', {
-        type: 'warning',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消'
-      })
+      await ElMessageBox.confirm(
+        editId.value ? '服务模板创建没进程提示' : '服务模板尚未添加进程，没有进程的服务模板无法创建服务实例',
+        '确认提交',
+        { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
+      )
     } catch { return }
   }
   saving.value = true
   try {
-    // 旧版 all_info 接口:一次创建模板+进程+属性
-    await http.post('/create/proc/service_template/all_info', {
-      bk_biz_id: bizId.value,
-      name: form.value.name,
-      service_category_id: form.value.secCategory,
-      processes: processList.value.map((p) => ({ property: buildProperty(p) })),
-      attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
-    })
-    successVisible.value = true
+    if (editId.value) {
+      // 老版契约:全量更新 PUT update/proc/service_template/all_info,进程携带已有 id
+      await http.put('/update/proc/service_template/all_info', {
+        id: editId.value,
+        bk_biz_id: bizId.value,
+        name: form.value.name,
+        service_category_id: form.value.secCategory,
+        processes: processList.value.map((p) => {
+          const payload = { property: buildProperty(p) }
+          if (p.process_id) payload.id = p.process_id
+          return payload
+        }),
+        attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
+      })
+      ElMessage.success('保存成功')
+      router.push(`/business/${bizId.value}/service/template/details/${editId.value}`)
+    } else {
+      // 旧版 all_info 接口:一次创建模板+进程+属性
+      await http.post('/create/proc/service_template/all_info', {
+        bk_biz_id: bizId.value,
+        name: form.value.name,
+        service_category_id: form.value.secCategory,
+        processes: processList.value.map((p) => ({ property: buildProperty(p) })),
+        attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
+      })
+      successVisible.value = true
+    }
   } catch (e) {
-    ElMessage.error('创建失败: ' + (e?.message || '后端异常'))
+    ElMessage.error((editId.value ? '保存失败: ' : '创建失败: ') + (e?.message || '后端异常'))
   } finally {
     saving.value = false
   }

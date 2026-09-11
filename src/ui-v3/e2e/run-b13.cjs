@@ -19,13 +19,13 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`) })
 
   try {
-    // === 1. 业务同步页面 ===
+    // === 1. 业务同步页面(B26 起按老版契约重构为模块折叠分组) ===
     await page.goto('http://localhost:8090/#/business/sync', { waitUntil: 'load' })
     await page.waitForTimeout(2500)
     ok('业务同步页加载')
-    const diffCard = await page.locator('.el-card:has-text("服务实例与模板差异")').count()
-    if (diffCard > 0) ok('业务同步差异卡片渲染')
-    else fail('业务同步差异', '卡片缺失')
+    const moduleGroups = await page.locator('.biz-sync-page .module-groups').count()
+    if (moduleGroups > 0) ok('业务同步模块分组容器渲染')
+    else fail('业务同步差异', '模块分组容器缺失')
     const syncAllBtn = await page.locator('button:has-text("同步全部")').count()
     if (syncAllBtn > 0) ok('"同步全部"按钮存在')
     await page.screenshot({ path: path.join(SHOTS, 'B13-business-sync.png'), fullPage: true })

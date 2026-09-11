@@ -55,7 +55,7 @@ const router = createRouter({
         { path: 'business/sync', name: 'BusinessSync', component: () => import('../views/business-sync/BusinessSync.vue'), meta: { title: '业务同步' } },
         { path: 'business/:bizId/service/template/create', name: 'SvcTplCreate', component: () => import('../views/service/ServiceTemplateCreate.vue'), meta: { title: '新建服务模板' } },
         { path: 'business/:bizId/service/template/details/:templateId', name: 'SvcTplDetails', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
-        { path: 'business/:bizId/service/template/edit/:templateId', name: 'SvcTplEdit', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
+        { path: 'business/:bizId/service/template/edit/:templateId', name: 'SvcTplEdit', component: () => import('../views/service/ServiceTemplateCreate.vue'), meta: { title: '编辑服务模板' } },
         { path: 'business/:bizId/service/operational/template/:templateId?', name: 'SvcTplOperational', redirect: (to) => (to.params.templateId
           ? { path: `/business/${to.params.bizId}/service/template/details/${to.params.templateId}` }
           : { path: `/business/${to.params.bizId}/service/template` }), meta: { title: '服务模板' } },
@@ -75,7 +75,7 @@ const router = createRouter({
         { path: 'business/:bizId/set/template/details/:templateId', name: 'SetTplDetailsLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'details', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
         { path: 'business/:bizId/set/template/edit/:templateId', name: 'SetTplEditLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'edit', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
         { path: 'business/:bizId/set/instance/history/:templateId?', name: 'SetTplHistoryLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'history', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/sync/:setTemplateId', name: 'SetSyncLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'sync', templateId: to.params.setTemplateId } }), meta: { title: '集群模板同步' } },
+        { path: 'business/:bizId/set/sync/:setTemplateId', name: 'SetSyncLegacy', component: () => import('../views/service/SetSyncDiff.vue'), meta: { title: '批量同步集群模板' } },
         { path: 'business/:bizId/synchronous/module/:template/:modules', name: 'BizSyncLegacy', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'module' }) }), meta: { title: '业务同步' } },
         { path: 'business/:bizId/sync/service-template/:template/:modules', name: 'TplSyncLegacy', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'service-template' }) }), meta: { title: '业务同步' } },
 
