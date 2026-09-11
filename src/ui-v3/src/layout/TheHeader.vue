@@ -2,7 +2,7 @@
   <header class="the-header">
     <div class="logo">
       <router-link class="logo-link" to="/index">
-        <span class="logo-icon">C</span>
+        <img class="logo-icon" src="/logo.svg" alt="蓝鲸配置平台">
         <span class="logo-text">蓝鲸配置平台</span>
       </router-link>
     </div>
@@ -84,10 +84,8 @@ function onUserCmd(cmd) {
   height: 58px; margin-left: 24px; color: #fff; font-size: 16px; text-decoration: none;
 }
 .logo-icon {
-  width: 28px; height: 28px; border-radius: 6px;
-  background: linear-gradient(135deg, #3A84FF, #2e6ad6);
-  color: #fff; font-weight: 700; font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 32px; object-fit: contain;
+  display: block;
 }
 .header-nav { flex: 1; white-space: nowrap; }
 .header-link {

@@ -119,8 +119,8 @@
             :x1="edge.x1" :y1="edge.y1" :x2="edge.x2" :y2="edge.y2"
             :class="['topo-edge', { hover: edge.hover || hoverEdgeKey === edge.key, mask: isEdgeMask(edge) }]"
             :stroke-width="edge.hover || hoverEdgeKey === edge.key ? 3 : 2"
-            :marker-end="edgeMarker(edge, 'end')"
-            :marker-start="edge.direction === 'bidirectional' ? edgeMarker(edge, 'start') : undefined"
+            :marker-end="['src_to_dest', 'bidirectional'].includes(edge.direction) ? edgeMarker(edge, 'end') : undefined"
+            :marker-start="['dest_to_src', 'bidirectional'].includes(edge.direction) ? edgeMarker(edge, 'start') : undefined"
             @mouseenter="hoverEdgeKey = edge.key"
             @mouseleave="hoverEdgeKey = null"
             @click.stop="onEdgeClick(edge)"
@@ -230,6 +230,8 @@ const localClassifications = ref([])
 const assocList = ref([])
 const relationTypes = ref([])
 const asstNameMap = ref({})
+const asstDirectionMap = ref({})
+const NODE_RADIUS = 27.5
 
 const topoNav = reactive({
   activeGroupId: '',
@@ -271,6 +273,7 @@ async function loadRelationTypes() {
   const data = await searchAssociationTypes({ page: { start: 0, limit: 200, sort: 'bk_asst_id' } })
   const items = data?.info || []
   asstNameMap.value = Object.fromEntries(items.map((item) => [item.bk_asst_id, item.bk_asst_name || item.bk_asst_id]))
+  asstDirectionMap.value = Object.fromEntries(items.map((item) => [item.bk_asst_id, item.direction || 'src_to_dest']))
   relationTypes.value = items.filter((item) => item.bk_asst_id !== 'bk_mainline')
 }
 
@@ -329,12 +332,17 @@ const visibleEdges = computed(() => {
     const s = pos[a.bk_obj_id]
     const t = pos[a.bk_asst_obj_id]
     if (!s || !t) return
+    const dx = t.x - s.x
+    const dy = t.y - s.y
+    const distance = Math.hypot(dx, dy)
+    const offsetX = distance ? (dx / distance) * NODE_RADIUS : 0
+    const offsetY = distance ? (dy / distance) * NODE_RADIUS : 0
     out.push({
       key: `e-${a.id ?? i}`,
-      x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+      x1: s.x + offsetX, y1: s.y + offsetY, x2: t.x - offsetX, y2: t.y - offsetY,
       mx: (s.x + t.x) / 2, my: (s.y + t.y) / 2,
       label: asstNameMap.value[a.bk_asst_id] || a.bk_asst_name || a.bk_asst_id,
-      direction: a.direction || 'src_to_dest',
+      direction: asstDirectionMap.value[a.bk_asst_id] || 'src_to_dest',
       g1: s.bk_classification_id, g2: t.bk_classification_id,
       hover: false
     })
@@ -344,12 +352,17 @@ const visibleEdges = computed(() => {
     const s = pos[MAIN_LINE_ORDER[i]]
     const t = pos[MAIN_LINE_ORDER[i + 1]]
     if (!s || !t) continue
+    const dx = t.x - s.x
+    const dy = t.y - s.y
+    const distance = Math.hypot(dx, dy)
+    const offsetX = distance ? (dx / distance) * NODE_RADIUS : 0
+    const offsetY = distance ? (dy / distance) * NODE_RADIUS : 0
     out.push({
       key: `m-${MAIN_LINE_ORDER[i]}-${MAIN_LINE_ORDER[i + 1]}`,
-      x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+      x1: s.x + offsetX, y1: s.y + offsetY, x2: t.x - offsetX, y2: t.y - offsetY,
       mx: (s.x + t.x) / 2, my: (s.y + t.y) / 2,
       label: '拓扑组成',
-      direction: 'src_to_dest',
+      direction: asstDirectionMap.value.bk_mainline || 'src_to_dest',
       g1: s.bk_classification_id, g2: t.bk_classification_id,
       hover: false
     })

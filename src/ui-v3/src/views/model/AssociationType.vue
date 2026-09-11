@@ -72,6 +72,7 @@
     />
 
     <el-drawer
+      class="association-drawer"
       v-model="drawerVisible"
       :title="drawerMode === 'view' ? '关联类型详情' : (form.id ? '编辑关联类型' : '新建关联类型')"
       size="450px"
@@ -302,9 +303,24 @@ onMounted(load)
 .disabled-action { color: #C4C6CC; font-size: 12px; margin-right: 12px; cursor: not-allowed; }
 .cell-link { color: #3A84FF; cursor: pointer; }
 .pagination { margin-top: 16px; justify-content: flex-end; }
-.relation-form { padding: 10px 4px 80px; }
-.drawer-footer {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 12px 20px; border-top: 1px solid #DCDEE5; background: #fff; text-align: right;
-}
+  :global(.association-drawer.el-drawer .el-drawer__header) {
+    margin-bottom: 0;
+    padding: 18px 20px;
+    border-bottom: 1px solid #DCDEE5;
+    color: #313238;
+  }
+  :global(.association-drawer.el-drawer .el-drawer__body) {
+    padding: 20px 24px 80px;
+  }
+  :global(.association-drawer.el-drawer .el-drawer__footer) {
+    padding: 12px 20px;
+    border-top: 1px solid #DCDEE5;
+    background: #FAFBFD;
+  }
+  :global(.association-drawer.el-drawer .el-drawer__close-btn) { color: #63656E; }
+  .relation-form { padding: 0 4px 20px; }
+  .drawer-footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 12px 20px; border-top: 1px solid #DCDEE5; background: #FAFBFD; text-align: right;
+  }
 </style>
