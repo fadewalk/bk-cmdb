@@ -26,7 +26,7 @@
         <el-radio-button label="model">模型统计</el-radio-button>
       </el-radio-group>
       <div class="spacer" />
-      <el-button :icon="'Plus'" type="primary" size="small" @click="openChartDialog()">新建图表</el-button>
+      <el-button :icon="'Plus'" type="primary" size="small" @click="openChartDialog(null, categoryTab === 'model' ? 'inst' : 'host')">新建图表</el-button>
       <el-button :icon="'Refresh'" size="small" @click="load">刷新</el-button>
     </div>
 
@@ -52,7 +52,7 @@
           </div>
         </template>
         <el-row :gutter="16">
-          <el-col :span="12" v-for="chart in charts" :key="chart.config_id">
+          <el-col :span="Number(chart.width) === 100 ? 24 : 12" v-for="chart in charts" :key="chart.config_id">
             <div class="chart-box">
               <div class="chart-title">
                 <span class="ct-name">{{ chart.name || chart.report_type }}</span>
@@ -71,47 +71,90 @@
       </el-card>
     </template>
 
-    <!-- 图表新建/编辑对话框 -->
-    <el-dialog v-model="chartFormVisible" :title="chartForm.id ? '编辑图表' : '新建图表'" width="540px">
-      <el-form label-width="100px" :model="chartForm">
-        <el-form-item label="名称" required>
-          <el-input v-model="chartForm.name" placeholder="如:主机总数趋势" />
-        </el-form-item>
-        <el-form-item label="报表类型" required>
-          <el-select v-model="chartForm.report_type" style="width: 100%">
-            <el-option label="主机 host" value="host" />
-            <el-option label="模型 model" value="model" />
-            <el-option label="资源 resource" value="resource" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="图表类型">
-          <el-select v-model="chartForm.chart_type" style="width: 100%">
-            <el-option label="饼图 pie" value="pie" />
-            <el-option label="柱状 bar" value="bar" />
-            <el-option label="折线 line" value="line" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="chartForm.description" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
+    <!-- 图表新建/编辑对话框(老版 chart-detail.vue 契约:自定义/内置、统计对象/维度、饼图/柱状、宽度、横轴数量) -->
+    <el-dialog v-model="chartFormVisible" :title="dialogTitle" width="720px">
+      <div class="chart-form">
+        <div class="form-row">
+          <label class="row-label">图表类型</label>
+          <el-radio-group v-model="chartTypeCustom" :disabled="!!chartForm.config_id">
+            <el-radio :value="true">自定义</el-radio>
+            <el-radio :value="false">内置</el-radio>
+          </el-radio-group>
+        </div>
+        <template v-if="!chartTypeCustom">
+          <div class="form-row">
+            <label class="row-label">图表名称</label>
+            <el-select v-model="chartForm.name" style="width: 320px" :disabled="!!chartForm.config_id" :clearable="false">
+              <el-option
+                v-for="opt in builtinList"
+                :key="opt.repType"
+                :label="opt.name"
+                :value="opt.name"
+                :disabled="existedRepTypes.includes(opt.repType)"
+              />
+            </el-select>
+          </div>
+        </template>
+        <template v-else>
+          <div class="form-row">
+            <label class="row-label">图表名称</label>
+            <el-input v-model="chartForm.name" placeholder="请输入图表名称" style="width: 320px" />
+          </div>
+          <div class="form-row" v-if="chartForm.bk_obj_id !== 'host' && hostKind === 'inst'">
+            <label class="row-label">统计对象</label>
+            <el-select v-model="chartForm.bk_obj_id" style="width: 320px" :disabled="!!chartForm.config_id">
+              <el-option v-for="m in staticModels" :key="m.bk_obj_id" :label="m.bk_obj_name" :value="m.bk_obj_id" />
+            </el-select>
+          </div>
+          <div class="form-row">
+            <label class="row-label">统计维度<el-tooltip content="模型中需包含枚举字段才可以作为维度统计" placement="top"><i class="bk-cmdb-icon icon-cc-exclamation-tips dim-tip" /></el-tooltip></label>
+            <el-select v-model="chartForm.field" style="width: 320px" :disabled="!!chartForm.config_id" :clearable="false">
+              <el-option
+                v-for="opt in dimensionList"
+                :key="opt.bk_property_id"
+                :label="opt.bk_property_name"
+                :value="opt.bk_property_id"
+                :disabled="isFieldUsed(opt)"
+              />
+            </el-select>
+          </div>
+          <div class="form-row">
+            <label class="row-label">图表类型</label>
+            <el-radio-group v-model="chartForm.chart_type">
+              <el-radio value="pie">饼图</el-radio>
+              <el-radio value="bar">柱状图</el-radio>
+            </el-radio-group>
+          </div>
+        </template>
+        <div class="form-row">
+          <label class="row-label">图表宽度</label>
+          <el-radio-group v-model="chartForm.width">
+            <el-radio value="50">50%</el-radio>
+            <el-radio value="100">100%</el-radio>
+          </el-radio-group>
+        </div>
+        <div class="form-row" v-if="chartForm.chart_type !== 'pie' && chartForm.report_type !== 'host_change_biz_chart'">
+          <label class="row-label">横轴坐标数量<el-tooltip content="图标可视区横轴坐标数量，建议不超过20个" placement="top"><i class="bk-cmdb-icon icon-cc-exclamation-tips dim-tip" /></el-tooltip></label>
+          <el-input-number v-model="chartForm.x_axis_count" :min="1" :max="25" style="width: 140px" />
+        </div>
+      </div>
       <template #footer>
         <el-button @click="chartFormVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitChart">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="submitChart">{{ chartForm.config_id ? '保存' : '提交' }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts/core'
 import { PieChart, BarChart, LineChart } from 'echarts/charts'
 import { TooltipComponent, GridComponent, TitleComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { getModelStatistics } from '../../api/cmdb'
 import {
+  getModelStatistics, searchModelAttributes, searchModels,
   getOperationCharts, getOperationChartData,
   createOperationChart, updateOperationChart, deleteOperationChart
 } from '../../api/cmdb'
@@ -122,7 +165,6 @@ const categoryTab = ref('')
 const chartList = ref([])
 const chartDataMap = ref({})
 const loading = ref(false)
-const saving = ref(false)
 
 const chartRefs = ref({})
 const chartInstances = ref({})
@@ -143,9 +185,64 @@ const defaultCharts = [
 ]
 const defaultEmpty = ref(false)
 
-// 图表表单
+// 图表表单(老版 chart-detail.vue 契约)
 const chartFormVisible = ref(false)
-const chartForm = ref({ id: null, name: '', report_type: 'host', chart_type: 'bar', description: '' })
+const chartForm = ref({ report_type: 'custom', name: '', config_id: null, bk_obj_id: 'host', chart_type: 'pie', field: '', width: '50', x_axis_count: 10 })
+const chartTypeCustom = ref(true)
+const hostKind = ref('host') // 老版 hostType: host=主机统计 inst=实例统计
+const staticModels = ref([])
+const dimensionList = ref([])
+const saving = ref(false)
+
+// 老版 seList 内置图表清单
+const BUILTIN_HOST = [
+  { name: '按操作系统类型统计', repType: 'host_os_chart' },
+  { name: '按业务统计', repType: 'host_biz_chart' },
+  { name: '按管控区域统计', repType: 'host_cloud_chart' },
+  { name: '主机数量变化趋势', repType: 'host_change_biz_chart' }
+]
+const BUILTIN_INST = [
+  { name: '实例数量统计', repType: 'model_inst_chart' },
+  { name: '实例变更统计', repType: 'model_inst_change_chart' }
+]
+const builtinList = computed(() => (hostKind.value === 'host' ? BUILTIN_HOST : BUILTIN_INST))
+const existedRepTypes = computed(() => flatCharts.value.map((c) => c.report_type))
+const dialogTitle = computed(() => `${chartForm.value.config_id ? '编辑' : '新建'}${hostKind.value === 'host' ? '主机' : '实例'}统计`)
+
+function isFieldUsed(property) {
+  if (hostKind.value === 'host') {
+    return flatCharts.value.some((c) => c.field === property.bk_property_id)
+  }
+  const existed = flatCharts.value.find((c) => c.bk_obj_id === property.bk_obj_id)
+  return existed ? existed.field === property.bk_property_id : false
+}
+
+async function loadDimensions(objId) {
+  if (!objId) { dimensionList.value = []; return }
+  try {
+    const attrs = await searchModelAttributes(objId)
+    dimensionList.value = (attrs || []).filter((item) => {
+      if (hostKind.value === 'host') {
+        return item.bk_property_type === 'enum' && item.bk_property_id !== 'bk_os_type'
+      }
+      return item.bk_property_type === 'enum'
+    })
+  } catch { dimensionList.value = [] }
+}
+
+watch(() => chartForm.value.bk_obj_id, (id) => {
+  if (chartTypeCustom.value) loadDimensions(id)
+})
+
+async function loadStaticModels() {
+  if (staticModels.value.length) return
+  try {
+    const models = await searchModels({})
+    const list = Array.isArray(models) ? models : models?.info || []
+    // 老版契约: 排除隐藏模型与 host/module/biz/set
+    staticModels.value = list.filter((m) => !m.bk_ishidden && !['host', 'module', 'biz', 'set'].includes(m.bk_obj_id))
+  } catch { staticModels.value = [] }
+}
 
 const categoryNames = { host: '主机统计', model: '模型统计', resource: '资源统计' }
 const categoryName = (c) => categoryNames[c] || c
@@ -334,36 +431,59 @@ async function renderDefaultCharts() {
   } catch (e) { defaultEmpty.value = true }
 }
 
-function openChartDialog(row) {
+async function openChartDialog(row, kind = 'host') {
+  hostKind.value = kind
   if (row) {
     chartForm.value = {
-      id: row.config_id || row.id,
+      config_id: row.config_id,
+      report_type: row.report_type,
       name: row.name || '',
-      report_type: row.report_type || 'host',
-      chart_type: row.chart_type || 'bar',
-      description: row.description || ''
+      bk_obj_id: row.bk_obj_id || 'host',
+      chart_type: row.chart_type || 'pie',
+      field: row.field || '',
+      width: String(row.width || '50'),
+      x_axis_count: Number(row.x_axis_count) || 10
     }
+    chartTypeCustom.value = row.report_type === 'custom'
+    if (chartTypeCustom.value) loadDimensions(chartForm.value.bk_obj_id)
   } else {
-    chartForm.value = { id: null, name: '', report_type: 'host', chart_type: 'bar', description: '' }
+    chartForm.value = { report_type: 'custom', name: '', config_id: null, bk_obj_id: kind === 'host' ? 'host' : '', chart_type: 'pie', field: '', width: '50', x_axis_count: 10 }
+    chartTypeCustom.value = true
+    dimensionList.value = []
+    if (kind === 'inst') {
+      await loadStaticModels()
+      chartForm.value.bk_obj_id = staticModels.value[0]?.bk_obj_id || ''
+      if (chartForm.value.bk_obj_id) loadDimensions(chartForm.value.bk_obj_id)
+    }
   }
   chartFormVisible.value = true
 }
 
 async function submitChart() {
-  if (!chartForm.value.name) { ElMessage.warning('请输入图表名称'); return }
+  if (chartTypeCustom.value && !chartForm.value.name) { ElMessage.warning('请输入图表名称'); return }
+  if (!chartTypeCustom.value && !chartForm.value.name) { ElMessage.warning('请选择内置图表'); return }
   saving.value = true
   try {
-    const payload = {
-      name: chartForm.value.name,
-      report_type: chartForm.value.report_type,
-      chart_type: chartForm.value.chart_type,
-      description: chartForm.value.description
+    // 老版契约: 内置图表 report_type=repType 且剔除自定义字段;自定义 report_type=custom
+    const data = { ...chartForm.value }
+    if (chartTypeCustom.value) {
+      data.report_type = 'custom'
+      if (hostKind.value === 'host') data.bk_obj_id = 'host'
+    } else {
+      const hit = builtinList.value.find((opt) => opt.name === data.name)
+      data.report_type = hit?.repType || data.report_type
+      delete data.bk_obj_id
+      delete data.config_id
+      delete data.field
+      delete data.name
+      delete data.chart_type
     }
-    if (chartForm.value.id) {
-      await updateOperationChart({ id: chartForm.value.id, ...payload })
+    data.x_axis_count = parseInt(data.x_axis_count, 10) || 10
+    if (chartForm.value.config_id) {
+      await updateOperationChart(data)
       ElMessage.success('已更新')
     } else {
-      await createOperationChart(payload)
+      await createOperationChart(data)
       ElMessage.success('已创建')
     }
     chartFormVisible.value = false
@@ -435,4 +555,8 @@ onBeforeUnmount(() => {
 .ct-ops { display: flex; gap: 4px; }
 .chart-canvas { width: 100%; height: 260px; }
 .chart-meta { margin-top: 8px; display: flex; gap: 6px; }
+.chart-form { padding: 0 8px; }
+.chart-form .form-row { display: flex; align-items: center; margin-bottom: 20px; }
+.chart-form .row-label { flex: 0 0 110px; text-align: right; padding-right: 16px; font-size: 14px; color: #63656E; }
+.chart-form .dim-tip { color: #C4C6CC; margin-left: 2px; cursor: help; }
 </style>

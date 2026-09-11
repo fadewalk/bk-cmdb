@@ -16,7 +16,7 @@
         <div class="model-operation-options">
           <button class="bk-button bk-primary" :disabled="modelType === 'disabled'" @click="showModelDialog('')">新建模型</button>
           <button class="bk-button" :disabled="modelType === 'disabled'" @click="showGroupDialog(false)">新建分组</button>
-          <button class="bk-button" :disabled="modelType === 'disabled'" @click="importDialog = true">导入</button>
+          <button class="bk-button" :disabled="modelType === 'disabled'" @click="openImportWizard">导入</button>
           <button class="bk-button" :disabled="modelType === 'disabled'" @click="startExportSelect">导出</button>
         </div>
 
@@ -112,7 +112,7 @@
                   :model-value="!!modelSelectionState[model.bk_obj_id]"
                   :disabled="!!model.ispre"
                   @click.stop
-                  @change="onModelCheck(cls, $event)"
+                  @change="onModelCheck(cls, model, $event)"
                 />
               </div>
               <div
@@ -138,7 +138,7 @@
       <el-checkbox v-model="isAllSelected" class="full-selection" @change="toggleAllSelection">全选</el-checkbox>
       <span class="selected-count">已选：<em>{{ exportModelsLen }}</em></span>
       <button class="bk-button cancel-button" @click="cancelExportSelect">取消</button>
-      <button class="bk-button bk-primary next-step-button" :disabled="exportModelsLen === 0" @click="exportDialog = true">下一步</button>
+      <button class="bk-button bk-primary next-step-button" :disabled="exportModelsLen === 0" @click="openExportWizard">下一步</button>
     </div>
 
     <!-- 新建/编辑模型弹窗(旧版 _create-model 复刻) -->
@@ -203,40 +203,123 @@
       </transition>
     </teleport>
 
-    <!-- 导入模型 -->
-    <el-dialog v-model="importDialog" title="导入模型" width="560px" :close-on-click-modal="false" class="legacy-el-dialog">
-      <el-alert v-if="importResult" :type="importResult.success ? 'success' : 'error'" :closable="false" style="margin-bottom: 12px" :title="importResult.message" />
-      <el-upload drag action="" accept=".zip" :auto-upload="false" :limit="1" :on-change="onImportFileChange" :file-list="importFileList">
-        <el-icon style="font-size: 40px; color: #C4C6CC"><UploadFilled /></el-icon>
-        <div class="el-upload__text">将模型包文件拖到此处,或<em>点击上传</em></div>
-        <template #tip><div class="el-upload__tip">支持 .zip 格式的模型导出包</div></template>
-      </el-upload>
-      <template #footer>
-        <button class="bk-button" @click="importDialog = false">取消</button>
-        <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="!importFile" @click="doImport">开始导入</button>
-      </template>
+    <!-- 导入模型(老版 4 步:用户须知 → 包上传 → 导入编辑器 → 结果) -->
+    <el-dialog v-model="importDialog" title="导入模型" width="680px" :close-on-click-modal="false" class="legacy-el-dialog">
+      <div class="import-steps">
+        <span v-for="(s, i) in ['用户须知', '导入文件', '内容确认', '执行结果']" :key="s"
+          :class="['step-item', { 'is-current': importStep === i + 1, 'is-done': importStep > i + 1 }]">
+          <i class="step-no">{{ importStep > i + 1 ? '✓' : i + 1 }}</i>{{ s }}
+        </span>
+      </div>
+
+      <div v-show="importStep === 1" class="import-notice">
+        <p class="notice-title">导入模型前请仔细阅读以下内容:</p>
+        <ul>
+          <li>模型文件支持 .zip 格式的模型导出包,可包含多个模型及其关联关系;</li>
+          <li>如导出时设置了文件密码,导入时需要填写对应密码;</li>
+          <li>若导入的模型已存在,将按照文件中的定义更新已有模型字段;</li>
+          <li>内置模型不支持导入覆盖。</li>
+        </ul>
+        <div class="step-actions">
+          <button class="bk-button bk-primary" @click="importStep = 2">我已了解,下一步</button>
+        </div>
+      </div>
+
+      <div v-show="importStep === 2">
+        <el-upload drag action="" accept=".zip" :auto-upload="false" :limit="1" :on-change="onImportFileChange" :file-list="importFileList">
+          <el-icon style="font-size: 40px; color: #C4C6CC"><UploadFilled /></el-icon>
+          <div class="el-upload__text">将模型包文件拖到此处,或<em>点击上传</em></div>
+          <template #tip><div class="el-upload__tip">支持 .zip 格式的模型导出包</div></template>
+        </el-upload>
+        <div class="legacy-form-row" style="margin-top: 12px">
+          <span class="label-title">文件密码</span>
+          <el-input v-model="importPassword" class="legacy-input row-input" placeholder="导出时设置了密码则必填" />
+        </div>
+        <div class="step-actions">
+          <button class="bk-button" @click="importDialog = false">取消</button>
+          <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="!importFile" :loading="importing" @click="analyzeImport">下一步</button>
+        </div>
+      </div>
+
+      <div v-show="importStep === 3">
+        <p class="section-hint">请确认需要导入的模型(共解析出 {{ parsedObjects.length }} 个模型,{{ parsedAssts.length }} 种关联关系):</p>
+        <el-table :data="parsedObjects" size="small" border max-height="300">
+          <el-table-column width="60">
+            <template #default="{ row }">
+              <el-checkbox v-model="row.__selected" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="bk_obj_id" label="模型标识" min-width="140" />
+          <el-table-column prop="bk_obj_name" label="模型名称" min-width="140" />
+        </el-table>
+        <p v-if="parsedAssts.length" class="section-hint" style="margin-top: 10px">关联关系:{{ parsedAssts.map((a) => a.bk_asst_id || a.name).join('、') }}</p>
+        <div class="step-actions">
+          <button class="bk-button" @click="importStep = 2">上一步</button>
+          <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="importing || !parsedObjects.some((o) => o.__selected)" @click="doImport">确认导入</button>
+        </div>
+      </div>
+
+      <div v-show="importStep === 4" class="import-notice">
+        <p :style="{ color: importResult?.success ? '#2DCB56' : '#EA3636', fontWeight: 'bold' }">
+          {{ importResult?.success ? '导入成功' : '导入失败' }}
+        </p>
+        <p class="section-hint">{{ importResult?.message }}</p>
+        <div class="step-actions">
+          <button class="bk-button bk-primary" @click="importDialog = false">完成</button>
+        </div>
+      </div>
     </el-dialog>
 
-    <!-- 导出模型 -->
-    <el-dialog v-model="exportDialog" title="导出模型" width="480px" :close-on-click-modal="false" class="legacy-el-dialog">
-      <div class="export-form">
-      <div class="legacy-form-row">
-        <span class="label-title">导出文件名</span>
-        <el-input v-model="exportForm.fileName" class="legacy-input row-input" placeholder="models" />
+    <!-- 导出模型(老版 4 步:已选模型 → 关联关系 → 导出设置 → 下载) -->
+    <el-dialog v-model="exportDialog" title="导出模型" width="680px" :close-on-click-modal="false" class="legacy-el-dialog">
+      <div class="import-steps">
+        <span v-for="(s, i) in ['选择关联关系', '导出设置', '导出结果']" :key="s"
+          :class="['step-item', { 'is-current': exportStep === i + 1, 'is-done': exportStep > i + 1 }]">
+          <i class="step-no">{{ exportStep > i + 1 ? '✓' : i + 1 }}</i>{{ s }}
+        </span>
       </div>
-      <div class="legacy-form-row">
-        <span class="label-title">文件密码</span>
-        <el-input v-model="exportForm.password" class="legacy-input row-input" placeholder="可选,用于加密导出包" />
+
+      <div v-show="exportStep === 1">
+        <p class="section-hint">已选 {{ exportModelsLen }} 个模型。勾选需要包含在导出包中的模型关联关系(取消勾选的关系不会被导出):</p>
+        <el-checkbox-group v-model="exportAsstIds" class="asst-check-group">
+          <el-checkbox v-for="a in associationTypes" :key="a.bk_asst_id" :value="a.bk_asst_id">
+            {{ a.bk_asst_name || a.bk_asst_id }}({{ a.bk_asst_id }})
+          </el-checkbox>
+        </el-checkbox-group>
+        <div class="step-actions">
+          <button class="bk-button" @click="exportDialog = false; cancelExportSelect()">取消导出</button>
+          <button class="bk-button bk-primary" style="margin-left: 10px" @click="exportStep = 2">下一步</button>
+        </div>
       </div>
-      <div class="legacy-form-row">
-        <span class="label-title">密码有效期</span>
-        <el-input v-model.number="exportForm.expiration" class="legacy-input row-input" placeholder="天,0 为无限期" />
+
+      <div v-show="exportStep === 2">
+        <div class="export-form">
+          <div class="legacy-form-row">
+            <span class="label-title">导出文件名</span>
+            <el-input v-model="exportForm.fileName" class="legacy-input row-input" placeholder="仅支持英文、数字、下划线、中划线" />
+          </div>
+          <div class="legacy-form-row">
+            <span class="label-title">文件密码</span>
+            <el-input v-model="exportForm.password" class="legacy-input row-input" placeholder="可选,用于加密导出包" />
+          </div>
+          <div class="legacy-form-row">
+            <span class="label-title">密码有效期</span>
+            <el-input v-model.number="exportForm.expiration" class="legacy-input row-input" placeholder="天,0 为无限期" />
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="bk-button" @click="exportStep = 1">上一步</button>
+          <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="exporting" @click="doExport">导出</button>
+        </div>
       </div>
+
+      <div v-show="exportStep === 3" class="import-notice">
+        <p style="color: #2DCB56; font-weight: bold">导出成功</p>
+        <p class="section-hint">文件已下载到本地。如设置了密码,导入时需提供该密码。</p>
+        <div class="step-actions">
+          <button class="bk-button bk-primary" @click="exportDialog = false; cancelExportSelect()">完成</button>
+        </div>
       </div>
-      <template #footer>
-        <button class="bk-button" @click="exportDialog = false">取消</button>
-        <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="exporting" @click="doExport">导出</button>
-      </template>
     </el-dialog>
   </div>
 </template>
@@ -251,7 +334,7 @@ import { MoreFilled, UploadFilled } from '@element-plus/icons-vue'
 import {
   searchClassificationWithObjects, searchClassifications, createClassification,
   updateClassification, deleteClassification,
-  createModel, updateModel, countInstances
+  createModel, updateModel, countInstances, searchAssociationTypes
 } from '../../api/cmdb'
 import CreateModelDialog from '../../components/model/CreateModelDialog.vue'
 
@@ -278,16 +361,25 @@ const isModelSelectable = ref(false)
 const clsSelectionState = ref({})
 const modelSelectionState = ref({})
 const isAllSelected = ref(false)
-const exportDialog = ref(false)
-const exporting = ref(false)
-const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
 
-// 导入
+// ---------- 导入(老版 4 步向导) ----------
 const importDialog = ref(false)
 const importFile = ref(null)
 const importFileList = ref([])
 const importing = ref(false)
 const importResult = ref(null)
+const importStep = ref(1)
+const importPassword = ref('')
+const parsedObjects = ref([])
+const parsedAssts = ref([])
+
+// ---------- 导出(老版向导:选择模式 → 关联关系 → 设置 → 下载) ----------
+const exportDialog = ref(false)
+const exporting = ref(false)
+const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
+const exportStep = ref(1)
+const exportAsstIds = ref([])
+const associationTypes = ref([])
 
 // 弹窗
 const modelDialogShow = ref(false)
@@ -399,19 +491,7 @@ function goInstance(model) {
   else router.push({ path: `/resource/instance/${model.bk_obj_id}` })
 }
 
-// ---------- 导出选择(旧版导出第一步) ----------
-function startExportSelect() {
-  isModelSelectable.value = true
-  clsSelectionState.value = {}
-  modelSelectionState.value = {}
-  isAllSelected.value = false
-}
-function cancelExportSelect() {
-  isModelSelectable.value = false
-  clsSelectionState.value = {}
-  modelSelectionState.value = {}
-  isAllSelected.value = false
-}
+// ---------- 导出选择(旧版导出第一步,提交动作见下方 openExportWizard) ----------
 function onGroupSelectAll(cls, checked) {
   clsSelectionState.value[cls.bk_classification_id] = checked
   modelsOf(cls).forEach((m) => {
@@ -419,9 +499,10 @@ function onGroupSelectAll(cls, checked) {
   })
   syncAllSelection()
 }
-function onModelCheck(cls) {
+function onModelCheck(cls, model, checked) {
+  modelSelectionState.value[model.bk_obj_id] = checked && !model.ispre
   const models = modelsOf(cls)
-  clsSelectionState.value[cls.bk_classification_id] = models.every((m) => modelSelectionState.value[m.bk_obj_id])
+  clsSelectionState.value[cls.bk_classification_id] = models.length > 0 && models.every((m) => modelSelectionState.value[m.bk_obj_id])
   syncAllSelection()
 }
 function syncGroupSelection() {
@@ -446,48 +527,133 @@ function toggleAllSelection(checked) {
 const exportModelsLen = computed(() =>
   Object.values(modelSelectionState.value).filter(Boolean).length)
 
-// ---------- 导入/导出 ----------
+// ---------- 导入/导出(老版向导契约) ----------
 function onImportFileChange(file, fileList) {
   importFile.value = file.raw
   importFileList.value = fileList
   importResult.value = null
 }
-async function doImport() {
+
+function openImportWizard() {
+  importStep.value = 1
+  importFile.value = null
+  importFileList.value = []
+  importPassword.value = ''
+  parsedObjects.value = []
+  parsedAssts.value = []
+  importResult.value = null
+  importDialog.value = true
+}
+
+function startExportSelect() {
+  isModelSelectable.value = true
+  clsSelectionState.value = {}
+  modelSelectionState.value = {}
+  isAllSelected.value = false
+}
+function cancelExportSelect() {
+  isModelSelectable.value = false
+  clsSelectionState.value = {}
+  modelSelectionState.value = {}
+  isAllSelected.value = false
+}
+
+// 下一步进入关联关系选择(老版导出编辑器步骤)
+async function openExportWizard() {
+  exportStep.value = 1
+  exportAsstIds.value = []
+  exportForm.value = { fileName: 'models', password: '', expiration: 0 }
+  try {
+    const res = await searchAssociationTypes({})
+    associationTypes.value = res?.info || []
+    // 老版默认全选(不排除任何关联)
+    exportAsstIds.value = associationTypes.value.map((a) => a.bk_asst_id)
+  } catch { associationTypes.value = [] }
+  exportDialog.value = true
+}
+
+// 解析模型包(老版 /object/importmany/analysis,multipart file + params{password})
+async function analyzeImport() {
   if (!importFile.value) return
   importing.value = true
-  importResult.value = null
   try {
-    const analysisForm = new FormData()
-    analysisForm.append('file', importFile.value)
-    const analysisResp = await fetch('/api/v3/object/importmany/analysis', {
+    const form = new FormData()
+    form.append('file', importFile.value)
+    if (importPassword.value) form.append('params', JSON.stringify({ password: importPassword.value }))
+    const resp = await fetch('/object/importmany/analysis', {
       method: 'POST',
       headers: { 'X-Bkcmdb-User': 'admin', 'X-Bkcmdb-Supplier-Account': '0' },
-      body: analysisForm
+      body: form
     })
-    const analysis = (await analysisResp.json())?.data || {}
-    const objects = analysis?.import_object || analysis?.object || {}
-    const assts = analysis?.import_asst || analysis?.asst || {}
-    if (!Object.keys(objects).length) {
-      importResult.value = { success: false, message: '解析结果为空,请确认文件格式' }
+    const res = await resp.json()
+    if (res.result === false && res.bk_error_code !== 0) {
+      throw new Error(res.bk_error_msg || '解析失败')
+    }
+    const data = res?.data || {}
+    parsedObjects.value = (data.import_object || []).map((o) => ({ ...o, __selected: true }))
+    parsedAssts.value = data.import_asst || []
+    if (!parsedObjects.value.length) {
+      ElMessage.warning('解析结果为空,请确认文件格式')
       return
     }
-    await fetch('/api/v3/object/importmany', {
+    importStep.value = 3
+  } catch (e) {
+    ElMessage.error('解析失败: ' + (e?.message || '后端异常'))
+  } finally { importing.value = false }
+}
+
+// 提交导入(老版 /object/importmany {import_object, import_asst})
+async function doImport() {
+  const selected = parsedObjects.value.filter((o) => o.__selected)
+  if (!selected.length) return
+  importing.value = true
+  try {
+    const resp = await fetch('/object/importmany', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Bkcmdb-User': 'admin', 'X-Bkcmdb-Supplier-Account': '0' },
-      body: JSON.stringify({ import_object: objects, import_asst: assts })
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Bkcmdb-User': 'admin',
+        'X-Bkcmdb-Supplier-Account': '0'
+      },
+      body: JSON.stringify({ import_object: selected, import_asst: parsedAssts.value })
     })
-    importResult.value = { success: true, message: `导入成功,共导入 ${Object.keys(objects).length} 个模型` }
+    const res = await resp.json().catch(() => ({}))
+    if (res.result === false) throw new Error(res.bk_error_msg || '导入失败')
+    importResult.value = { success: true, message: `已提交导入 ${selected.length} 个模型` }
     ElMessage.success('导入成功')
     await load()
   } catch (e) {
-    importResult.value = { success: false, message: '导入失败: ' + (e?.message || '后端异常') }
-  } finally { importing.value = false }
+    importResult.value = { success: false, message: e?.message || '后端异常' }
+  } finally {
+    importing.value = false
+    importStep.value = 4
+  }
 }
+
 async function doExport() {
+  // 老版契约:object_id 传模型数字 id(非 bk_obj_id);file_name 仅限英文/数字/下划线/中划线
+  const selectedIds = Object.entries(modelSelectionState.value)
+    .filter(([, v]) => v)
+    .map(([objId]) => {
+      for (const cls of rawGroups.value) {
+        const hit = (cls.bk_objects || []).find((m) => m.bk_obj_id === objId)
+        if (hit) return hit.id
+      }
+      return null
+    })
+    .filter(Boolean)
+  if (!selectedIds.length) { ElMessage.warning('未选中任何模型'); return }
+  const fileName = (exportForm.value.fileName || 'models').trim()
+  if (!/^[a-zA-Z0-9_-]+$/.test(fileName)) {
+    ElMessage.error('文件名仅支持英文、数字、下划线、中划线')
+    return
+  }
   exporting.value = true
   try {
-    const selectedIds = Object.entries(modelSelectionState.value).filter(([, v]) => v).map(([objId]) => objId)
-    const resp = await fetch('/api/v3/object/exportmany', {
+    const excluded = associationTypes.value
+      .map((a) => a.bk_asst_id)
+      .filter((id) => !exportAsstIds.value.includes(id))
+    const resp = await fetch('/object/exportmany', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -496,22 +662,20 @@ async function doExport() {
       },
       body: JSON.stringify({
         object_id: selectedIds,
-        excluded_asst_id: [],
+        excluded_asst_id: excluded,
         password: exportForm.value.password || '',
         expiration: exportForm.value.expiration || 0,
-        file_name: exportForm.value.fileName || 'models'
+        file_name: fileName
       })
     })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const blob = await resp.blob()
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `${exportForm.value.fileName || 'models'}.zip`
+    a.download = `${fileName}.zip`
     a.click()
     URL.revokeObjectURL(a.href)
-    ElMessage.success('导出成功')
-    exportDialog.value = false
-    cancelExportSelect()
+    exportStep.value = 3
   } catch (e) {
     ElMessage.error('导出失败: ' + (e?.message || '后端异常'))
   } finally { exporting.value = false }
@@ -1077,4 +1241,41 @@ onMounted(load)
 .success-content .btn-box .bk-button {
   margin: 0 5px;
 }
+
+/* 导入/导出向导(老版 step-pane 复刻) */
+.import-steps {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  padding: 4px 0 20px;
+  border-bottom: 1px solid #DCDEE5;
+  margin-bottom: 20px;
+}
+.step-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #979BA5;
+}
+.step-item.is-current { color: #3A84FF; font-weight: bold; }
+.step-item.is-done { color: #63656E; }
+.step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 12px;
+  font-style: normal;
+}
+.step-item.is-current .step-no { background: #3A84FF; border-color: #3A84FF; color: #fff; }
+.step-actions { margin-top: 20px; text-align: right; }
+.import-notice ul { margin: 8px 0 0; padding-left: 20px; }
+.import-notice li { line-height: 26px; color: #63656E; font-size: 13px; }
+.notice-title { font-weight: bold; color: #313238; }
+.section-hint { color: #63656E; font-size: 13px; margin: 0 0 10px; }
+.asst-check-group { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 4px 0; }
 </style>

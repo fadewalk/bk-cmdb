@@ -57,9 +57,10 @@ export const deleteServiceInstances = (bizId, ids) =>
   http.delete('/deletemany/proc/service_instance', {
     data: { bk_biz_id: bizId, service_instance_ids: ids }
   })
-export const searchProcessInstances = (serviceInstanceId, page) =>
+// 进程实例查询(老版契约需 bk_biz_id,后端强校验)
+export const searchProcessInstances = (bizId, serviceInstanceId, page) =>
   http.post('/findmany/proc/process_instance', {
-    service_instance_id: serviceInstanceId, page
+    bk_biz_id: bizId, service_instance_id: serviceInstanceId, page
   })
 
 // 模块下未绑定服务实例的主机

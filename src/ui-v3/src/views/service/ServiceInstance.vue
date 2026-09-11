@@ -238,7 +238,7 @@ const moduleOptions = ref([])
 async function loadProcesses(id) {
   procLoading.value = true
   try {
-    const data = await searchProcessInstances(id, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(bizId.value, id, { start: 0, limit: 100 })
     const list = data?.info || data || []
     processes.value = list
     if (id === procInstId.value) {
@@ -330,7 +330,7 @@ async function saveProcess() {
       ElMessage.success('进程已创建')
     }
     procFormVisible.value = false
-    const data = await searchProcessInstances(procInstId.value, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
     processes.value = data?.info || data || []
   } finally {
     procSaving.value = false
@@ -345,7 +345,7 @@ async function removeProcess(row) {
     process_instance_ids: [pid]
   })
   ElMessage.success('已删除')
-  const data = await searchProcessInstances(procInstId.value, { start: 0, limit: 100 })
+  const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
   processes.value = data?.info || data || []
 }
 
@@ -366,7 +366,7 @@ async function openClone(row) {
   cloneDialog.value = true
   await loadModuleOptions()
   // 拉取源实例的进程配置
-  const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
+  const data = await searchProcessInstances(bizId.value, row.id, { start: 0, limit: 100 })
   cloneSourceProcesses.value = ((data?.info || data || [])).map((p) => p.property || {})
   if (row.bk_module_id) loadCloneHosts()
 }
@@ -545,7 +545,7 @@ async function toggleAllExpanded() {
   procLoading.value = true
   try {
     const entries = await Promise.all(rows.value.map(async (row) => {
-      const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
+      const data = await searchProcessInstances(bizId.value, row.id, { start: 0, limit: 100 })
       return [row.id, data?.info || data || []]
     }))
     const processMap = new Map(entries)

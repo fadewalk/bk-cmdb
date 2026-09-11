@@ -606,7 +606,7 @@ async function openSvcProcesses(row) {
   procDrawer.value = true
   procLoading.value = true
   try {
-    const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(bizId, row.id, { start: 0, limit: 100 })
     processes.value = data?.info || []
   } finally {
     procLoading.value = false
@@ -634,7 +634,7 @@ async function saveProcess() {
     await createProcessInstance(procInstId.value, info)
     ElMessage.success('进程已创建')
     procFormVisible.value = false
-    const data = await searchProcessInstances(procInstId.value, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(bizId, procInstId.value, { start: 0, limit: 100 })
     processes.value = data?.info || data || []
   } catch (e) {
     ElMessage.error('创建进程失败: ' + (e?.message || '后端异常'))
@@ -649,7 +649,7 @@ async function removeProcess(row) {
   await ElMessageBox.confirm('确定删除该进程?', '删除确认', { type: 'warning' })
   await http.delete('/delete/proc/process_instance', { bk_biz_id: bizId, process_instance_ids: [pid] })
   ElMessage.success('已删除')
-  const data = await searchProcessInstances(procInstId.value, { start: 0, limit: 100 })
+  const data = await searchProcessInstances(bizId, procInstId.value, { start: 0, limit: 100 })
   processes.value = data?.info || data || []
 }
 

@@ -118,13 +118,26 @@ function note(label) { console.log(`- ${label}`) }
       await page.goBack()
       await page.waitForTimeout(800)
     } else fail('集群模板新建', '缺少「新建」按钮')
-    // 0 行时仅记录;有数据时校验详情/同步/历史操作
-    const setRows = await page.locator('.el-table .el-table__row').count()
+    // 0 行时仅记录;有数据时校验行内 详情/删除(老版行契约),再从详情抽屉校验 同步/同步历史 入口
+    const setRows = await page.locator('.settpl-pane .el-table .el-table__row, .el-table .el-table__row').count()
     if (setRows > 0) {
       const ops = (await page.locator('.el-table .cell').allTextContents()).join(',')
-      for (const label of ['详情', '同步', '历史']) {
+      for (const label of ['详情', '删除']) {
         if (ops.includes(label)) ok(`集群模板"${label}"入口`)
         else fail('集群模板操作', `缺少"${label}"`)
+      }
+      // 详情抽屉内含 同步/同步历史(老版 details.vue 契约:同步入口在详情,不在行内)
+      const firstDetail = page.locator('.el-table .el-table__row button:has-text("详情")').first()
+      if (await firstDetail.count()) {
+        await firstDetail.click()
+        await page.waitForTimeout(1200)
+        const drawerText = await page.locator('.el-drawer:visible').innerText().catch(() => '')
+        for (const label of ['同步', '同步历史']) {
+          if (drawerText.includes(label)) ok(`集群模板详情"${label}"入口`)
+          else fail('集群模板详情操作', `缺少"${label}"`)
+        }
+        await page.click('.el-drawer:visible .el-drawer__close-btn')
+        await page.waitForTimeout(600)
       }
     } else {
       note('集群模板 0 行(独立模式无数据),操作入口由代码静态保证')

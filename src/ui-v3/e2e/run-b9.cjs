@@ -29,8 +29,9 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
 
     // 新建图表
     await page.locator('button:has-text("新建图表")').click()
-    await page.waitForTimeout(500)
-    const chartDlg = await page.locator('.el-dialog:has-text("新建图表")').isVisible().catch(() => false)
+    await page.waitForTimeout(800)
+    // B27 起弹窗对齐老版 chart-detail 契约,标题为 新建主机统计
+    const chartDlg = await page.locator('.el-dialog:has-text("新建主机统计")').isVisible().catch(() => false)
     if (chartDlg) ok('运营统计 新建图表对话框打开')
     else fail('运营统计新建', '对话框未出现')
     // 填写名称
