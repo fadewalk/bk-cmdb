@@ -13,6 +13,8 @@
         clearable
         style="width: 240px"
         :prefix-icon="'Search'"
+        @keyup.enter="reloadFromFirst"
+        @clear="reloadFromFirst"
       />
       <el-button v-if="scope === 'normal'" type="primary" :icon="'Plus'" @click="openForm()">新建</el-button>
       <el-button v-if="scope === 'normal'" :disabled="!selectedRows.length" @click="openBatchEdit">批量编辑</el-button>
@@ -177,13 +179,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchBusiness, createBusiness, updateBusiness,
   archiveBusiness, recoverBusiness, deleteArchivedBiz, http
 } from '../api/cmdb'
 
+const route = useRoute()
 const router = useRouter()
 const keyword = ref('')
 const page = ref(1)
@@ -212,19 +215,26 @@ const timeZones = [
   'Australia/Sydney', 'UTC'
 ]
 
-const filtered = computed(() =>
-  keyword.value
-    ? rows.value.filter((r) => (r.bk_biz_name || '').includes(keyword.value))
-    : rows.value
-)
+const filtered = computed(() => rows.value)
+
+function reloadFromFirst() {
+  page.value = 1
+  load()
+}
 
 async function load() {
   loading.value = true
   try {
-    const condition = scope.value === 'archived' ? { bk_data_status: 'disabled' } : {}
-    const data = await searchBusiness({ start: (page.value - 1) * pageSize.value, limit: pageSize.value }, condition)
+    const condition = {
+      ...(scope.value === 'archived' ? { bk_data_status: 'disabled' } : { bk_data_status: { $ne: 'disabled' } }),
+      ...(keyword.value.trim() ? { bk_biz_name: keyword.value.trim() } : {})
+    }
+    const data = await searchBusiness({ start: (page.value - 1) * pageSize.value, limit: pageSize.value }, condition, keyword.value.trim() ? true : undefined)
     rows.value = data?.info || []
     total.value = data?.count || 0
+  } catch {
+    rows.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -369,7 +379,13 @@ async function removeForever(row) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  if (String(route.query.create || '') === '1') {
+    openForm()
+    router.replace({ query: { ...route.query, create: undefined } })
+  }
+})
 </script>
 
 <style scoped>

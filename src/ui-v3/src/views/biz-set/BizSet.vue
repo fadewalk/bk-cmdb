@@ -1,13 +1,5 @@
 <template>
   <div class="res-page">
-    <div class="page-head">
-      <span class="back-arrow" @click="$router.push('/resource/index')">←</span>
-      <span class="page-name">业务集</span>
-      <el-tooltip content="在新窗口打开业务集帮助文档" placement="bottom">
-        <i class="bk-cmdb-icon icon-cc-external-link head-link" />
-      </el-tooltip>
-    </div>
-
     <div class="page-body">
       <div class="table-toolbar">
         <el-button type="primary" @click="openForm()">新建</el-button>
@@ -112,10 +104,11 @@
 <script setup>
 // 业务集列表:对齐老版 resource/business-set(新建/编辑/删除/预览)
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { http, searchBusiness, searchBizSetAttributes } from '../../api/cmdb'
 
+const route = useRoute()
 const router = useRouter()
 const keyword = ref('')
 const rows = ref([])
@@ -130,11 +123,7 @@ const formVisible = ref(false)
 const formId = ref(null)
 const form = ref({ bk_biz_set_name: '', bk_biz_set_desc: '', bk_biz_maintainer: '', bizIds: [] })
 
-const filtered = computed(() =>
-  keyword.value.trim()
-    ? rows.value.filter((r) => (r.bk_biz_set_name || '').includes(keyword.value.trim()))
-    : rows.value
-)
+const filtered = computed(() => rows.value)
 
 function fmtTime(t) { return t ? String(t).replace('T', ' ').slice(0, 19) : '--' }
 
@@ -224,7 +213,11 @@ function goDetail(row) {
 async function load() {
   loading.value = true
   try {
-    const data = await http.post('/findmany/biz_set', { page: { start: (page.value - 1) * limit.value, limit: limit.value } })
+    const keywordValue = keyword.value.trim()
+    const data = await http.post('/findmany/biz_set', {
+      page: { start: (page.value - 1) * limit.value, limit: limit.value },
+      ...(keywordValue ? { condition: { bk_biz_set_name: keywordValue }, is_fuzzy: true } : {})
+    })
     rows.value = data?.info || []
     total.value = data?.count ?? rows.value.length
   } catch {
@@ -240,7 +233,7 @@ function openForm(row) {
       bk_biz_set_name: row.bk_biz_set_name || '',
       bk_biz_set_desc: row.bk_biz_set_desc || '',
       bk_biz_maintainer: row.bk_biz_maintainer || '',
-      bizIds: []
+      bizIds: Array.isArray(row.bk_scope?.filter?.biz_ids) ? [...row.bk_scope.filter.biz_ids] : []
     }
   } else {
     formId.value = null
@@ -259,18 +252,18 @@ async function submitForm() {
       bk_biz_set_desc: form.value.bk_biz_set_desc,
       bk_biz_maintainer: form.value.bk_biz_maintainer
     }
+    const scope = form.value.bizIds.length
+      ? { match_all: false, filter: { biz_ids: form.value.bizIds } }
+      : { match_all: true }
     if (formId.value) {
-      // 契约: PUT /updatemany/biz_set {bk_biz_set_ids, data:{bk_biz_set_attr}}
+      // 契约: PUT /updatemany/biz_set {bk_biz_set_ids, data:{bk_biz_set_attr,bk_scope}}
       await http.put('/updatemany/biz_set', {
         bk_biz_set_ids: [formId.value],
-        data: { bk_biz_set_attr: attr }
+        data: { bk_biz_set_attr: attr, bk_scope: scope }
       })
       ElMessage.success('业务集已更新')
     } else {
       // 契约: POST /create/biz_set {bk_biz_set_attr, bk_scope}
-      const scope = form.value.bizIds.length
-        ? { match_all: false, filter: { biz_ids: form.value.bizIds } }
-        : { match_all: true }
       await http.post('/create/biz_set', { bk_biz_set_attr: attr, bk_scope: scope })
       ElMessage.success('业务集已创建')
     }
@@ -303,6 +296,10 @@ onMounted(async () => {
   } catch { bizList.value = [] }
   attrs.value = (await searchBizSetAttributes().catch(() => [])) || []
   loadPickedCols()
+  if (String(route.query.create || '') === '1') {
+    openForm()
+    router.replace({ query: { ...route.query, create: undefined } })
+  }
 })
 </script>
 

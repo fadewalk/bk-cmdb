@@ -275,6 +275,9 @@ async function saveName(row) {
     await updateCloudArea(row.bk_cloud_id, { bk_cloud_name: value })
     row.bk_cloud_name = value
     ElMessage.success('修改成功')
+  } catch (e) {
+    ElMessage.error('修改失败: ' + (e?.message || '后端异常'))
+    editName.value = row.bk_cloud_name
   } finally {
     row._pending_ = false
   }

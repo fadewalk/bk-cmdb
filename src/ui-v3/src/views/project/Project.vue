@@ -1,13 +1,5 @@
 <template>
   <div class="res-page">
-    <div class="page-head">
-      <span class="back-arrow" @click="$router.push('/resource/index')">←</span>
-      <span class="page-name">项目</span>
-      <el-tooltip content="在新窗口打开项目帮助文档" placement="bottom">
-        <i class="bk-cmdb-icon icon-cc-external-link head-link" />
-      </el-tooltip>
-    </div>
-
     <div class="page-body">
       <div class="table-toolbar">
         <el-button type="primary" @click="openForm()">新建</el-button>
@@ -160,11 +152,7 @@ const formVisible = ref(false)
 const formId = ref(null)
 const form = ref({})
 
-const filtered = computed(() =>
-  keyword.value.trim()
-    ? rows.value.filter((r) => (r.bk_project_name || '').includes(keyword.value.trim()))
-    : rows.value
-)
+const filtered = computed(() => rows.value)
 
 function onSelect(rows) { selected.value = rows }
 
@@ -303,7 +291,12 @@ function cellText(value, p) {
 async function load() {
   loading.value = true
   try {
-    const data = await http.post('/findmany/project', { page: { start: (page.value - 1) * 20, limit: 20 } })
+    const keywordValue = keyword.value.trim()
+    const payload = {
+      page: { start: (page.value - 1) * 20, limit: 20 },
+      ...(keywordValue ? { condition: { bk_project_name: keywordValue }, is_fuzzy: true } : {})
+    }
+    const data = await http.post('/findmany/project', payload)
     rows.value = data?.info || []
     total.value = data?.count ?? rows.value.length
   } catch {

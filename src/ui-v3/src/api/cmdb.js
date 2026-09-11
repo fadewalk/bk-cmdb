@@ -5,8 +5,8 @@ export { http }
 
 // ---------- 业务 ----------
 // 搜索业务(owner 0;body 里的 condition 支持按 bk_biz_name 过滤)
-export const searchBusiness = (page, condition = {}) =>
-  http.post('/biz/search/0', { page, condition })
+export const searchBusiness = (page, condition = {}, isFuzzy = false) =>
+  http.post('/biz/search/0', { page, condition, ...(isFuzzy ? { is_fuzzy: true } : {}) })
 
 // ---------- 业务 ----------
 // 按业务 ID 精确查询(带 condition)

@@ -177,7 +177,7 @@
           </el-table-column>
           <el-table-column label="操作" width="70">
             <template #default="{ $index }">
-              <el-button link type="danger" size="small" @click="syncRows.splice($index, 1)">删除</el-button>
+              <el-button link type="danger" size="small" @click="removeSyncRow($index)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -377,6 +377,15 @@ function openEdit(row) {
   syncRows.value = (row.bk_sync_vpcs || []).map((v) => ({ ...v, destroyed: !!v.destroyed }))
   formVisible.value = true
   loadAreasAndDirs()
+}
+
+function removeSyncRow(index) {
+  const row = syncRows.value[index]
+  if (formMode.value === 'edit' && row?.bk_vpc_id) {
+    syncRows.value[index] = { ...row, destroyed: true }
+  } else {
+    syncRows.value.splice(index, 1)
+  }
 }
 
 function goCloudAccount() {

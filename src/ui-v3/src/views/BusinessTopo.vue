@@ -1379,7 +1379,7 @@ async function openInstanceDrawer(row) {
 async function refreshProcesses() {
   procLoading.value = true
   try {
-    const data = await searchProcessInstances(procInstId.value, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(bizId.value, procInstId.value, { start: 0, limit: 100 })
     processes.value = data?.info || data || []
   } finally {
     procLoading.value = false
@@ -1451,7 +1451,7 @@ async function openClone(row) {
   cloneModulePath.value = null
   cloneVisible.value = true
   try {
-    const data = await searchProcessInstances(row.id, { start: 0, limit: 100 })
+    const data = await searchProcessInstances(bizId.value, row.id, { start: 0, limit: 100 })
     cloneProcesses.value = data?.info || []
   } catch { cloneProcesses.value = [] }
 }

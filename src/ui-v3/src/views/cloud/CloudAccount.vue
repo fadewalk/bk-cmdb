@@ -132,7 +132,7 @@
           <el-descriptions-item label="账户名称">{{ detailRow.bk_account_name || '--' }}</el-descriptions-item>
           <el-descriptions-item label="云厂商">{{ vendorName(detailRow.bk_cloud_vendor) }}</el-descriptions-item>
           <el-descriptions-item label="认证类型">密钥认证</el-descriptions-item>
-          <el-descriptions-item label="SecretId">{{ detailRow.bk_secret_id || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="SecretId">{{ detailRow.bk_secret_id ? `${String(detailRow.bk_secret_id).slice(0, 4)}******` : '--' }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ detailRow.bk_description || '--' }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ detailRow.bk_creator || '--' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ fmtTime(detailRow.create_time) }}</el-descriptions-item>
