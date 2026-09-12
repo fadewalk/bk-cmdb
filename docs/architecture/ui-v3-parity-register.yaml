@@ -1,0 +1,107 @@
+version: 1
+batch: B37
+updated: 2026-09-12
+status: 生产阻断
+source_of_truth: src/ui
+scope:
+  - identity
+  - authentication
+  - session
+  - authorization
+  - startup
+  - management_boundary
+entries:
+  - id: web-login
+    legacy_routes: [/login, /login/oidc/start, /login/oidc/callback]
+    v3_routes: [/login]
+    page: src/ui-v3/public/login.html
+    interaction: 登录入口必须保留 return URL，并由 Web Server 配置选择本地账号或 OIDC
+    api: [GET /is_login, POST /login, GET /login/oidc/start, GET /login/oidc/callback]
+    readback: session cookie + GET /userinfo
+    permission: unauthenticated entry only
+    error: 401 redirects to configured login entry; no redirect loop
+    deep_link: c_url/return URL preserved and same-origin validated
+    e2e: pending
+    dependency: external IdP for OIDC/shared/production
+    evidence: []
+    state: 部分迁移
+
+  - id: current-user
+    legacy_routes: [/userinfo]
+    v3_routes: [/userinfo]
+    page: src/ui-v3/src/layout/TheHeader.vue
+    interaction: 顶栏显示认证上下文用户名，不能显示固定 admin
+    api: [GET /userinfo]
+    readback: session user/chname/owner/avatar
+    permission: authenticated session
+    error: loading, anonymous and expired-session states are explicit
+    deep_link: current route retained through re-login
+    e2e: pending
+    dependency: real session or OIDC fixture
+    evidence: []
+    state: 部分迁移
+
+  - id: logout
+    legacy_routes: [/logout]
+    v3_routes: [/logout]
+    page: src/ui-v3/src/layout/TheHeader.vue
+    interaction: confirm then POST logout, clear client context and navigate to returned login URL
+    api: [POST /logout]
+    readback: session no longer authenticated; returned logout URL honored
+    permission: authenticated session
+    error: failed logout is visible and does not claim success
+    deep_link: return URL is preserved safely
+    e2e: pending
+    dependency: session store
+    evidence: []
+    state: 生产阻断
+
+  - id: trusted-identity
+    legacy_routes: [/api/*]
+    v3_routes: [/api/v3/*]
+    page: src/web_server/middleware/login.go
+    interaction: client identity headers are rejected/removed; trusted session or API key is rebuilt with Set
+    api: [GET|POST|PUT|DELETE /api/v3/*]
+    readback: downstream receives one trusted identity value per header
+    permission: default deny when auth is required
+    error: multi-value and inner-request spoofing fail closed
+    deep_link: request URL and query preserved by proxy
+    e2e: pending
+    dependency: trusted session, OIDC or configured API key
+    evidence: []
+    state: 生产阻断
+
+  - id: standalone-startup
+    legacy_routes: [standalone entrypoint]
+    v3_routes: [standalone entrypoint]
+    page: deploy/standalone/run.sh
+    interaction: external/shared/production startup rejects unsafe auth combinations before child processes start
+    api: [GET /healthz, GET /api/v3/*]
+    readback: listener/auth/profile/secret/TLS checks are recorded before serving
+    permission: API key or OIDC required outside development
+    error: missing/invalid credentials and unsafe defaults exit non-zero
+    deep_link: N/A
+    e2e: pending
+    dependency: secret manager or mounted secrets; external IdP for OIDC
+    evidence: []
+    state: 生产阻断
+
+  - id: management-boundary
+    legacy_routes: [/admin/*, /migrate/*]
+    v3_routes: [/admin/*, /migrate/*]
+    page: src/web_server/service/service.go
+    interaction: admin/migrate stay on loopback management surface and are not ordinary public UI APIs
+    api: [POST /migrate/*, /api/v3/admin/*]
+    readback: management listener/network policy and audit evidence
+    permission: separate administrator identity and audit
+    error: ordinary user API cannot invoke management operations
+    deep_link: N/A
+    e2e: pending
+    dependency: deployment network policy
+    evidence: []
+    state: 生产阻断
+
+notes:
+  - v3 currently has no completed real login/IAM flow; do not mark B37 complete without a real session or OIDC/API-key E2E.
+  - Resource-level Casbin policy is tracked separately and is not inferred from the current bootstrap admin policy.
+  - Development skip-login may remain for localhost-only E2E, but must never be presented as a production mode.

@@ -2,11 +2,40 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CMDB - 登录</title>
-    <script>
-      // 独立模式使用 skip-login 免登录插件,无需登录页;访问即建立会话并回到首页
-      window.location.replace('/')
-    </script>
+    <style>
+      body { margin: 0; background: #f5f7fa; color: #1f2d3d; font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: 360px; margin: 15vh auto; padding: 32px; background: #fff; box-shadow: 0 2px 12px rgb(0 0 0 / 8%); border-radius: 4px; }
+      h1 { margin: 0 0 24px; font-size: 20px; font-weight: 500; }
+      label { display: block; margin: 16px 0 6px; color: #606266; }
+      input { box-sizing: border-box; width: 100%; height: 36px; padding: 0 12px; border: 1px solid #dcdfe6; border-radius: 4px; }
+      button { width: 100%; height: 36px; margin-top: 24px; color: #fff; background: #3a84ff; border: 0; border-radius: 4px; cursor: pointer; }
+      .error { min-height: 20px; margin-top: 12px; color: #f56c6c; }
+      .oidc { display: block; margin-top: 16px; text-align: center; color: #3a84ff; }
+    </style>
   </head>
-  <body></body>
+  <body>
+    <main>
+      <h1>蓝鲸配置平台</h1>
+      <form method="post" action="/login">
+        <input type="hidden" name="c_url" id="c_url" />
+        <label for="username">用户名</label>
+        <input id="username" name="username" autocomplete="username" required />
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">登录</button>
+        <div class="error" id="error" role="alert"></div>
+      </form>
+      <a class="oidc" href="/login/oidc/start" id="oidc">使用单点登录</a>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search)
+      const returnUrl = params.get('c_url') || '/'
+      document.getElementById('c_url').value = returnUrl
+      document.getElementById('oidc').href += `?c_url=${encodeURIComponent(returnUrl)}`
+      const error = params.get('error')
+      if (error) document.getElementById('error').textContent = error
+    </script>
+  </body>
 </html>

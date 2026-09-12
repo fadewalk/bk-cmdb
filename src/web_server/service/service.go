@@ -73,6 +73,8 @@ func (s *Service) WebService() *gin.Engine {
 	middleware.CacheCli = s.CacheCli
 
 	ws.Use(middleware.RequestIDMiddleware)
+	// Strip caller-controlled identity before any authentication or authorization.
+	ws.Use(middleware.SanitizeExternalIdentityHeaders())
 	ws.Use(sessions.Sessions(s.Config.Session.Name, s.Session))
 	// Machine clients can authenticate with the standalone API key without a browser session.
 	// When no key is configured, the existing browser session/skip-login flow is unchanged.

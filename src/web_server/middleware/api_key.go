@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	standaloneAPIKeyHeader = "X-API-Key"
-	standaloneAPIKeyEnv    = "CMDB_API_KEY"
-	standaloneAPIUserEnv   = "CMDB_API_USER"
-	standaloneAPISupplier  = "CMDB_API_SUPPLIER_ACCOUNT"
-	standaloneAPIAppCode   = "CMDB_API_APP_CODE"
+	standaloneAPIKeyHeader      = "X-API-Key"
+	standaloneAPIKeyEnv         = "CMDB_API_KEY"
+	standaloneAPIUserEnv        = "CMDB_API_USER"
+	standaloneAPISupplier       = "CMDB_API_SUPPLIER_ACCOUNT"
+	standaloneAPIAppCode        = "CMDB_API_APP_CODE"
+	standaloneAPIKeyRequiredEnv = "CMDB_API_KEY_REQUIRED"
 )
 
 type standaloneAPIIdentity struct {
@@ -30,7 +31,7 @@ type standaloneAPIIdentity struct {
 }
 
 // StandaloneAPIKeyProxy authenticates machine calls before the browser login
-// middleware. An unset CMDB_API_KEY keeps the existing session/skip-login flow.
+// middleware. Required mode never falls through to a browser or skip-login session.
 func StandaloneAPIKeyProxy(disc discovery.DiscoveryInterface) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !isAPIRequest(c.Request.URL.Path) {
@@ -39,13 +40,16 @@ func StandaloneAPIKeyProxy(disc discovery.DiscoveryInterface) gin.HandlerFunc {
 		}
 
 		identity, configured, presented := standaloneAPIKeyIdentity(c.Request.Header)
-		if !configured || !presented {
+		if !configured {
+			if standaloneAPIKeyRequired() {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"status": "standalone api key is required"})
+				return
+			}
 			c.Next()
 			return
 		}
-		if identity.User == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"status": "invalid standalone api key"})
-			c.Abort()
+		if !presented || identity.User == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"status": "invalid standalone api key"})
 			return
 		}
 
@@ -55,6 +59,11 @@ func StandaloneAPIKeyProxy(disc discovery.DiscoveryInterface) gin.HandlerFunc {
 		}
 		c.Abort()
 	}
+}
+
+func standaloneAPIKeyRequired() bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(standaloneAPIKeyRequiredEnv)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
 }
 
 func isAPIRequest(path string) bool {
@@ -68,6 +77,12 @@ func standaloneAPIKeyIdentity(header http.Header) (standaloneAPIIdentity, bool, 
 		return standaloneAPIIdentity{}, false, false
 	}
 
+	if values := header.Values(standaloneAPIKeyHeader); len(values) > 1 {
+		return standaloneAPIIdentity{}, true, true
+	}
+	if values := header.Values("Authorization"); len(values) > 1 {
+		return standaloneAPIIdentity{}, true, true
+	}
 	presented := strings.TrimSpace(header.Get(standaloneAPIKeyHeader))
 	if presented == "" {
 		const bearerPrefix = "Bearer "
@@ -84,17 +99,11 @@ func standaloneAPIKeyIdentity(header http.Header) (standaloneAPIIdentity, bool, 
 		return standaloneAPIIdentity{}, true, true
 	}
 
-	user := os.Getenv(standaloneAPIUserEnv)
-	if user == "" {
-		user = "admin"
-	}
-	supplier := os.Getenv(standaloneAPISupplier)
-	if supplier == "" {
-		supplier = "0"
-	}
-	appCode := os.Getenv(standaloneAPIAppCode)
-	if appCode == "" {
-		appCode = "standalone-api"
+	user := strings.TrimSpace(os.Getenv(standaloneAPIUserEnv))
+	supplier := strings.TrimSpace(os.Getenv(standaloneAPISupplier))
+	appCode := strings.TrimSpace(os.Getenv(standaloneAPIAppCode))
+	if user == "" || supplier == "" || appCode == "" {
+		return standaloneAPIIdentity{}, true, true
 	}
 
 	return standaloneAPIIdentity{

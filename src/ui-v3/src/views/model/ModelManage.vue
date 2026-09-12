@@ -331,11 +331,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, UploadFilled } from '@element-plus/icons-vue'
+import axios from 'axios'
 import {
   searchClassificationWithObjects, searchClassifications, createClassification,
   updateClassification, deleteClassification,
   createModel, updateModel, countInstances, searchAssociationTypes
 } from '../../api/cmdb'
+import http from '../../api/http'
 import CreateModelDialog from '../../components/model/CreateModelDialog.vue'
 
 const router = useRouter()
@@ -580,12 +582,8 @@ async function analyzeImport() {
     const form = new FormData()
     form.append('file', importFile.value)
     if (importPassword.value) form.append('params', JSON.stringify({ password: importPassword.value }))
-    const resp = await fetch('/object/importmany/analysis', {
-      method: 'POST',
-      headers: { 'X-Bkcmdb-User': 'admin', 'X-Bkcmdb-Supplier-Account': '0' },
-      body: form
-    })
-    const res = await resp.json()
+    const response = await axios.post('/object/importmany/analysis', form, { withCredentials: true })
+    const res = response.data
     if (res.result === false && res.bk_error_code !== 0) {
       throw new Error(res.bk_error_msg || '解析失败')
     }
@@ -608,16 +606,11 @@ async function doImport() {
   if (!selected.length) return
   importing.value = true
   try {
-    const resp = await fetch('/object/importmany', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Bkcmdb-User': 'admin',
-        'X-Bkcmdb-Supplier-Account': '0'
-      },
-      body: JSON.stringify({ import_object: selected, import_asst: parsedAssts.value })
-    })
-    const res = await resp.json().catch(() => ({}))
+    const response = await axios.post('/object/importmany', {
+      import_object: selected,
+      import_asst: parsedAssts.value
+    }, { withCredentials: true })
+    const res = response.data
     if (res.result === false) throw new Error(res.bk_error_msg || '导入失败')
     importResult.value = { success: true, message: `已提交导入 ${selected.length} 个模型` }
     ElMessage.success('导入成功')
@@ -653,23 +646,14 @@ async function doExport() {
     const excluded = associationTypes.value
       .map((a) => a.bk_asst_id)
       .filter((id) => !exportAsstIds.value.includes(id))
-    const resp = await fetch('/object/exportmany', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Bkcmdb-User': 'admin',
-        'X-Bkcmdb-Supplier-Account': '0'
-      },
-      body: JSON.stringify({
-        object_id: selectedIds,
-        excluded_asst_id: excluded,
-        password: exportForm.value.password || '',
-        expiration: exportForm.value.expiration || 0,
-        file_name: fileName
-      })
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    const blob = await resp.blob()
+    const response = await axios.post('/object/exportmany', {
+      object_id: selectedIds,
+      excluded_asst_id: excluded,
+      password: exportForm.value.password || '',
+      expiration: exportForm.value.expiration || 0,
+      file_name: fileName
+    }, { responseType: 'blob', withCredentials: true })
+    const blob = response.data
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `${fileName}.zip`

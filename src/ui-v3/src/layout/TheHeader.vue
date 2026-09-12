@@ -27,10 +27,9 @@
     <div class="header-info">
       <el-tag size="small" effect="dark" type="info" style="border-color: rgba(255,255,255,.2)">独立模式</el-tag>
 
-      <!-- 用户 admin ▾ -->
       <el-dropdown trigger="click" class="info-item" @command="onUserCmd">
         <span class="info-user">
-          <span class="user-name">admin</span>
+          <span class="user-name">{{ sessionStore.displayName }}</span>
           <i class="caret">▾</i>
         </span>
         <template #dropdown>
@@ -50,11 +49,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { MENUS, resolveMenuByRoute, menuLinkPath } from './menu-config'
 import { useBizStore } from '../stores/biz'
 import { usePermissionStore } from '../stores/permission'
+import { useSessionStore } from '../stores/session'
 
 const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
 const permissionStore = usePermissionStore()
+const sessionStore = useSessionStore()
 const topMenus = computed(() => MENUS.filter((menu) => menu.id !== 'platform' || permissionStore.canPlatformManage))
 const hasBizId = computed(() => bizStore.bizId != null)
 
@@ -71,12 +72,20 @@ function goFirst(menu) {
 onMounted(() => {
   bizStore.ensureLoaded()
   permissionStore.ensureLoaded()
+  sessionStore.ensureLoaded()
 })
 
-function onUserCmd(cmd) {
+async function onUserCmd(cmd) {
   if (cmd === 'logout') {
     ElMessageBox.confirm('确定退出登录?', '退出确认', { type: 'warning' })
-      .then(() => ElMessage.success('独立模式下无登录会话'))
+      .then(async () => {
+        try {
+          const logoutUrl = await sessionStore.logout()
+          window.location.replace(logoutUrl || '/login')
+        } catch (error) {
+          ElMessage.error(error.response?.data?.bk_error_msg || '退出登录失败')
+        }
+      })
       .catch(() => {})
   }
 }
