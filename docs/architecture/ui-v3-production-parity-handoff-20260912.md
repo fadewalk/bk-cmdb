@@ -118,7 +118,18 @@
 
 **B37 门禁：**真实登录、logout、身份头清洗、API fail-closed 未通过，不得部署到共享/生产。
 
+### B38~B44 执行结果（2026-09-13 追记）
+
+- **B38（完成）**：`/host/search` 死请求移除，主机详情走真实 `findmany/hosts/search/{with_biz|resource|noauth}` 四对象 condition；删除 `/hosts/snapshot/:id`、`/findmany/inst/association`、`getLabelHistory` 死导出；字段分组移动改为 `PUT /update/objectattgroupproperty` 批量契约、删除走 owner 四段注册路径；模型导入/导出统一根路径 helper；audit-parity 升级为 244 个 v3 API 调用 ↔ 778 条后端注册路由的分段通配比对，`apiGaps=0`。E2E run-b38 全过。
+- **B39（完成）**：复刻 StatusError + meta.view 命名视图（error/permission 原位渲染、URL 保留）；新增 /error、/no-business；业务 interceptor 硬化（bizId 规范化回填、业务/业务集不存在→permission、无业务→no-business）；meta.auth→auth/verify 映射、checkAvailable→404；补 errorHandler/onerror/unhandledrejection/router.onError 与 9900403/1306000 处理。E2E run-b39 全过。
+- **B40（完成）**：业务拓扑复刻 node/tab query 契约（写回用老版 hostList/serviceInstance 命名、深链恢复选中节点）；恢复老版服务实例 create/clone 路径深链；向导按绑定模板预填进程；主机详情 nav-history 返回链；host-apply stage 深链恢复。E2E run-b40 全过。
+- **B41（完成）**：实例详情补关联 tab（列表/拓扑、方向/类型/对端名、新增/取消关联真实写回——E2E 抓到并修复 `create/instassociation` 需 `bk_obj_asst_id` 别名的契约差异）；唯一校验内置保护+只读查看；字段模板绑定 diff 预览/冲突阻断/停用过滤/同步任务轮询；自定义字段跨组移动与分组排序；模型导入关联类型冲突覆盖/跳过。E2E run-b41 全过。
+- **B42（依赖阻塞，可交付部分完成）**：新增 DependencyBlocked 阻塞页与 `/business/:bizId/pod`、`/pod-details/*`、`/full-text-search` 路由——深链可达、明确阻塞态，不再 404/空白。真实 K8s/ES/云凭据接入后自动解除。
+- **B43（本地可做部分完成）**：新增 backup-mongo.sh/restore-mongo.sh（auth+gzip+保留策略+最小体积门禁），备份演练真实通过（195KB 有效档，空档被拒）；恢复演练需停写窗口。一进程一容器、PITR、镜像签名/SBOM 等仍依赖基础设施。
+- **B44（工具就绪，放行未通过）**：audit-parity 作为放行前门禁扫描（路由/菜单/API 注册/固定身份头/固定口令命中）；干净环境全量回归、镜像签名/SBOM、恢复演练未完成——旧前端不得下线、不得宣称全量生产替代。
+
 ### B38：前后端 API 契约清理（P0/P1）
+
 
 - 删除 `searchHostDetail` 对未注册 `/host/search` 的首请求，改真实 `/findmany/hosts/search/{with_biz|resource|noauth}`；
 - 处理/删除未注册 `/hosts/snapshot/:id`；

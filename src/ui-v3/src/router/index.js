@@ -149,7 +149,12 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') },
     // 状态路由(老版 status/ 同名独立页,无导航壳)
     { path: '/error', name: 'Error', component: () => import('../views/status/ErrorStatus.vue'), meta: { title: '服务异常' } },
-    { path: '/no-business', name: 'NoBusiness', component: () => import('../views/status/NoBusiness.vue'), meta: { title: '无业务权限' } }
+    { path: '/no-business', name: 'NoBusiness', component: () => import('../views/status/NoBusiness.vue'), meta: { title: '无业务权限' } },
+    // 依赖阻塞型能力:深链可达并给出明确阻塞态(老版行为一致性:独立环境无 K8s/ES 数据链路)
+    { path: '/dependency-blocked/:kind', name: 'DependencyBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '依赖阻塞' } },
+    { path: '/business/:bizId/pod/:rest(.*)*', name: 'PodBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '容器管理', blockedKind: 'pod' } },
+    { path: '/pod-details/:rest(.*)*', name: 'PodDetailsBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '容器管理', blockedKind: 'pod' } },
+    { path: '/full-text-search', name: 'FullTextBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '全文检索', blockedKind: 'es' } }
   ]
 })
 

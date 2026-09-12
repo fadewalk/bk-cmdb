@@ -1,6 +1,6 @@
 version: 1
-batch: B37
-updated: 2026-09-12
+batch: B44
+updated: 2026-09-13
 status: 生产阻断
 source_of_truth: src/ui
 scope:
@@ -10,6 +10,11 @@ scope:
   - authorization
   - startup
   - management_boundary
+  - api_contract
+  - router_guard
+  - deep_interaction
+  - dependency_blocked
+  - reliability
 entries:
   - id: web-login
     legacy_routes: [/login, /login/oidc/start, /login/oidc/callback]
@@ -101,7 +106,53 @@ entries:
     evidence: []
     state: 生产阻断
 
+  - id: dependency-blocked
+    legacy_routes: [/business/:bizId/pod, /pod-details/*, full-text-search]
+    v3_routes: [/business/:bizId/pod, /pod-details/*, /full-text-search]
+    page: src/ui-v3/src/views/status/DependencyBlocked.vue
+    interaction: 深链可达并渲染明确依赖阻塞态(容器/K8s、ES 全文检索、真实云凭据)
+    api: []
+    readback: N/A (capability gate)
+    permission: public within session
+    error: 依赖缺失时明确说明,不渲染 404 或空白
+    deep_link: 原 legacy pod/全文检索路径全部重定向到阻塞页
+    e2e: b42 inline probe (2026-09-13 pass)
+    dependency: Kubernetes 数据链路 / Elasticsearch / 真实云厂商凭据
+    evidence: [served bundle probe 2026-09-13]
+    state: 依赖阻塞
+
+  - id: reliability-backup
+    legacy_routes: []
+    v3_routes: [deploy/standalone/scripts/backup-mongo.sh, deploy/standalone/scripts/restore-mongo.sh]
+    page: deploy/standalone/scripts
+    interaction: mongodump/mongorestore 带 auth、gzip、保留策略与最小体积门禁
+    api: []
+    readback: 2026-09-13 备份演练通过(195KB 有效档);空档被大小门禁拒绝
+    permission: operator via docker context
+    error: 认证失败/空档直接失败退出
+    deep_link: N/A
+    e2e: backup drill pass; restore drill 待停写窗口
+    dependency: 停写窗口与恢复演练
+    evidence: [/tmp/cmdb-backup-drill/cmdb-20260913-020733]
+    state: 部分迁移
+
+  - id: release-gate
+    legacy_routes: []
+    v3_routes: [scripts/ui-v3/audit-parity.cjs]
+    page: scripts/ui-v3/audit-parity.cjs
+    interaction: B44 放行前全量门禁扫描(路由/菜单/API 注册/固定身份头/固定口令命中)
+    api: []
+    readback: apiGaps=0(2026-09-13);biz 三路径经 apiserver 通用代理
+    permission: CI/operator
+    error: 任一门禁失败即非零退出
+    deep_link: N/A
+    e2e: audit-parity run 2026-09-13
+    dependency: 干净环境全量回归、镜像签名/SBOM、备份恢复演练
+    evidence: ["/tmp/b38-audit.json"]
+    state: 部分迁移
+
 notes:
-  - v3 currently has no completed real login/IAM flow; do not mark B37 complete without a real session or OIDC/API-key E2E.
+  - v3 已有真实 session/userinfo/logout/401 处理与 localhost 启动门禁;真实 OIDC/多用户 E2E、资源级 IAM、secret 轮换、全链路 TLS 与恢复演练仍为生产阻断。
   - Resource-level Casbin policy is tracked separately and is not inferred from the current bootstrap admin policy.
   - Development skip-login may remain for localhost-only E2E, but must never be presented as a production mode.
+  - B38~B44 逐批证据见 docs/architecture/ui-v3-production-parity-handoff-20260912.md 与 e2e/run-b38~b41.cjs。
