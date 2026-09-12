@@ -28,6 +28,15 @@ services:
     image: mongo:4.4
     container_name: cmdb-mongodb
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     # 首次初始化时自动创建 root 用户并开启认证(--replSet + 认证时官方镜像自动生成 keyfile)
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
@@ -101,13 +110,17 @@ services:
     restart: unless-stopped
     environment:
       STANDALONE_PROFILE: ${STANDALONE_PROFILE:-core}
-      # Optional for local development; set CMDB_API_KEY in production to enable machine API auth.
+      STANDALONE_ENV: ${STANDALONE_ENV:-development}
+      STANDALONE_LISTEN_ADDR: ${STANDALONE_LISTEN_ADDR:-127.0.0.1:8090}
+      # API-key mode is optional only for localhost development.
+      CMDB_API_KEY_REQUIRED: ${CMDB_API_KEY_REQUIRED:-0}
       CMDB_API_KEY: ${CMDB_API_KEY:-}
-      CMDB_API_USER: ${CMDB_API_USER:-admin}
-      CMDB_API_SUPPLIER_ACCOUNT: ${CMDB_API_SUPPLIER_ACCOUNT:-0}
-      CMDB_API_APP_CODE: ${CMDB_API_APP_CODE:-standalone-api}
+      CMDB_API_USER: ${CMDB_API_USER:-}
+      CMDB_API_SUPPLIER_ACCOUNT: ${CMDB_API_SUPPLIER_ACCOUNT:-}
+      CMDB_API_APP_CODE: ${CMDB_API_APP_CODE:-}
+      CMDB_SESSION_SECRET: ${CMDB_SESSION_SECRET:-}
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     depends_on:
       zookeeper:
         condition: service_healthy

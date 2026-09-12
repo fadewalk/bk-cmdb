@@ -65,9 +65,12 @@ profile 只裁剪镜像构建目标和启动进程，不删除公共 API 契约�
 | 全文检索 | ES + 日志平台 | 关闭 |
 | 国密加密 | 铜锁(Tongsuo) | 编译期 `-tags=disable_crypto` 绕过,**无需安装铜锁** |
 
-## 使用
+## 安全边界
 
-```bash
+默认启动仅绑定宿主机 `127.0.0.1:8090`，并使用 development-only 的 skip-login 便于本机联调。该模式不提供正式身份、资源级权限或生产审计能力，禁止通过修改端口映射或监听地址直接对外暴露。
+
+共享/生产环境必须显式设置 `STANDALONE_ENV=shared|production`、外部 IdP/OIDC 或 `CMDB_API_KEY` + `CMDB_API_KEY_REQUIRED=true`，并提供非 admin 的 `CMDB_API_USER`、supplier/app code 和随机 `CMDB_SESSION_SECRET`。启动脚本会在任何子进程启动前拒绝不安全组合。
+
 # 构建并启动(首次构建约 10-20 分钟,需网络下载 go/npm 依赖)
 docker compose -f deploy/standalone/docker-compose.yml up -d --build
 

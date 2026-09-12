@@ -1,6 +1,6 @@
 # web_server 本地配置(独立模式)
 # 关键差异:
-#   - login.version: skip-login   免登录模式(自动以 admin 身份登录),不依赖蓝鲸 PaaS 登录
+#   - login.version: skip-login 仅限 localhost development; shared/production 必须使用 OIDC 或受信 API Key
 #   - site.authscheme / app.authscheme: internal   内置权限,不依赖蓝鲸权限中心
 #   - 所有 bkXXX(蓝鲸 PaaS/ESB)地址仅占位,不会被调用
 

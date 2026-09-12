@@ -18,10 +18,51 @@ CMDB_HOME=/data/cmdb
 LOG_DIR=${CMDB_HOME}/logs
 ZK_ADDR=zookeeper:2181
 STANDALONE_PROFILE=${STANDALONE_PROFILE:-core}
-case "${STANDALONE_PROFILE}" in
-    core|cloud|sync|transfer|full) ;;
-    *) echo "unsupported STANDALONE_PROFILE: ${STANDALONE_PROFILE}" >&2; exit 1 ;;
+STANDALONE_ENV=${STANDALONE_ENV:-development}
+STANDALONE_LISTEN_ADDR=${STANDALONE_LISTEN_ADDR:-127.0.0.1:8090}
+CMDB_API_KEY_REQUIRED=${CMDB_API_KEY_REQUIRED:-0}
+case "${STANDALONE_ENV}" in
+    development|shared|production) ;;
+    *) echo "unsupported STANDALONE_ENV: ${STANDALONE_ENV}" >&2; exit 1 ;;
 esac
+case "${STANDALONE_LISTEN_ADDR}" in
+    127.0.0.1:*|localhost:*) external_listener=0 ;;
+    *) external_listener=1 ;;
+esac
+if [ "${external_listener}" -eq 1 ]; then
+    if grep -Eiq 'version:[[:space:]]*skip-login' "${CMDB_HOME}/cmdb_webserver/web.yaml" 2>/dev/null && grep -A2 -Eiq '^[[:space:]]*auth:[[:space:]]*$' "${CMDB_HOME}/cmdb_webserver/web.yaml" 2>/dev/null | grep -Eiq 'enabled:[[:space:]]*false'; then
+        echo "ERROR: external listener cannot use skip-login with disabled auth" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && grep -Eiq 'insecureSkipVerify:[[:space:]]*true' "${CMDB_HOME}/cmdb_webserver/web.yaml" 2>/dev/null; then
+        echo "ERROR: ${STANDALONE_ENV} listener cannot disable TLS certificate verification" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && [ -z "${CMDB_API_KEY:-}" ]; then
+        echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_API_KEY" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && [ "${CMDB_API_KEY_REQUIRED}" != "1" ] && [ "${CMDB_API_KEY_REQUIRED}" != "true" ]; then
+        echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_API_KEY_REQUIRED=true" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && [ "${CMDB_API_USER:-}" = "" -o "${CMDB_API_USER:-}" = "admin" ]; then
+        echo "ERROR: external ${STANDALONE_ENV} listener requires explicit non-admin CMDB_API_USER" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && [ "${CMDB_API_SUPPLIER_ACCOUNT:-}" = "" ]; then
+        echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_API_SUPPLIER_ACCOUNT" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && [ "${CMDB_API_APP_CODE:-}" = "" ]; then
+        echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_API_APP_CODE" >&2
+        exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ] && [ "${CMDB_SESSION_SECRET:-}" = "" ]; then
+        echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_SESSION_SECRET" >&2
+        exit 1
+    fi
+fi
 mkdir -p "${LOG_DIR}"
 
 wait_port() {
@@ -110,11 +151,6 @@ start_svc cmdb_datacollection 60005 \
     --addrport=127.0.0.1:60005 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
 start_svc cmdb_operationserver 60011 \
     --addrport=127.0.0.1:60011 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
-start_svc cmdb_cloudserver 60013 \
-    --addrport=127.0.0.1:60013 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG} --enable-cryptor=false
-start_svc cmdb_apiserver 8080 \
-    --addrport=127.0.0.1:8080 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
-
 if [ "${STANDALONE_PROFILE}" = "cloud" ] || [ "${STANDALONE_PROFILE}" = "full" ]; then
     start_svc cmdb_cloudserver 60013 \
         --addrport=127.0.0.1:60013 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG} --enable-cryptor=false
@@ -127,9 +163,10 @@ if [ "${STANDALONE_PROFILE}" = "transfer" ] || [ "${STANDALONE_PROFILE}" = "full
     start_svc cmdb_transferservice 50011 \
         --addrport=127.0.0.1:50011 --regdiscv=${ZK_ADDR} ${COMMON}
 fi
-# web_server:web.yaml 走本地文件,监听 0.0.0.0 以便端口映射到宿主机
+start_svc cmdb_apiserver 8080 \
+    --addrport=127.0.0.1:8080 --regdiscv=${ZK_ADDR} ${COMMON} ${AUTH_FLAG}
 start_svc cmdb_webserver 8090 \
-    --addrport=0.0.0.0:8090 --regdiscv=${ZK_ADDR} \
+    --addrport=${STANDALONE_LISTEN_ADDR} --regdiscv=${ZK_ADDR} \
     --deployment-method=open_source \
     --config=${CMDB_HOME}/cmdb_webserver/web.yaml ${COMMON}
 
@@ -141,7 +178,7 @@ pgrep -a cmdb_ || true
 echo "------------------------------------"
 
 dead=0
-services="cmdb_adminserver cmdb_coreservice cmdb_cacheservice cmdb_toposerver cmdb_hostserver cmdb_procserver cmdb_eventserver cmdb_taskserver cmdb_datacollection cmdb_operationserver cmdb_apiserver cmdb_cloudserver cmdb_webserver"
+services="cmdb_adminserver cmdb_coreservice cmdb_cacheservice cmdb_toposerver cmdb_hostserver cmdb_procserver cmdb_eventserver cmdb_taskserver cmdb_datacollection cmdb_operationserver cmdb_apiserver cmdb_webserver"
 case "${STANDALONE_PROFILE}" in
     cloud) services="${services} cmdb_cloudserver" ;;
     sync) services="${services} cmdb_synchronizeserver" ;;
@@ -157,7 +194,7 @@ done
 
  echo
 if [ ${dead} -eq 0 ]; then
-    echo "standalone profile ${STANDALONE_PROFILE} started successfully. web ui: http://localhost:8090 (skip-login, admin)"
+    echo "standalone profile ${STANDALONE_PROFILE} (${STANDALONE_ENV}) started successfully. web ui: http://${STANDALONE_LISTEN_ADDR}"
 else
     echo "${dead} service(s) failed to start for profile ${STANDALONE_PROFILE}, see logs under ${LOG_DIR}"
 fi

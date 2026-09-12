@@ -79,7 +79,7 @@
 |---|---|---|---|
 | 云资源发现/同步 | `src/ui/src/views/cloud-resource/` | 已接入 core | cmdb_cloudserver 已部署;账户密钥验证与实际同步需真实云厂商凭据和网络 |
 | Pod/容器详情 | `src/ui/src/views/pod-details/` | 依赖阻塞 | Kubernetes 集群纳管和 Pod/容器 API 可用 |
-| 外部 IAM/正式登录 | 旧版 router auth/interceptor(绑定蓝鲸 IAM) | 尚未实现 | **方向已定:对接开源方案体系**(OIDC/OAuth2 IdP、Casbin 等),不依赖蓝鲸权限中心;现有 StandaloneAPIKeyProxy 作为 OpenAPI/服务间鉴权基础;落地前 skip-login 模式验收 |
+| 外部 IAM/正式登录 | 旧版 router auth/interceptor(绑定蓝鲸 IAM) | v3 已接入 session/userinfo/logout/401 处理；真实 OIDC/API Key 与资源级 IAM 未完成 | **部分迁移 / 生产阻断**：需真实 IdP、多用户隔离、default-deny、权限/异常矩阵和 E2E |
 
 ## 当前批次与发布门禁
 

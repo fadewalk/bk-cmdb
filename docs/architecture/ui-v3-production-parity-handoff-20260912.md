@@ -94,7 +94,18 @@
 
 ### B37：安全身份与生产启动门禁（P0）
 
-先做，没完成不能谈生产。
+本轮已落地并验证：
+
+- `src/ui-v3` HTTP 层移除固定 `X-Bkcmdb-User: admin` / supplier `0`，改为同源 session/API Key 信任边界；401/登录 HTML 进入统一 session-expired 处理；
+- v3 新增 session store，调用根路径 `/userinfo`，顶栏显示真实会话用户，退出调用 `POST /logout` 并按返回 URL 回登录入口；
+- Web 入口新增身份头清洗：客户端身份头会删除，多值身份头返回 400，inner-request/from-web 伪造返回 401；session 认证改用 `Header.Set` 重建可信身份；
+- standalone API Key 增加 `CMDB_API_KEY_REQUIRED` fail-closed 模式，成功身份必须显式配置 user/supplier/app code，不再隐式回退 admin/0；
+- standalone 默认监听改为 `127.0.0.1:8090`，外部监听在 shared/production 下要求 API key、非 admin service identity、随机 session secret，并拒绝 TLS verify 关闭；云服务重复启动/状态重复计数已修正；
+- 建立 `docs/architecture/ui-v3-parity-register.yaml` 与 `scripts/ui-v3/audit-parity.cjs`，专项 `src/ui-v3/e2e/run-b37.cjs` 会如实输出依赖阻塞。
+
+验证证据：`node src/ui-v3/e2e/run-b37.cjs` 通过；`go test -tags disable_crypto ./src/web_server/middleware -run 'TestStandaloneAPIKey|TestSanitizeExternalIdentity'` 通过；`npm run build` 通过。默认 Go 测试在本机因缺少 `openssl/evp.h` 失败，`CGO_ENABLED=0` 又因项目 crypto build tag 缺 `bkcrypto.NewSm4`，这两项是环境依赖阻塞而非通过证据。
+
+仍未通过、不得生产放行：真实 OIDC/多用户 session E2E、资源级 IAM/default-deny 正式策略、secret manager/轮换、Mongo/Redis/ZK 全链路 TLS 与恢复演练、管理面网络隔离。当前 B37 状态为“部分迁移 / 生产阻断”，development skip-login 只允许 localhost 本机联调。
 
 - 移除 v3 `http.js` 固定 admin/supplier；接入可信 session/userinfo/config；
 - Web 入口删除外部同名身份头，认证成功后 `Header.Set` 重建；拒绝多值身份头和伪造 inner-request；
