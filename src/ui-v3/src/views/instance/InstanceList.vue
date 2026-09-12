@@ -161,6 +161,7 @@
     <el-drawer v-model="detailVisible" :title="detailRow ? (detailRow.bk_inst_name || `实例 ${detailInstId}`) : '实例详情'" size="520px">
       <el-tabs v-model="detailTab">
         <el-tab-pane label="属性" name="props" />
+        <el-tab-pane label="关联" name="assoc" />
         <el-tab-pane label="变更历史" name="history" />
       </el-tabs>
       <template v-if="detailTab === 'props'">
@@ -169,6 +170,73 @@
             {{ v === null || v === '' || v === undefined ? '--' : v }}
           </el-descriptions-item>
         </el-descriptions>
+      </template>
+      <template v-else-if="detailTab === 'assoc'">
+        <!-- 老版 general-model 详情关联 tab:列表/拓扑双视图 + 新增关联(内置模型保护) -->
+        <div class="assoc-toolbar">
+          <el-radio-group v-model="assocView" size="small">
+            <el-radio-button value="list">列表</el-radio-button>
+            <el-radio-button value="topo">拓扑</el-radio-button>
+          </el-radio-group>
+          <el-tooltip :disabled="!assocLocked" content="内置模型实例不支持关联编辑" placement="top">
+            <span>
+              <el-button type="primary" size="small" :disabled="assocLocked || !assocDefs.length" @click="assocFormVisible = true">新增关联</el-button>
+            </span>
+          </el-tooltip>
+        </div>
+        <template v-if="assocView === 'list'">
+          <el-table :data="assocRows" v-loading="assocLoading" size="small">
+            <el-table-column label="方向" width="92">
+              <template #default="{ row }">{{ row.__dir === 'src' ? '关联' : '被关联' }}</template>
+            </el-table-column>
+            <el-table-column label="模型" prop="__peerObjName" min-width="110" show-overflow-tooltip />
+            <el-table-column label="实例" prop="__peerName" min-width="130" show-overflow-tooltip />
+            <el-table-column label="关联类型" prop="__kindName" min-width="100" show-overflow-tooltip />
+            <el-table-column label="操作" width="86">
+              <template #default="{ row }">
+                <el-tooltip :disabled="!assocLocked" content="内置模型实例不支持关联编辑" placement="top">
+                  <span>
+                    <el-button link type="danger" :disabled="assocLocked" @click="removeAssoc(row)">取消关联</el-button>
+                  </span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!assocLoading && assocRows.length === 0" description="暂无关联" :image-size="60" />
+        </template>
+        <template v-else>
+          <div v-loading="assocLoading" class="assoc-topo">
+            <div v-for="group in assocTopoGroups" :key="group.objId" class="assoc-topo-group">
+              <div class="assoc-topo-title">{{ group.objName }}({{ group.items.length }})</div>
+              <div class="assoc-topo-nodes">
+                <span v-for="item in group.items" :key="item.__key" class="assoc-topo-node">
+                  {{ item.__peerName }}
+                </span>
+              </div>
+            </div>
+            <el-empty v-if="!assocLoading && assocTopoGroups.length === 0" description="暂无关联拓扑" :image-size="60" />
+          </div>
+        </template>
+
+        <el-dialog v-model="assocFormVisible" title="新增关联" width="420px" append-to-body>
+          <el-form label-width="72px" size="small">
+            <el-form-item label="关联类型">
+              <el-select v-model="assocForm.kind" placeholder="请选择" style="width: 100%">
+                <el-option v-for="d in assocDefs" :key="d.__key" :value="d" :label="`${d.kindName} ${d.__dir === 'src' ? '→' : '←'} ${d.peerObjName}`" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="目标实例">
+              <el-select v-model="assocForm.targetInst" filterable remote :remote-method="searchAssocTargets"
+                :loading="assocTargetLoading" placeholder="输入实例名搜索" style="width: 100%">
+                <el-option v-for="inst in assocTargetOptions" :key="inst.id" :value="inst.id" :label="inst.name" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="assocFormVisible = false">取消</el-button>
+            <el-button type="primary" :loading="assocSaving" @click="submitAssoc">提交</el-button>
+          </template>
+        </el-dialog>
       </template>
       <template v-else>
         <el-table :data="auditRows" v-loading="auditLoading" size="small">
@@ -195,7 +263,9 @@ import {
   searchModels, searchModelAttributes,
   searchInstances, countInstances,
   createInstance, updateInstance, deleteInstance, deleteInstances,
-  searchInstAudit, importInstances, downloadInstTemplate, exportInstances
+  searchInstAudit, importInstances, downloadInstTemplate, exportInstances,
+  searchInstAssociations, searchObjectAssociations, searchAssociationTypes,
+  createInstAssociation, deleteInstAssociation
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -250,7 +320,157 @@ async function loadAudit() {
 
 watch(detailTab, (v) => {
   if (v === 'history' && !auditRows.value.length && !auditLoading.value) loadAudit()
+  if (v === 'assoc' && !assocRows.value.length && !assocLoading.value) loadInstAssoc()
 })
+
+// ---------- 关联 tab(老版 general-model 详情 relation 契约) ----------
+const assocView = ref('list')
+const assocRows = ref([])
+const assocLoading = ref(false)
+const assocLocked = computed(() => Boolean(model.value?.bk_ispre))
+const assocDefs = ref([])
+const assocFormVisible = ref(false)
+const assocForm = ref({ kind: null, targetInst: null })
+const assocTargetOptions = ref([])
+const assocTargetLoading = ref(false)
+const assocSaving = ref(false)
+
+function instIdFieldOf(obj) {
+  return obj === 'host' ? 'bk_host_id' : `bk_${obj}_id`
+}
+
+async function loadInstAssoc() {
+  if (!detailInstId.value) return
+  assocLoading.value = true
+  try {
+    // 老版契约:findmany/inst/association/object/{objId}/inst_id/{id}/offset/limit/web
+    // 响应 {association:{src,dst}, instance:{objId:[实例信息]}};src 为本实例作为源模型
+    const data = await searchInstAssociations(objId.value, detailInstId.value, 0, 200)
+    const payload = data?.data || data || {}
+    const srcList = payload.association?.src || []
+    const dstList = payload.association?.dst || []
+    const instMap = payload.instance || {}
+    let kinds = {}
+    try {
+      const kindRes = await searchAssociationTypes({})
+      kinds = Object.fromEntries((kindRes?.info || kindRes || []).map((k) => [k.bk_asst_id, k.bk_asst_name]))
+    } catch { kinds = {} }
+    const peerName = (obj, instId) => {
+      const list = instMap[obj] || []
+      const idField = instIdFieldOf(obj)
+      const hit = list.find((x) => Number(x[idField] ?? x.bk_inst_id) === Number(instId))
+      return hit ? (hit.bk_inst_name || hit.bk_host_innerip || instId) : instId
+    }
+    const peerObjName = (obj) => {
+      const list = instMap[obj] || []
+      return list[0]?.bk_obj_name || obj
+    }
+    const rows = []
+    for (const item of srcList) {
+      rows.push({
+        __dir: 'src', __key: `s-${item.id}`, id: item.id,
+        __kindName: kinds[item.bk_asst_id] || item.bk_asst_id,
+        __peerObj: item.bk_asst_obj_id, __peerObjName: peerObjName(item.bk_asst_obj_id),
+        __peerName: peerName(item.bk_asst_obj_id, item.bk_asst_inst_id),
+        __peerInst: item.bk_asst_inst_id
+      })
+    }
+    for (const item of dstList) {
+      rows.push({
+        __dir: 'dst', __key: `d-${item.id}`, id: item.id,
+        __kindName: kinds[item.bk_asst_id] || item.bk_asst_id,
+        __peerObj: item.bk_obj_id, __peerObjName: peerObjName(item.bk_obj_id),
+        __peerName: peerName(item.bk_obj_id, item.bk_inst_id),
+        __peerInst: item.bk_inst_id
+      })
+    }
+    assocRows.value = rows
+    // 可选关联定义:本模型为源(asst 方向)或为目标的反向关联
+    let defs = []
+    try {
+      const [asSrc, asDst] = await Promise.all([
+        searchObjectAssociations({ condition: { bk_obj_id: objId.value } }).catch(() => ({ info: [] })),
+        searchObjectAssociations({ condition: { bk_asst_obj_id: objId.value } }).catch(() => ({ info: [] }))
+      ])
+      for (const d of (asSrc?.info || [])) {
+        defs.push({ __key: `src-${d.id}`, __dir: 'src', def: d, bkAsstId: d.bk_asst_id, peerObj: d.bk_asst_obj_id, kindName: kinds[d.bk_asst_id] || d.bk_asst_id, peerObjName: d.bk_asst_obj_id })
+      }
+      for (const d of (asDst?.info || [])) {
+        defs.push({ __key: `dst-${d.id}`, __dir: 'dst', def: d, bkAsstId: d.bk_asst_id, peerObj: d.bk_obj_id, kindName: kinds[d.bk_asst_id] || d.bk_asst_id, peerObjName: d.bk_obj_id })
+      }
+    } catch { defs = [] }
+    assocDefs.value = defs
+  } catch {
+    assocRows.value = []
+  } finally {
+    assocLoading.value = false
+  }
+}
+
+const assocTopoGroups = computed(() => {
+  const byObj = new Map()
+  for (const row of assocRows.value) {
+    if (!byObj.has(row.__peerObj)) byObj.set(row.__peerObj, [])
+    byObj.get(row.__peerObj).push(row)
+  }
+  return [...byObj.entries()].map(([obj, items]) => ({ objId: obj, objName: items[0].__peerObjName, items }))
+})
+
+async function searchAssocTargets(keyword) {
+  const kind = assocForm.value.kind
+  if (!kind?.peerObj) return
+  assocTargetLoading.value = true
+  try {
+    const condition = keyword ? { bk_inst_name: { $regex: keyword }, bk_supplier_account: 0 } : { bk_supplier_account: 0 }
+    const data = await searchInstances(kind.peerObj, {
+      condition, page: { start: 0, limit: 50 }
+    })
+    const idField = instIdFieldOf(kind.peerObj)
+    assocTargetOptions.value = (data?.info || []).map((row) => ({
+      id: row[idField] ?? row.bk_inst_id,
+      name: row.bk_inst_name || row.bk_host_innerip || row[idField]
+    }))
+  } catch {
+    assocTargetOptions.value = []
+  } finally {
+    assocTargetLoading.value = false
+  }
+}
+
+async function submitAssoc() {
+  const kind = assocForm.value.kind
+  if (!kind) { ElMessage.warning('请选择关联类型'); return }
+  if (!assocForm.value.targetInst) { ElMessage.warning('请选择目标实例'); return }
+  assocSaving.value = true
+  try {
+    // 老版契约:create/instassociation 以关联定义别名 bk_obj_asst_id 定位(dst 方向源/目标互换)
+    if (kind.__dir === 'src') {
+      await createInstAssociation({
+        bk_obj_asst_id: kind.def.bk_obj_asst_id,
+        bk_inst_id: detailInstId.value, bk_asst_inst_id: assocForm.value.targetInst
+      })
+    } else {
+      await createInstAssociation({
+        bk_obj_asst_id: kind.def.bk_obj_asst_id,
+        bk_inst_id: assocForm.value.targetInst, bk_asst_inst_id: detailInstId.value
+      })
+    }
+    ElMessage.success('关联已创建')
+    assocFormVisible.value = false
+    assocForm.value = { kind: null, targetInst: null }
+    loadInstAssoc()
+  } catch { /* http 层已提示 */ } finally {
+    assocSaving.value = false
+  }
+}
+
+async function removeAssoc(row) {
+  await ElMessageBox.confirm('确定取消该关联?', '取消确认', { type: 'warning' })
+  // 老版契约:delete/instassociation/{objId}/{assoId},objId 为本模型
+  await deleteInstAssociation(objId.value, row.id)
+  ElMessage.success('已取消关联')
+  loadInstAssoc()
+}
 
 // 展示列:候选为全部非系统字段,按用户勾选(默认前 6 个,localStorage 持久化)
 const colPool = computed(() => attrs.value
@@ -564,4 +784,15 @@ onMounted(async () => {
 .selected-info { color: #979BA5; }
 .import-toolbar { display: flex; align-items: center; gap: 8px; }
 .col-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; }
+
+/* 关联 tab */
+.assoc-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.assoc-topo { min-height: 120px; }
+.assoc-topo-group { margin-bottom: 12px; }
+.assoc-topo-title { font-size: 12px; color: #979BA5; margin-bottom: 6px; }
+.assoc-topo-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
+.assoc-topo-node {
+  display: inline-block; padding: 2px 10px; font-size: 12px; color: #63656E;
+  background: #F0F1F5; border: 1px solid #DCDEE5; border-radius: 2px;
+}
 </style>

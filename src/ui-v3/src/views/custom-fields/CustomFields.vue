@@ -45,6 +45,8 @@
           <span class="group-name">{{ group.info.bk_group_name }}（ {{ group.properties.length }} ）</span>
 
           <div class="group-actions" @click.stop>
+            <el-button link size="small" :disabled="groupIndex === 0" @click="moveGroup(groupIndex, -1)">上移</el-button>
+            <el-button link size="small" :disabled="groupIndex === groupedProperties.length - 1" @click="moveGroup(groupIndex, 1)">下移</el-button>
             <el-button link size="small" :disabled="!isEditableGroup(group.info) || group.info.bk_isdefault" @click="handleEditGroup(group)">编辑分组</el-button>
             <el-button link size="small" type="danger" :disabled="!isEditableGroup(group.info) || group.info.bk_isdefault" @click="handleDeleteGroup(group, groupIndex)">删除分组</el-button>
           </div>
@@ -67,6 +69,17 @@
                 <div class="field-id">{{ property.bk_property_id }}</div>
               </div>
               <div class="card-actions" @click.stop>
+                <el-dropdown trigger="click" @command="(gid) => moveField(group, property, gid)">
+                  <el-button link size="small" :disabled="!isEditableField(property, false)">移动</el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        v-for="g in groupedProperties.filter((x) => x.info.bk_group_id !== group.info.bk_group_id)"
+                        :key="g.info.bk_group_id" :command="g.info.bk_group_id"
+                      >{{ g.info.bk_group_name }}</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
                 <el-button link size="small" :disabled="!isEditableField(property, false)" @click="handleEditField(group, property)">编辑</el-button>
                 <el-button link size="small" type="danger" :disabled="!isEditableField(property) || property.ispre" @click="handleDeleteField({ property, groupIndex, fieldIndex })">删除</el-button>
               </div>
@@ -165,7 +178,9 @@ import {
   searchFieldGroups,
   createFieldGroup,
   updateFieldGroup,
-  deleteFieldGroup
+  deleteFieldGroup,
+  updateAttributeSort,
+  switchFieldGroupIndex
 } from '../../api/cmdb'
 import PreviewField from './PreviewField.vue'
 import FieldDetailForm from './FieldDetailForm.vue'
@@ -250,6 +265,33 @@ async function loadGroups() {
   } catch (e) {
     groups.value = []
   }
+}
+
+// 老版契约:分组排序走 update/objectattgroup/groupindex(condition.id 恰好两个)
+async function moveGroup(groupIndex, delta) {
+  const a = groupedProperties.value[groupIndex]
+  const b = groupedProperties.value[groupIndex + delta]
+  if (!a || !b) return
+  try {
+    await switchFieldGroupIndex({ condition: { id: [a.info.id, b.info.id] } })
+    const list = groupedProperties.value
+    list.splice(groupIndex, 1, b)
+    list.splice(groupIndex + delta, 1, a)
+    ElMessage.success('分组顺序已调整')
+  } catch (e) { ElMessage.error('调整分组顺序失败: ' + (e?.message || '后端异常')) }
+}
+
+// 老版契约:字段跨组移动走 update/objectattr/index/{objId}/{propertyId}(分组+序号一并提交)
+async function moveField(group, property, targetGroupId) {
+  try {
+    const targetGroup = groupedProperties.value.find((g) => g.info.bk_group_id === targetGroupId)
+    await updateAttributeSort(tab.value, property.id, {
+      bk_property_group: targetGroupId,
+      bk_property_index: (targetGroup?.properties.length || 0) + 1
+    })
+    ElMessage.success(`已移动到「${targetGroup?.info.bk_group_name || targetGroupId}」`)
+    await loadProperties()
+  } catch (e) { ElMessage.error('移动失败: ' + (e?.message || '后端异常')) }
 }
 
 async function loadProperties() {

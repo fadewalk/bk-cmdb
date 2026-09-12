@@ -135,11 +135,27 @@
       </div>
       <el-divider />
       <el-select v-model="newBindModelId" filterable style="width: 100%" placeholder="选择要绑定的模型">
-        <el-option v-for="m in bindableModels" :key="m.id" :label="`${m.bk_obj_name || m.bk_obj_id} (${m.bk_obj_id})`" :value="m.id" />
+        <el-option v-for="m in bindableModels" :key="m.id" :label="`${m.bk_obj_name || m.bk_obj_id} (${m.bk_obj_id})${m.bk_ispaused ? ' 已停用' : ''}`" :value="m.id" :disabled="m.bk_ispaused" />
       </el-select>
+      <div v-if="newBindModelId" v-loading="bindDiffLoading" class="bind-diff">
+        <template v-if="bindDiff">
+          <div class="bind-diff-title">差异预览</div>
+          <template v-if="bindDiff.attr">
+            <div>字段:<span class="diff-add">新增 {{ bindDiff.attr.created }}</span>
+              <span class="diff-upd">更新 {{ bindDiff.attr.updated }}</span>
+              <span :class="bindDiff.attr.conflicts ? 'diff-conflict' : ''">冲突 {{ bindDiff.attr.conflicts }}</span></div>
+          </template>
+          <template v-if="bindDiff.unique">
+            <div>唯一校验:<span class="diff-add">新增 {{ bindDiff.unique.created }}</span>
+              <span class="diff-upd">更新 {{ bindDiff.unique.updated }}</span>
+              <span :class="bindDiff.unique.conflicts ? 'diff-conflict' : ''">冲突 {{ bindDiff.unique.conflicts }}</span></div>
+          </template>
+          <div v-if="hasBindConflict" class="diff-conflict">模型存在冲突,无法提交</div>
+        </template>
+      </div>
       <template #footer>
         <button class="bk-button" @click="bindVisible = false">取消</button>
-        <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="saving || !newBindModelId" @click="doBind">绑定</button>
+        <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="saving || !newBindModelId || hasBindConflict" @click="doBind">绑定</button>
       </template>
     </el-dialog>
   </div>
@@ -148,14 +164,15 @@
 <script setup>
 // 字段组合模板列表页:按旧版 src/ui/src/views/field-template/index.vue 复刻
 // 新建/编辑进入两步向导路由(create/basic → create/field-settings)
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchFieldTemplates, getFieldTemplate, searchFieldTemplateAttributes, countFieldTemplateAttributes,
   searchFieldTemplateUniques, searchFieldTemplateModels,
   cloneFieldTemplate, deleteFieldTemplate, bindFieldTemplateModels, unbindFieldTemplateModel,
-  syncFieldTemplateToModels, searchModels
+  syncFieldTemplateToModels, searchModels,
+  compareFieldTemplateAttributes, compareFieldTemplateUniques, getFieldTemplateTaskStatus
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -188,6 +205,51 @@ const boundModels = ref([])
 const newBindModelId = ref(null)
 
 const bindableModels = computed(() => modelList.value.filter((m) => !boundModels.value.some((b) => String(b.bk_obj_id || b.id) === String(m.bk_obj_id || m.id))))
+// 老版 bind-model:停用模型过滤(不可选)
+const pausedFiltered = computed(() => bindableModels.value.filter((m) => !m.bk_ispaused))
+const bindDiff = ref(null)
+const bindDiffLoading = ref(false)
+const hasBindConflict = computed(() => Boolean(bindDiff.value && ((bindDiff.value.attr?.conflicts || 0) > 0 || (bindDiff.value.unique?.conflicts || 0) > 0)))
+
+// 老版第三步 diff 契约:attribute/unique difference 按选中模型预览新增/更新/冲突
+async function loadBindDiff(modelId) {
+  bindDiffLoading.value = true
+  bindDiff.value = null
+  try {
+    const tplId = bindTarget.value.id
+    const [attrs, uniques] = await Promise.all([searchFieldTemplateAttributes(tplId), searchFieldTemplateUniques(tplId)])
+    const [attrDiff, uniqueDiff] = await Promise.all([
+      compareFieldTemplateAttributes({ bk_template_id: tplId, object_id: modelId, attributes: attrs?.info || attrs || [] }),
+      compareFieldTemplateUniques({ bk_template_id: tplId, object_id: modelId, uniques: uniques?.info || uniques || [] })
+    ])
+    const summarize = (res) => {
+      const d = res?.data || res || {}
+      const count = (v) => Array.isArray(v) ? v.length : (typeof v === 'number' ? v : 0)
+      return {
+        created: count(d.created ?? d.create ?? d.createds),
+        updated: count(d.updated ?? d.update ?? d.changed),
+        conflicts: count(d.conflict ?? d.conflicts ?? d.conflicted)
+      }
+    }
+    bindDiff.value = { attr: summarize(attrDiff), unique: summarize(uniqueDiff) }
+  } catch { bindDiff.value = { attr: null, unique: null } } finally { bindDiffLoading.value = false }
+}
+
+async function pollSyncTasks(taskIds) {
+  // 老版 sync-results:轮询 find/field_template/tasks_status 直到全部结束
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      const res = await getFieldTemplateTaskStatus({ task_ids: taskIds })
+      const rows = res?.data?.info || res?.data || res?.info || []
+      const list = Array.isArray(rows) ? rows : []
+      if (list.length && list.every((t) => t.status === 'finished' || t.status === 'success' || t.status === 'failed')) {
+        return list
+      }
+    } catch { return null }
+  }
+  return null
+}
 
 function goCreate() {
   router.push('/model/field-template/create/basic')
@@ -269,6 +331,8 @@ async function removeTpl(row) {
   await ElMessageBox.confirm(`确定删除字段组合模板「${row.name}」?`, '删除确认', { type: 'warning' })
   try { await deleteFieldTemplate(row.id); ElMessage.success('删除成功'); await load() } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
 }
+watch(newBindModelId, (id) => { if (id) loadBindDiff(id) })
+
 async function openBindDialog(row) {
   if (!row) return
   bindTarget.value = row
@@ -279,11 +343,26 @@ async function openBindDialog(row) {
 }
 async function doBind() {
   if (!newBindModelId.value) return
+  const newModelId = newBindModelId.value
   saving.value = true
   try {
     await bindFieldTemplateModels(bindTarget.value.id, [...boundModels.value.map((m) => m.bk_obj_id || m.id), newBindModelId.value])
     ElMessage.success('绑定成功')
     newBindModelId.value = null
+    try {
+      await ElMessageBox.confirm('绑定成功,是否立即同步模板字段到该模型?', '同步确认', { type: 'info', confirmButtonText: '立即同步', cancelButtonText: '稍后' })
+      syncing.value = true
+      const res = await syncFieldTemplateToModels({ bk_template_id: bindTarget.value.id, object_ids: [String(newModelId)] })
+      const taskIds = res?.task_ids || res?.data?.task_ids || []
+      const finished = taskIds.length ? await pollSyncTasks(taskIds) : null
+      if (finished) {
+        const failed = finished.filter((t) => t.status === 'failed')
+        if (failed.length) ElMessage.error(`同步完成,${failed.length} 个任务失败`)
+        else ElMessage.success('同步完成')
+      } else {
+        ElMessage.info('同步任务已提交,可在详情页查看状态')
+      }
+    } catch { /* 用户选择稍后或同步失败已提示 */ } finally { syncing.value = false }
     await openBindDialog(bindTarget.value)
     await load()
     if (detail.value?.id === bindTarget.value.id) await loadDetailData(detail.value.id)
@@ -302,7 +381,20 @@ async function unbindModel(model) {
 async function syncModels() {
   if (!detail.value?.id || !detailModels.value.length) return
   syncing.value = true
-  try { await syncFieldTemplateToModels({ bk_template_id: detail.value.id, object_ids: detailModels.value.map((m) => m.bk_obj_id || m.id) }); ElMessage.success('同步任务已提交') } catch (e) { ElMessage.error('同步失败: ' + (e?.message || '后端异常')) } finally { syncing.value = false }
+  try {
+    const res = await syncFieldTemplateToModels({ bk_template_id: detail.value.id, object_ids: detailModels.value.map((m) => m.bk_obj_id || m.id) })
+    const taskIds = res?.task_ids || res?.data?.task_ids || []
+    if (!taskIds.length) { ElMessage.success('同步任务已提交'); return }
+    ElMessage.info('同步任务已提交,正在查询结果...')
+    const finished = await pollSyncTasks(taskIds)
+    if (finished) {
+      const failed = finished.filter((t) => t.status === 'failed')
+      if (failed.length) ElMessage.error(`同步完成,${failed.length} 个任务失败`)
+      else ElMessage.success('同步完成')
+    } else {
+      ElMessage.info('任务仍在执行,请稍后刷新查看')
+    }
+  } catch (e) { ElMessage.error('同步失败: ' + (e?.message || '后端异常')) } finally { syncing.value = false }
 }
 
 onMounted(async () => {
@@ -371,4 +463,10 @@ onMounted(async () => {
 .label-top {
   vertical-align: top;
 }
+
+.bind-diff { margin-top: 10px; font-size: 12px; color: #63656E; }
+.bind-diff-title { font-weight: bold; margin-bottom: 4px; }
+.bind-diff .diff-add { color: #2DCB56; margin-right: 10px; }
+.bind-diff .diff-upd { color: #3A84FF; margin-right: 10px; }
+.bind-diff .diff-conflict { color: #EA3636; }
 </style>

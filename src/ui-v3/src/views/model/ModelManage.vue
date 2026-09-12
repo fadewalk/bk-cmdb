@@ -252,7 +252,20 @@
           <el-table-column prop="bk_obj_id" label="模型标识" min-width="140" />
           <el-table-column prop="bk_obj_name" label="模型名称" min-width="140" />
         </el-table>
-        <p v-if="parsedAssts.length" class="section-hint" style="margin-top: 10px">关联关系:{{ parsedAssts.map((a) => a.bk_asst_id || a.name).join('、') }}</p>
+        <div v-if="parsedAssts.length" class="asst-conflicts" style="margin-top: 10px">
+          <p class="section-hint">关联关系(已存在的关联类型选择处理方式,默认跳过):</p>
+          <el-table :data="parsedAssts" size="small" border max-height="180">
+            <el-table-column prop="bk_asst_id" label="关联类型标识" min-width="140" />
+            <el-table-column label="处理方式" width="180">
+              <template #default="{ row }">
+                <el-radio-group v-model="row.__conflictAction" size="small">
+                  <el-radio value="cover">覆盖</el-radio>
+                  <el-radio value="skip">跳过</el-radio>
+                </el-radio-group>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
         <div class="step-actions">
           <button class="bk-button" @click="importStep = 2">上一步</button>
           <button class="bk-button bk-primary" style="margin-left: 10px" :disabled="importing || !parsedObjects.some((o) => o.__selected)" @click="doImport">确认导入</button>
@@ -584,7 +597,7 @@ async function analyzeImport() {
     }
     const data = res || {}
     parsedObjects.value = (data.import_object || []).map((o) => ({ ...o, __selected: true }))
-    parsedAssts.value = data.import_asst || []
+    parsedAssts.value = (data.import_asst || []).map((a) => ({ ...a, __conflictAction: 'skip' }))
     if (!parsedObjects.value.length) {
       ElMessage.warning('解析结果为空,请确认文件格式')
       return
@@ -603,7 +616,7 @@ async function doImport() {
   try {
     await importModels({
       import_object: selected,
-      import_asst: parsedAssts.value
+      import_asst: parsedAssts.value.filter((a) => a.__conflictAction !== 'skip')
     })
     importResult.value = { success: true, message: `已提交导入 ${selected.length} 个模型` }
     ElMessage.success('导入成功')

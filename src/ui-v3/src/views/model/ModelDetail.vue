@@ -117,7 +117,11 @@
       <!-- 唯一校验 -->
       <template v-if="tab === 'unique'">
         <div class="toolbar">
-          <el-button type="primary" @click="openUniqueDialog()">新建唯一校验</el-button>
+          <el-tooltip :disabled="!uniqueCreateLocked" content="主线模型不支持新建唯一校验">
+            <span>
+              <el-button type="primary" :disabled="uniqueCreateLocked" @click="openUniqueDialog()">新建唯一校验</el-button>
+            </span>
+          </el-tooltip>
           <div class="spacer" />
         </div>
         <el-table :data="uniques" size="small" v-loading="uniqueLoading">
@@ -130,10 +134,21 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
+          <el-table-column label="来源" width="90">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openUniqueDialog(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="removeUnique(row)">删除</el-button>
+              <el-tag v-if="row.bk_template_id" size="small" type="info">模板</el-tag>
+              <span v-else>--</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="viewUnique(row)">查看</el-button>
+              <el-tooltip :disabled="!isUniqueLocked(row)" content="内置/模板下发规则不可编辑删除" placement="top">
+                <span>
+                  <el-button link type="primary" size="small" :disabled="isUniqueLocked(row)" @click="openUniqueDialog(row)">编辑</el-button>
+                  <el-button link type="danger" size="small" :disabled="isUniqueLocked(row)" @click="removeUnique(row)">删除</el-button>
+                </span>
+              </el-tooltip>
             </template>
           </el-table-column>
         </el-table>
@@ -221,6 +236,20 @@
       </template>
     </el-dialog>
   </div>
+    <!-- 只读"查看校验"详情(老版 verification slider) -->
+    <el-dialog v-model="uniqueViewVisible" title="查看校验" width="420px" append-to-body>
+      <el-descriptions v-if="uniqueViewRow" :column="1" border size="small">
+        <el-descriptions-item label="ID">{{ uniqueViewRow.id }}</el-descriptions-item>
+        <el-descriptions-item label="校验类型">{{ (uniqueViewRow.keys || []).length > 1 ? '联合唯一' : '单独唯一' }}</el-descriptions-item>
+        <el-descriptions-item label="约束字段">
+          <el-tag v-for="k in uniqueViewRow.keys || []" :key="k.key_id" size="small" style="margin-right: 6px">
+            {{ propName(k.key_id) }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="是否必须校验">{{ uniqueViewRow.must_check ? '是' : '否' }}</el-descriptions-item>
+        <el-descriptions-item label="来源">{{ uniqueViewRow.bk_template_id ? '字段模板下发' : '手动创建' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
 </template>
 
 <script setup>
@@ -528,6 +557,20 @@ async function onGroupCmd(cmd, g) {
 }
 
 // ---- 唯一校验 ----
+// 老版内置保护(verification.vue):模板下发(bk_template_id)与内置(ispre)规则不可编辑删除;
+// 主线模型(除 host)不提供新建入口
+const MAINLINE_OBJ_IDS = ['biz', 'set', 'module', 'host', 'process', 'service_instance', 'plat']
+const uniqueCreateLocked = computed(() => MAINLINE_OBJ_IDS.includes(objId.value) && objId.value !== 'host')
+function isUniqueLocked(row) {
+  return Boolean(row.ispre || row.bk_template_id)
+}
+const uniqueViewRow = ref(null)
+const uniqueViewVisible = ref(false)
+function viewUnique(row) {
+  uniqueViewRow.value = row
+  uniqueViewVisible.value = true
+}
+
 function openUniqueDialog(row) {
   if (row) {
     uniqueForm.value = {
