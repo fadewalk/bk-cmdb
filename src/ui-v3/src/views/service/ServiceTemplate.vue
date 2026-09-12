@@ -65,7 +65,7 @@
           <template #default="{ row }">{{ row.modifier || row.creator || '-' }}</template>
         </el-table-column>
         <el-table-column label="修改时间" width="160" sortable prop="last_time">
-          <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 16) }}</template>
+          <template #default="{ row }">{{ formatTime(row.last_time, 'YYYY-MM-DD HH:mm') }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
@@ -109,19 +109,23 @@
           </template>
         </el-table-column>
         <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip sortable />
-        <el-table-column prop="apply_count" label="应用数量" width="110" sortable>
-          <template #default="{ row }">{{ row.apply_count ?? 0 }}</template>
+        <el-table-column prop="set_instance_count" label="应用数量" width="110" sortable>
+          <template #default="{ row }">{{ row.set_instance_count ?? 0 }}</template>
         </el-table-column>
         <el-table-column prop="modifier" label="修改人" width="130" sortable>
           <template #default="{ row }">{{ row.modifier || row.creator || '--' }}</template>
         </el-table-column>
         <el-table-column label="修改时间" width="170" sortable prop="last_time">
-          <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
+          <template #default="{ row }">{{ formatTime(row.last_time, 'YYYY-MM-DD HH:mm') || '--' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openSetTplDetail(row)">详情</el-button>
-            <el-button link type="danger" @click.stop="removeSetTpl(row)">删除</el-button>
+            <!-- 旧版契约:已应用到集群(set_instance_count>0)时删除置灰不可点,tooltip 不可删除 -->
+            <el-tooltip v-if="(row.set_instance_count ?? 0) > 0" content="不可删除" placement="top">
+              <el-button link disabled>删除</el-button>
+            </el-tooltip>
+            <el-button v-else link type="danger" @click.stop="removeSetTpl(row)">删除</el-button>
           </template>
         </el-table-column>
         <template #empty>
@@ -167,10 +171,10 @@
           </el-descriptions-item>
           <el-descriptions-item label="创建人">{{ setDetail.creator || setDetail.bk_created_by || '--' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">
-            {{ (setDetail.create_time || setDetail.bk_created_at || '').replace('T', ' ').slice(0, 19) || '--' }}
+            {{ formatTime(setDetail.create_time || setDetail.bk_created_at, 'YYYY-MM-DD HH:mm:ss') || '--' }}
           </el-descriptions-item>
           <el-descriptions-item label="最近更新">
-            {{ (setDetail.last_time || setDetail.bk_updated_at || '').replace('T', ' ').slice(0, 19) || '--' }}
+            {{ formatTime(setDetail.last_time || setDetail.bk_updated_at, 'YYYY-MM-DD HH:mm:ss') || '--' }}
           </el-descriptions-item>
         </el-descriptions>
         <el-divider>同步状态</el-divider>
@@ -258,7 +262,7 @@
             </template>
           </el-table-column>
           <el-table-column label="最近同步" width="170">
-            <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '--' }}</template>
+            <template #default="{ row }">{{ formatTime(row.last_time) || '--' }}</template>
           </el-table-column>
           <el-table-column label="失败原因" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">{{ row.fail_tips || '--' }}</template>
@@ -315,6 +319,7 @@ import {
   searchModelAttributes
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
+import { formatTime } from '../../utils/format-time'
 
 const route = useRoute()
 const router = useRouter()
@@ -681,8 +686,12 @@ async function loadSetTemplateHistory(row) {
 async function loadSetTemplates() {
   setLoading.value = true
   try {
-    const data = await searchSetTemplates(bizId.value, { start: 0, limit: 200 })
-    setTemplates.value = data?.info || []
+    // 旧版契约:列表项为 {set_instance_count, set_template:{...}} 嵌套形态,需展平;默认服务端按 -last_time 排序
+    const data = await searchSetTemplates(bizId.value, { start: 0, limit: 200, sort: '-last_time' })
+    setTemplates.value = (data?.info || []).map((item) => ({
+      set_instance_count: item.set_instance_count,
+      ...item.set_template
+    }))
   } finally { setLoading.value = false }
 }
 
@@ -724,7 +733,8 @@ async function loadSyncStatus() {
     svcSyncIds.value = new Set()
   }
   if (setTemplates.value.length) {
-    const resp = await http.post(`/findmany/topo/set_template_sync_status/bk_biz_id/${bizId.value}`, {
+    // 旧版契约:集群模板待同步状态走 set_template_status(入参 set_template_ids,返回项含 set_template_id/need_sync)
+    const resp = await searchSetTemplateStatus(bizId.value, {
       set_template_ids: setTemplates.value.map((r) => r.id)
     }).catch(() => [])
     setSyncIds.value = new Set((resp || []).filter((s) => s.need_sync).map((s) => s.set_template_id))
