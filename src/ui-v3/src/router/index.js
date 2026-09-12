@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import StatusError from './StatusError'
 
 // web_server 的 NoRoute 会 302 到 /#/404,因此前端必须使用 hash 路由
 // 路由结构与旧版菜单(dictionary/menu.js)一一对应
@@ -142,61 +143,154 @@ const router = createRouter({
         { path: 'host-detail', name: 'HostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } }
       ]
     },
-    { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') }
+    { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') },
+    // 状态路由(老版 status/ 同名独立页,无导航壳)
+    { path: '/error', name: 'Error', component: () => import('../views/status/ErrorStatus.vue'), meta: { title: '服务异常' } },
+    { path: '/no-business', name: 'NoBusiness', component: () => import('../views/status/NoBusiness.vue'), meta: { title: '无业务权限' } }
   ]
 })
 
-// 旧版 business-interceptor 复刻(router/business-interceptor.js):
+// 旧版 business-interceptor + checkViewAuthorize 复刻(router/business-interceptor.js + router/index.js beforeEach):
 // 1. 业务视图之间切换业务 → 整页刷新,保证所有页面状态重置(老版即此行为)
-// 2. 平铺旧路径 → 补齐业务 ID(?biz= 优先,其次上次选择 selectedBusiness,再次首个业务)后重定向到规范路由
-// 3. 规范业务路由 → 同步当前业务到 biz store 与 localStorage(老版同名 key selectedBusiness)
+// 2. 平铺旧路径 → 补齐业务 ID(?biz= 优先,其次上次选择 selectedBusiness,再次首个业务)后重定向;
+//    无任何业务 → /no-business(老版 403 态,不得渲染空表)
+// 3. 规范业务路由 → bizId 规范化(非法值回填),业务不存在 → 原位 permission 视图(URL 保留)
+// 4. meta.auth.view/superView → auth/verify 校验;失败按老版语义降级(superView 失败整页 permission)
+// 5. 守卫异常:StatusError → 状态路由;其余错误 → meta.view='error' 原位错误页,URL 保留
 router.beforeEach(async (to, from) => {
-  // 平台管理沿用旧版 configAdmin.update 可见性;菜单隐藏不能替代直接 URL 的路由保护
-  if (to.path.startsWith('/platform/')) {
-    const { usePermissionStore } = await import('../stores/permission')
-    const permissionStore = usePermissionStore()
-    await permissionStore.ensureLoaded()
-    if (!permissionStore.canPlatformManage) return '/index'
-  }
-  // 转移确认页标题随类型变化(老版语义)
-  if (to.name === 'HostTransfer') {
-    to.meta.title = ({
-      idle: '转移到空闲模块', business: '转移到业务模块', remove: '移除主机', increment: '追加主机', add: '添加主机'
-    })[to.params.type] || '主机转移'
-  }
-  const isBizView = (location) => location.path.startsWith('/business/')
-  const toBizId = Number(to.params.bizId)
-  const fromBizId = Number(from.params.bizId)
+  // 进入新路由时重置上一轮可能残留的状态视图标记(老版 reset view 语义)
+  delete to.meta.view
+  delete to.meta.extra
+  let bizStore = null
 
-  if (Number.isFinite(toBizId) && Number.isFinite(fromBizId) && toBizId !== fromBizId
-    && isBizView(from) && isBizView(to)) {
-    window.location.hash = `#${to.fullPath}`
-    window.location.reload()
-    return false
-  }
+  try {
+    // 平台管理沿用旧版 configAdmin.update 可见性;菜单隐藏不能替代直接 URL 的路由保护
+    if (to.path.startsWith('/platform/')) {
+      const { usePermissionStore } = await import('../stores/permission')
+      const permissionStore = usePermissionStore()
+      await permissionStore.ensureLoaded()
+      if (!permissionStore.canPlatformManage) return '/index'
+    }
+    // 转移确认页标题随类型变化(老版语义)
+    if (to.name === 'HostTransfer') {
+      to.meta.title = ({
+        idle: '转移到空闲模块', business: '转移到业务模块', remove: '移除主机', increment: '追加主机', add: '添加主机'
+      })[to.params.type] || '主机转移'
+    }
 
-  if (to.meta.legacyFlat) {
-    const { useBizStore } = await import('../stores/biz')
-    const bizStore = useBizStore()
-    let bizId = Number(to.query.biz)
-    if (!Number.isFinite(bizId) || !bizId) bizId = Number(localStorage.getItem('selectedBusiness'))
-    if (!Number.isFinite(bizId) || !bizId) {
+    const isBizView = (location) => location.path.startsWith('/business/')
+    const toBizId = Number(to.params.bizId)
+    const fromBizId = Number(from.params.bizId)
+
+    // 业务视图统一走业务 store(biz 列表同时用于不存在校验)
+    if (isBizView(to) || to.path.startsWith('/biz-set') || to.path.startsWith('/business-set')) {
+      const { useBizStore } = await import('../stores/biz')
+      bizStore = useBizStore()
       try {
         await bizStore.ensureLoaded()
-      } catch { /* 业务列表加载失败时按原路径进入,由页面空态兜底 */ }
-      bizId = bizStore.bizId
+      } catch {
+        // 业务列表加载失败:老版语义为原位 error 视图且 URL 保留
+        to.meta.view = 'error'
+        return true
+      }
     }
-    if (!bizId) return true
-    bizStore.select(bizId)
-    return { path: to.meta.legacyFlat.replace(':bizId', String(bizId)), query: withoutBiz(to.query), replace: true }
-  }
 
-  if (Number.isFinite(toBizId) && toBizId && isBizView(to)) {
-    const { useBizStore } = await import('../stores/biz')
-    useBizStore().select(toBizId)
+    // 业务集拓扑:业务集不存在 → 原位 permission(老版 non-exist-business-set 语义)
+    const bizSetId = Number(to.params.bizSetId || to.query.bizSetId)
+    if ((to.path.startsWith('/biz-set') || to.path.startsWith('/business-set')) && bizSetId) {
+      if (!bizStore.bizSetList.some((s) => s.bk_biz_set_id === bizSetId)) {
+        to.meta.view = 'permission'
+        to.meta.extra = { isNotFound: true }
+      }
+    }
+
+    // 规范业务路由 bizId 规范化(仅带 :bizId 参数的路由;平铺旧路径走 legacyFlat 分支):
+    // 非法值按老版 parseInt 语义回填(来源与平铺路径一致),无业务可回填 → /no-business
+    if (isBizView(to) && to.params.bizId !== undefined && (!Number.isFinite(toBizId) || toBizId <= 0)) {
+      let refill = Number(to.query.biz)
+      if (!Number.isFinite(refill) || refill <= 0) refill = Number(localStorage.getItem('selectedBusiness'))
+      if (!Number.isFinite(refill) || refill <= 0) refill = bizStore.bizId
+      if (!refill) return { path: '/no-business' }
+      bizStore.select(refill)
+      const path = to.path.replace(/^\/business\/[^/]+/, `/business/${refill}`)
+      return { path, query: withoutBiz(to.query), replace: true }
+    }
+
+    // 业务不存在(深链到已归档/删除业务)→ 原位 permission 视图,URL 保留(老版 meta.view 语义)
+    if (isBizView(to) && to.params.bizId !== undefined && Number.isFinite(toBizId) && toBizId > 0) {
+      if (!bizStore.bizList.some((b) => b.bk_biz_id === toBizId)) {
+        to.meta.view = 'permission'
+        to.meta.extra = { isNotFound: true }
+        return true
+      }
+      bizStore.select(toBizId)
+    }
+
+    // 业务视图之间切换业务 → 整页刷新(老版行为,保证所有页面状态重置)
+    if (Number.isFinite(toBizId) && Number.isFinite(fromBizId) && toBizId !== fromBizId
+      && isBizView(from) && isBizView(to)) {
+      window.location.hash = `#${to.fullPath}`
+      window.location.reload()
+      return false
+    }
+
+    if (to.meta.legacyFlat) {
+      if (!bizStore) {
+        const { useBizStore } = await import('../stores/biz')
+        bizStore = useBizStore()
+        try {
+          await bizStore.ensureLoaded()
+        } catch { /* 业务列表加载失败时按原路径进入,由页面空态兜底 */ }
+      }
+      let bizId = Number(to.query.biz)
+      if (!Number.isFinite(bizId) || !bizId) bizId = Number(localStorage.getItem('selectedBusiness'))
+      if (!Number.isFinite(bizId) || !bizId) bizId = bizStore.bizId
+      if (!bizId) return { path: '/no-business' }
+      bizStore.select(bizId)
+      return { path: to.meta.legacyFlat.replace(':bizId', String(bizId)), query: withoutBiz(to.query), replace: true }
+    }
+
+    // 老版 checkAvailable/meta.available 映射:返回 false 抛 404 StatusError
+    if (to.meta.checkAvailable && !(await to.meta.checkAvailable(to, from))) {
+      throw new StatusError({ name: '404' })
+    }
+
+    // 老版 checkViewAuthorize 映射:standalone 非 IAM 模式 auth/verify 恒真,IAM 模式下 superView 失败整页 permission
+    if (to.meta.auth && (to.meta.auth.superView || to.meta.auth.view)) {
+      const passed = await verifyViewAuth(to.meta.auth)
+      if (!passed && to.meta.auth.superView) {
+        to.meta.view = 'permission'
+        return true
+      }
+    }
+  } catch (e) {
+    // 老版 catch 语义:StatusError → 状态路由;其余错误 → 原位 error 视图(URL 保留);401 放行由 HTTP 层处理
+    if (e instanceof StatusError) return { name: e.name, query: e.query }
+    if (e?.response?.status !== 401 && e?.status !== 401) {
+      console.error('[router] guard error:', e)
+      to.meta.view = 'error'
+      return true
+    }
   }
   return true
 })
+
+// auth/verify 结果按 auths 摘要缓存,避免每帧重复请求(老版 getViewAuth 有 store 缓存)
+const viewAuthCache = new Map()
+async function verifyViewAuth(auth) {
+  const key = JSON.stringify(auth)
+  if (viewAuthCache.has(key)) return viewAuthCache.get(key)
+  const { default: http } = await import('../api/http')
+  try {
+    const res = await http.post('/auth/verify', { auths: [auth] })
+    viewAuthCache.set(key, res === true)
+    return res === true
+  } catch {
+    // verify 接口不可用时按老版 fail-closed 语义处理
+    viewAuthCache.set(key, false)
+    return false
+  }
+}
 
 router.afterEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} - 蓝鲸配置平台` : '蓝鲸配置平台'

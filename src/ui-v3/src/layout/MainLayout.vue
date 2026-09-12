@@ -5,14 +5,16 @@
       <TheNav v-if="showNav" />
       <div class="app-main">
         <TheBreadcrumbs v-if="showBreadcrumbs" />
-        <router-view />
+        <!-- 老版 dynamic-router-view 语义:meta.view = error|permission 时原位渲染状态视图,URL 保留 -->
+        <component :is="statusView" v-if="statusView" />
+        <router-view v-else />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, defineAsyncComponent, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import TheHeader from './TheHeader.vue'
 import TheNav from './TheNav.vue'
@@ -22,6 +24,12 @@ import { useBizStore } from '../stores/biz'
 
 const route = useRoute()
 const bizStore = useBizStore()
+// meta.view 原位状态视图(error/permission),与老版 injectStatusComponents + dynamic-router-view 对齐
+const statusView = computed(() => {
+  if (route.meta.view === 'error') return defineAsyncComponent(() => import('../views/status/ErrorStatus.vue'))
+  if (route.meta.view === 'permission') return defineAsyncComponent(() => import('../views/status/PermissionStatus.vue'))
+  return null
+})
 const showNav = computed(() => {
   if (isHomeRoute(route)) return false
   return Boolean(resolveMenuByRoute(route))
