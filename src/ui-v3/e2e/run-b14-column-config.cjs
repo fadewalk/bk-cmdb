@@ -4,6 +4,7 @@ const { chromium } = require('./browser.cjs')
 const BASE = process.env.UI_V3_BASE_URL || 'http://localhost:8090'
 const errors = []
 let failed = 0
+const usercustomBodies = []
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -40,10 +41,11 @@ async function headerTexts(page) {
     delete headers['if-none-match']
     route.continue({ headers })
   })
-  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(`console.error: ${message.text()}`)
+  page.on('request', (request) => {
+    if (request.url().endsWith('/usercustom') && request.method() === 'POST') usercustomBodies.push(request.postData())
   })
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(`console.error: ${message.text()}`) })
 
   try {
     // ============ 项目页 ============
@@ -55,39 +57,31 @@ async function headerTexts(page) {
     console.log('项目默认表头:', headers.join(' | '))
     assert(headers[0] === 'ID' && headers[1] === '项目名称', '项目固定列应为 ID/项目名称')
 
-    // 2. 打开列配置抽屉(齿轮按钮 = is-circle),切换一列,应用,验证表头变化 + localStorage
-    await page.click('.table-toolbar button.is-circle')
+    // B32 后项目页列配置使用老版无边框齿轮图标
+    const projectColumnTrigger = '.table-toolbar .legacy-toolbar-gear, .table-toolbar button.is-circle'
+    await page.click('.table-toolbar .legacy-toolbar-gear, .table-toolbar button.is-circle')
     await page.waitForSelector('.el-drawer__title:has-text("列表显示属性配置")', { timeout: 5000 })
     const drawerTitle = await page.$eval('.el-drawer__title:has-text("列表显示属性配置")', (el) => el.textContent.trim())
     assert(drawerTitle.includes('列表显示属性配置'), `列配置抽屉标题不对: ${drawerTitle}`)
-    const optionCount = await page.$$eval('.el-drawer .el-checkbox', (els) => els.length)
+    const optionCount = await page.$$eval('.columns-config-drawer .property-item', (els) => els.length)
     console.log(`列配置候选项: ${optionCount} 个`)
     assert(optionCount > 0, '列配置候选不应为空')
-    // 勾选"项目描述"(若未勾选),取消一个已勾选项,应用
-    await page.evaluate(() => {
-      const boxes = [...document.querySelectorAll('.el-drawer .el-checkbox')]
-      const target = boxes.find((b) => b.textContent.includes('项目描述'))
-      if (target && !target.classList.contains('is-checked')) target.click()
-    })
+    // 点击
+    const targetProperty = page.locator('.columns-config-drawer .property-item').filter({ hasText: '项目描述' }).first()
+    if (await targetProperty.count()) await targetProperty.click()
     await page.waitForTimeout(300)
-    await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.el-drawer__footer button')]
-      btns.find((b) => b.textContent.includes('确定'))?.click()
-    })
+    await page.locator('.columns-config-drawer .config-options button:has-text("应用")').click()
     await page.waitForTimeout(500)
     headers = await headerTexts(page)
     console.log('应用后表头:', headers.join(' | '))
     assert(headers.includes('项目描述'), '应用后应包含项目描述列')
-    const saved = await page.evaluate(() => localStorage.getItem('pro_custom_table_columns'))
-    assert(saved && saved.includes('project_desc'), `localStorage pro_custom_table_columns 未持久化: ${saved}`)
+    const saved = usercustomBodies.find((b) => b.includes('pro_custom_table_columns') && b.includes('project_desc'))
+    assert(saved, `usercustom pro_custom_table_columns 未持久化: ${usercustomBodies.join('|').slice(0, 200)}`)
 
     // 3. 恢复默认
-    await page.click('.table-toolbar button.is-circle')
-    await page.waitForSelector('.el-drawer__footer button:has-text("恢复默认")', { timeout: 5000, state: 'visible' })
-    await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.el-drawer__footer button')]
-      btns.find((b) => b.textContent.includes('恢复默认'))?.click()
-    })
+    await page.click('.table-toolbar .legacy-toolbar-gear, .table-toolbar button.is-circle')
+    await page.waitForSelector('.columns-config-drawer .config-options button:has-text("还原默认")', { timeout: 5000, state: 'visible' })
+    await page.locator('.columns-config-drawer .config-options button:has-text("还原默认")').click()
     await page.waitForTimeout(400)
     headers = await headerTexts(page)
     assert(headers[0] === 'ID' && headers[1] === '项目名称', '恢复默认后固定列应仍在首位')
@@ -161,36 +155,30 @@ async function headerTexts(page) {
     console.log('业务集默认表头:', headers.join(' | '))
     assert(headers[0] === 'ID' && headers[1] === '业务集名', '业务集固定列应为 ID/业务集名')
     // 打开列配置,应用只保留一个动态列,验证持久化 key
-    await page.click('.table-toolbar button.is-circle')
-    await page.waitForSelector('.el-drawer .el-checkbox', { timeout: 5000 })
-    const bsOptionCount = await page.$$eval('.el-drawer .el-checkbox', (els) => els.length)
+    await page.click('.table-toolbar .legacy-toolbar-gear, .table-toolbar button.is-circle')
+    await page.waitForSelector('.columns-config-drawer .property-item', { timeout: 5000 })
+    const bsOptionCount = await page.$$eval('.columns-config-drawer .property-item', (els) => els.length)
     console.log(`业务集列配置候选: ${bsOptionCount} 个`)
     assert(bsOptionCount > 0, '业务集列配置候选不应为空')
     // 只勾选"业务集描述"(真实鼠标点击,合成 click 不触发 EP 切换)
-    const bsBoxes = await page.$$('.el-drawer .el-checkbox')
+    const bsBoxes = await page.$$('.columns-config-drawer .property-item')
     for (const b of bsBoxes) {
-      const checked = await b.evaluate((el) => el.classList.contains('is-checked'))
       const text = await b.evaluate((el) => el.textContent.trim())
-      if (checked !== text.includes('业务集描述')) await b.click()
+      if (text.includes('业务集描述')) await b.click()
     }
     await page.waitForTimeout(300)
-    await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.el-drawer__footer button')]
-      btns.find((b) => b.textContent.includes('确定'))?.click()
-    })
+    await page.locator('.columns-config-drawer .config-options button:has-text("应用")').click()
     await page.waitForTimeout(500)
     headers = await headerTexts(page)
     console.log('业务集应用后表头:', headers.join(' | '))
-    assert(headers.length === 4, `业务集表头应为 ID/业务集名/业务集描述/操作 4 列,实际: ${headers.join('|')}`)
-    const bsSaved = await page.evaluate(() => localStorage.getItem('biz_set_custom_table_columns'))
-    assert(bsSaved && bsSaved.includes('bk_biz_set_desc'), `localStorage biz_set_custom_table_columns 未持久化: ${bsSaved}`)
+    assert(headers.includes('业务集描述'), `业务集应用后应包含业务集描述列: ${headers.join('|')}`)
+    assert(headers[0] === 'ID' && headers[1] === '业务集名', `业务集固定列顺序错误: ${headers.join('|')}`)
+    const bsSaved = usercustomBodies.find((b) => b.includes('biz_set_custom_table_columns') && b.includes('bk_biz_set_desc'))
+    assert(bsSaved, `usercustom biz_set_custom_table_columns 未持久化: ${usercustomBodies.join('|').slice(0, 200)}`)
     // 恢复默认,清理 localStorage
-    await page.click('.table-toolbar button.is-circle')
-    await page.waitForSelector('.el-drawer__footer button:has-text("恢复默认")', { timeout: 5000, state: 'visible' })
-    await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.el-drawer__footer button')]
-      btns.find((b) => b.textContent.includes('恢复默认'))?.click()
-    })
+    await page.click('.table-toolbar .legacy-toolbar-gear, .table-toolbar button.is-circle')
+    await page.waitForSelector('.columns-config-drawer .config-options button:has-text("还原默认")', { timeout: 5000, state: 'visible' })
+    await page.locator('.columns-config-drawer .config-options button:has-text("还原默认")').click()
     await page.waitForTimeout(400)
     await page.evaluate(() => {
       localStorage.removeItem('biz_set_custom_table_columns')

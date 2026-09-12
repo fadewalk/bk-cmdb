@@ -17,8 +17,9 @@
         <a
           v-else
           class="header-link"
-          :class="{ active: isActive(menu) }"
+          :class="{ active: isActive(menu), disabled: menu.id === 'business' && !hasBizId }"
           href="javascript:;"
+          :aria-disabled="menu.id === 'business' && !hasBizId"
           @click="goFirst(menu)"
         >{{ menu.name }}</a>
       </template>
@@ -43,15 +44,19 @@
 </template>
 
 <script setup>
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MENUS, resolveMenuByRoute, menuLinkPath } from './menu-config'
 import { useBizStore } from '../stores/biz'
+import { usePermissionStore } from '../stores/permission'
 
 const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
-const topMenus = MENUS
+const permissionStore = usePermissionStore()
+const topMenus = computed(() => MENUS.filter((menu) => menu.id !== 'platform' || permissionStore.canPlatformManage))
+const hasBizId = computed(() => bizStore.bizId != null)
 
 function isActive(menu) {
   const resolved = resolveMenuByRoute(route)
@@ -59,8 +64,14 @@ function isActive(menu) {
 }
 
 function goFirst(menu) {
+  if (menu.id === 'business' && !hasBizId.value) return
   if (menu.children?.length) router.push(menuLinkPath(menu.children[0], bizStore.bizId))
 }
+
+onMounted(() => {
+  bizStore.ensureLoaded()
+  permissionStore.ensureLoaded()
+})
 
 function onUserCmd(cmd) {
   if (cmd === 'logout') {
@@ -93,6 +104,12 @@ function onUserCmd(cmd) {
   padding: 0 25px; color: #96A2B9; font-size: 14px; text-decoration: none; cursor: pointer;
 }
 .header-link:hover { background-color: rgba(49, 64, 94, 0.5); color: #C2CEE5; }
+.header-link.disabled {
+  color: #636B7E;
+  cursor: not-allowed;
+  opacity: .7;
+}
+.header-link.disabled:hover { background-color: transparent; color: #636B7E; }
 .header-link.active,
 .header-link.router-link-active { background-color: rgba(49, 64, 94, 1); color: #fff; }
 .header-info {

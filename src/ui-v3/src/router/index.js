@@ -151,6 +151,13 @@ const router = createRouter({
 // 2. 平铺旧路径 → 补齐业务 ID(?biz= 优先,其次上次选择 selectedBusiness,再次首个业务)后重定向到规范路由
 // 3. 规范业务路由 → 同步当前业务到 biz store 与 localStorage(老版同名 key selectedBusiness)
 router.beforeEach(async (to, from) => {
+  // 平台管理沿用旧版 configAdmin.update 可见性;菜单隐藏不能替代直接 URL 的路由保护
+  if (to.path.startsWith('/platform/')) {
+    const { usePermissionStore } = await import('../stores/permission')
+    const permissionStore = usePermissionStore()
+    await permissionStore.ensureLoaded()
+    if (!permissionStore.canPlatformManage) return '/index'
+  }
   // 转移确认页标题随类型变化(老版语义)
   if (to.name === 'HostTransfer') {
     to.meta.title = ({

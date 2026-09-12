@@ -54,6 +54,6 @@ const items = [
   { module: '容器管理', desc: 'K8s 集群纳管、Pod 详情(依赖容器数据链路,独立部署与老版一致不可用)', status: 'todo' },
   { module: '主机转移确认页', desc: '老版 host-operation 1:1:已选主机/转移到/变更确认 tabs/预览+执行,业务拓扑入口已接', status: 'done' },
   { module: '主机导入', desc: '.xlsx 客户端真实解析(XLSX 库)+服务端导入/导入编辑(/hosts/import、/hosts/update)全支持', status: 'done' },
-  { module: '菜单结构', desc: '与老版可用菜单逐项比对一致(业务集拓扑组、资源八项、模型四项、平台管理单项)', status: 'done' }
+  { module: '菜单结构', desc: '严格对齐老版最终可见菜单:业务 7 项、资源 4 项(资源目录/管控区域/云账户/云资源发现)、模型 4 项、运营分析 2 项、平台管理 1 项;项目/业务集/业务/主机保留内部路由但不作为资源同级导航', status: 'done' }
 ]
 </script>

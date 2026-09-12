@@ -18,17 +18,27 @@
     </div>
 
     <div class="menu-list">
-      <router-link
-        v-for="child in currentTop?.children || []"
-        :key="child.id"
-        class="menu-item"
-        :class="{ active: isActive(child) }"
-        :to="menuLinkPath(child, bizStore.bizId)"
-        :title="child.name"
-      >
-        <i v-if="child.icon" :class="['bk-cmdb-icon', 'menu-icon', child.icon]" />
-        <span class="menu-name">{{ child.name }}</span>
-      </router-link>
+      <template v-for="child in currentTop?.children || []" :key="child.id">
+        <router-link
+          v-if="canOpenChild(child)"
+          class="menu-item"
+          :class="{ active: isActive(child) }"
+          :to="menuLinkPath(child, bizStore.bizId)"
+          :title="child.name"
+        >
+          <i v-if="child.icon" :class="['bk-cmdb-icon', 'menu-icon', child.icon]" />
+          <span class="menu-name">{{ child.name }}</span>
+        </router-link>
+        <span
+          v-else
+          class="menu-item menu-item-disabled"
+          :title="bizStore.bizId == null ? '请先选择业务' : child.name"
+          aria-disabled="true"
+        >
+          <i v-if="child.icon" :class="['bk-cmdb-icon', 'menu-icon', child.icon]" />
+          <span class="menu-name">{{ child.name }}</span>
+        </span>
+      </template>
     </div>
 
     <div class="nav-option">
@@ -43,22 +53,28 @@
 </template>
 
 <script setup>
-import { computed, ref, onBeforeUnmount } from 'vue'
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveMenuByRoute, menuLinkPath } from './menu-config'
 import { useBizStore } from '../stores/biz'
 import BizMixSelector from '../components/BizMixSelector.vue'
+import { usePermissionStore } from '../stores/permission'
 
 const NAV_STICK_KEY = 'navStick'
 
 const route = useRoute()
 const bizStore = useBizStore()
+const permissionStore = usePermissionStore()
 
 // 旧版 global store 初始语义:navStick 未写入或非 'false' 时视为固定
 const navStick = ref(localStorage.getItem(NAV_STICK_KEY) !== 'false')
 const navFold = ref(navStick.value === 'false')
 
-const currentTop = computed(() => resolveMenuByRoute(route)?.top || null)
+const currentTop = computed(() => {
+  const top = resolveMenuByRoute(route)?.top || null
+  if (top?.id === 'platform' && !permissionStore.canPlatformManage) return null
+  return top
+})
 const currentChild = computed(() => resolveMenuByRoute(route)?.child || null)
 const unfold = computed(() => navStick.value || !navFold.value)
 
@@ -67,6 +83,10 @@ const selectedId = computed(() => (bizStore.bizId == null ? '' : `${bizStore.biz
 
 function isActive(child) {
   return currentChild.value?.path === child.path
+}
+
+function canOpenChild(child) {
+  return !child.path?.includes(':bizId') || bizStore.bizId != null
 }
 
 let foldTimer = null
@@ -102,6 +122,11 @@ function handleToggleBusiness(value, newId, isBizSet) {
     : `#/business/${newId}/index`
   window.location.reload()
 }
+
+onMounted(() => {
+  bizStore.ensureLoaded()
+  permissionStore.ensureLoaded()
+})
 
 onBeforeUnmount(() => {
   if (foldTimer) clearTimeout(foldTimer)
@@ -176,6 +201,17 @@ onBeforeUnmount(() => {
 }
 .menu-item:hover {
   background-color: #F6F6F9;
+}
+.menu-item-disabled {
+  color: #C4C6CC;
+  cursor: not-allowed;
+  opacity: .75;
+}
+.menu-item-disabled .menu-icon {
+  color: #C4C6CC;
+}
+.menu-item-disabled:hover {
+  background-color: transparent;
 }
 .menu-item.active {
   background-color: #E1ECFF;

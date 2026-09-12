@@ -27,11 +27,8 @@ export const MENUS = [
     name: '资源',
     icon: 'icon-cc-nav-resource',
     children: [
-      { id: 'index', name: '资源目录', icon: 'icon-cc-resources', path: '/resource/index' },
-      { id: 'project', name: '项目', icon: 'icon-cc-project', path: '/resource/project' },
-      { id: 'biz-set', name: '业务集', icon: 'icon-cc-business-set', path: '/resource/biz-set' },
-      { id: 'business', name: '业务', icon: 'icon-cc-business', path: '/resource/business' },
-      { id: 'host', name: '主机', icon: 'icon-cc-host', path: '/resource/host' },
+      // 对齐老版最终可见资源菜单:项目/业务集/业务/主机保留路由,但不作为资源同级导航项
+      { id: 'index', name: '资源目录', icon: 'icon-cc-square', path: '/resource/index' },
       { id: 'cloud-area', name: '管控区域', icon: 'icon-cc-network-segment', path: '/resource/cloud-area' },
       { id: 'cloud-account', name: '云账户', icon: 'icon-cc-cloud-account', path: '/resource/cloud-account' },
       { id: 'cloud-discover', name: '云资源发现', icon: 'icon-cc-cloud-discover', path: '/resource/cloud-discover' }
@@ -99,7 +96,8 @@ export function findMenuByPath(path) {
 }
 
 const LEGACY_ROUTE_FAMILIES = [
-  // 业务视图附属页(主机详情/Pod)在导航上归属业务拓扑
+  // 平铺业务入口也要保留业务菜单上下文,无 bizId 时显示禁用项而不是空侧栏
+  { pattern: /^\/business\/(?:topo|service-template|set-template|service-category|host-apply|dynamic-group|custom-fields)(?:\/.*)?$/, path: '/business/:bizId/index' },
   { pattern: /^\/business\/[^/]+\/host(?:\/.*)?$/, path: '/business/:bizId/index' },
   { pattern: /^\/business\/[^/]+\/pod(?:\/.*)?$/, path: '/business/:bizId/index' },
   // 组件直出的子页深链(服务模板创建/详情/编辑等)归属各自菜单

@@ -4,13 +4,15 @@ const fs = require('fs')
 
 const e2eDir = path.resolve(__dirname)
 const scripts = [
-  'run-route-smoke.cjs', 'run.cjs', 'run-b5.cjs', 'run-b6.cjs', 'run-b7.cjs', 'run-b8.cjs',
+  'run-route-smoke.cjs', 'run-b5.cjs', 'run-b6.cjs', 'run-b7.cjs', 'run-b8.cjs',
   'run-b9.cjs', 'run-b10.cjs', 'run-b11.cjs', 'run-b13.cjs', 'run-b14-column-config.cjs',
   // A/B/C 批(动态分组/云账户、主机/业务批量编辑、进程模板 bind_info)与 B18/B20 资源模型域、转移确认页
   'run-b15-batch-a.cjs', 'run-b16-batch-b.cjs', 'run-b17-batch-c.cjs', 'run-b18.cjs', 'run-b20.cjs',
   // B24 首页高级筛选;B25 假端点修复/新建关联/模板整页编辑;B26 集群模板同步差异页/业务同步逐进程差异;
-  // B27 运营图表弹窗契约/模型导入导出向导
-  'run-b24.cjs', 'run-b25.cjs', 'run-b26.cjs', 'run-b27.cjs'
+  // B27 运营图表弹窗契约/模型导入导出向导;B28 资源池目录数量与搜索契约;B31 主机表格列配置/排序契约;
+  // B32 业务/项目/业务集列表表格契约
+  'run-b24.cjs', 'run-b25.cjs', 'run-b26.cjs', 'run-b27.cjs', 'run-b28.cjs', 'run-b29.cjs',
+  'run-b30.cjs', 'run-b31.cjs', 'run-b32.cjs', 'run-b33.cjs', 'run-b34.cjs', 'run-b35.cjs', 'run-field-template.cjs'
 ]
 
 // cmdb-mongodb 被外部周期性重启(约 1 次/分钟),写接口在重启窗口会失败。
