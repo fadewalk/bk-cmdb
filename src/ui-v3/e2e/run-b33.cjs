@@ -58,20 +58,11 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     if (stBody) ok(`set_template_status 请求 set_template_ids=[${stBody.set_template_ids.join(',')}]`)
     else fail('set_template_status 请求', '未捕获到携带 set_template_ids 的请求')
 
-    // 行点击 → 详情抽屉(同样依赖展平后的 row.id/row.name);页面常驻两个 el-drawer,只认打开的
+    // 行点击 → 详情整页(B34 起:旧版 details/:templateId 契约,行点击复用展平后的 row.id)
     await rows.nth(0).locator('td').nth(1).click()
-    await page.waitForTimeout(1200)
-    const drawer = page.locator('.el-drawer.open')
-    if (await drawer.isVisible()) {
-      const drawerTitle = (await drawer.locator('.el-drawer__title').innerText()).trim()
-      if (drawerTitle.includes(firstName)) ok(`详情抽屉标题含模板名: ${drawerTitle}`)
-      else fail('详情抽屉标题', `期望含 "${firstName}",实际 "${drawerTitle}"`)
-      const tplIdText = (await drawer.locator('text=模板 ID').locator('xpath=..').innerText().catch(() => '')).trim()
-      if (new RegExp(`模板 ID\\s*${firstId}`).test(tplIdText.replace(/\s+/g, ' '))) ok(`详情模板 ID=${firstId}`)
-      else ok('详情抽屉打开(模板 ID 字段校验跳过)')
-    } else fail('详情抽屉', '行点击后抽屉未出现')
-    await page.keyboard.press('Escape')
-    await page.waitForTimeout(400)
+    await page.waitForTimeout(1500)
+    if (/set\/template\/details\/\d+/.test(page.url())) ok(`行点击进详情整页: ${page.url()}`)
+    else fail('行点击详情路由', page.url())
     await page.screenshot({ path: path.join(SHOTS, 'B33-settpl-list.png'), fullPage: true })
 
     // === 2. mock 应用数量>0:删除置灰 + tooltip 不可删除(旧版契约) ===
@@ -92,6 +83,7 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
           }
         })
       }))
+    await page.goto('http://localhost:8090/#/business/2/set/template')
     await page.reload({ waitUntil: 'load' })
     await page.waitForTimeout(2000)
     const mockRows = page.locator('.el-table__body tr')

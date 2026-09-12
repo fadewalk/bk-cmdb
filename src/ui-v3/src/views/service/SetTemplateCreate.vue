@@ -106,11 +106,25 @@
       </section>
     </div>
 
-    <!-- 底部操作 -->
+    <!-- 底部操作(旧版:创建=提交,编辑=保存) -->
     <div class="create-footer">
-      <el-button type="primary" :loading="saving" @click="submit">提交</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{ isEdit ? '保存' : '提交' }}</el-button>
       <el-button @click="cancel">取消</el-button>
     </div>
+
+    <!-- 旧版 edit.vue 修改成功对话框:按 needSync 出现「同步集群」入口 -->
+    <el-dialog v-model="successDialog" width="480px" :show-close="false" :close-on-click-modal="true">
+      <div class="update-alert-layout">
+        <i class="bk-cmdb-icon icon-cc-check update-check">✓</i>
+        <h3>修改成功</h3>
+        <p class="update-success-tips">{{ needSync ? '集群模板修改成功，您可以同步此配置到现有的集群实例或使用当前配置创建新集群' : '集群模板修改成功，您可以使用当前配置创建新集群' }}</p>
+        <div class="btns">
+          <el-button v-if="needSync" type="primary" @click="goDetailsTab">同步集群</el-button>
+          <el-button :type="needSync ? 'default' : 'primary'" @click="goCreateSet">创建集群</el-button>
+          <el-button @click="goDetails">关闭</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -119,13 +133,16 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
-import { searchServiceTemplates, searchModelAttributes, http } from '../../api/cmdb'
+import { searchServiceTemplates, searchModelAttributes, searchSetTemplateStatus, http } from '../../api/cmdb'
 
 const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
 
 const bizId = computed(() => Number(route.params.bizId) || bizStore.bizId)
+// 旧版 management-form:create/edit 同一表单,templateId>0 为编辑态
+const templateId = computed(() => Number(route.params.templateId) || 0)
+const isEdit = computed(() => templateId.value > 0)
 
 const collapse = reactive({ basic: false, property: false, topo: false })
 const saving = ref(false)
@@ -165,6 +182,22 @@ onMounted(async () => {
     ])
     templates.value = tplRes?.info || []
     moduleAttrs.value = setProps || []
+    // 编辑态:加载模板全量信息回填(旧版 find/topo/set_template/all_info)
+    if (isEdit.value) {
+      const data = await http.post('/find/topo/set_template/all_info', { bk_biz_id: bizId.value, id: templateId.value })
+      form.value.name = data?.name || ''
+      form.value.serviceTemplates = (data?.service_template_ids || [])
+        .map((id) => templates.value.find((t) => t.id === id) || { id, name: `#${id}` })
+      propertyRows.value = (data?.attributes || []).map((a) => {
+        const p = moduleAttrs.value.find((prop) => prop.id === a.bk_attribute_id)
+        return {
+          id: a.bk_attribute_id,
+          bk_property_name: p?.bk_property_name || a.bk_attribute_id,
+          bk_property_id: p?.bk_property_id || '',
+          value: a.bk_property_value
+        }
+      })
+    }
   } catch (e) {
     ElMessage.error('数据加载失败: ' + (e?.message || '后端异常'))
   }
@@ -183,20 +216,51 @@ async function submit() {
   }
   saving.value = true
   try {
-    // 旧版契约:create/topo/set_template/all_info 一次创建模板+绑定服务模板+属性
-    await http.post('/create/topo/set_template/all_info', {
-      bk_biz_id: bizId.value,
-      name: form.value.name,
-      service_template_ids: form.value.serviceTemplates.map((t) => t.id),
-      attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
-    })
-    ElMessage.success('创建成功')
-    backToList()
+    if (isEdit.value) {
+      // 旧版契约:update/topo/set_template/all_info 全量更新
+      await http.put('/update/topo/set_template/all_info', {
+        id: templateId.value,
+        bk_biz_id: bizId.value,
+        name: form.value.name,
+        service_template_ids: form.value.serviceTemplates.map((t) => t.id),
+        attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
+      })
+      needSync.value = !!(await searchSetTemplateStatus(bizId.value, {
+        set_template_ids: [templateId.value]
+      }).catch(() => []))?.[0]?.need_sync
+      successDialog.value = true
+    } else {
+      // 旧版契约:create/topo/set_template/all_info 一次创建模板+绑定服务模板+属性
+      await http.post('/create/topo/set_template/all_info', {
+        bk_biz_id: bizId.value,
+        name: form.value.name,
+        service_template_ids: form.value.serviceTemplates.map((t) => t.id),
+        attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
+      })
+      ElMessage.success('创建成功')
+      backToList()
+    }
   } catch (e) {
-    ElMessage.error('创建失败: ' + (e?.message || '后端异常'))
+    ElMessage.error((isEdit.value ? '保存失败' : '创建失败') + ': ' + (e?.message || '后端异常'))
   } finally {
     saving.value = false
   }
+}
+
+// ---------- 旧版 edit.vue 修改成功对话框 ----------
+const successDialog = ref(false)
+const needSync = ref(false)
+function goDetailsTab() {
+  successDialog.value = false
+  router.push(`/business/${bizId.value}/set/template/details/${templateId.value}?tab=instance`)
+}
+function goCreateSet() {
+  successDialog.value = false
+  router.push(`/business/${bizId.value}/index`)
+}
+function goDetails() {
+  successDialog.value = false
+  router.push(`/business/${bizId.value}/set/template/details/${templateId.value}`)
 }
 
 function backToList() {
@@ -376,5 +440,36 @@ function cancel() {
 }
 .create-footer .el-button {
   min-width: 86px;
+}
+/* 旧版修改成功对话框 */
+.update-alert-layout {
+  text-align: center;
+}
+.update-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  font-size: 30px;
+  font-style: normal;
+  color: #fff;
+  border-radius: 50%;
+  background: #2DCB56;
+  margin: 8px 0 15px;
+}
+.update-alert-layout h3 {
+  font-size: 24px;
+  color: #313238;
+  font-weight: normal;
+  padding-bottom: 16px;
+}
+.update-success-tips {
+  color: #63656E;
+  padding-bottom: 24px;
+}
+.update-alert-layout .btns .el-button {
+  min-width: 86px;
+  margin-left: 8px;
 }
 </style>

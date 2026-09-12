@@ -72,9 +72,9 @@ const router = createRouter({
           return { path: `/business/${to.params.bizId}/host-apply`, query: { ...withoutBiz(to.query), mode, stage: legacyStage(seg) } }
         }, meta: { title: '主机自动应用' } },
         { path: 'business/:bizId/set/template/create', name: 'SetTplCreate', component: () => import('../views/service/SetTemplateCreate.vue'), meta: { title: '新建集群模板' } },
-        { path: 'business/:bizId/set/template/details/:templateId', name: 'SetTplDetailsLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'details', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/template/edit/:templateId', name: 'SetTplEditLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'edit', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
-        { path: 'business/:bizId/set/instance/history/:templateId?', name: 'SetTplHistoryLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/set/template`, query: { ...withoutBiz(to.query), action: 'history', templateId: to.params.templateId } }), meta: { title: '集群模板' } },
+        { path: 'business/:bizId/set/template/details/:templateId', name: 'SetTplDetails', component: () => import('../views/service/SetTemplateDetails.vue'), meta: { title: '模板详情' } },
+        { path: 'business/:bizId/set/template/edit/:templateId', name: 'SetTplEdit', component: () => import('../views/service/SetTemplateCreate.vue'), meta: { title: '编辑集群模板' } },
+        { path: 'business/:bizId/set/instance/history/:templateId?', name: 'SetTplHistory', component: () => import('../views/service/SetSyncHistory.vue'), meta: { title: '同步历史' } },
         { path: 'business/:bizId/set/sync/:setTemplateId', name: 'SetSyncLegacy', component: () => import('../views/service/SetSyncDiff.vue'), meta: { title: '批量同步集群模板' } },
         { path: 'business/:bizId/synchronous/module/:template/:modules', name: 'BizSyncLegacy', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'module' }) }), meta: { title: '业务同步' } },
         { path: 'business/:bizId/sync/service-template/:template/:modules', name: 'TplSyncLegacy', redirect: (to) => ({ path: '/business/sync', query: legacyBizQuery(to, { template: to.params.template, modules: to.params.modules, source: 'service-template' }) }), meta: { title: '业务同步' } },

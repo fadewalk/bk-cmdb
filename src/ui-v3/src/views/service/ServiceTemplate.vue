@@ -101,7 +101,7 @@
         :data="filteredSetTemplates"
         v-loading="setLoading"
         row-class-name="clickable-row"
-        @row-click="(row) => openSetTplDetail(row)"
+        @row-click="goSetDetails"
       >
         <el-table-column prop="id" label="ID" width="90" sortable>
           <template #default="{ row }">
@@ -120,7 +120,7 @@
         </el-table-column>
         <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click.stop="openSetTplDetail(row)">详情</el-button>
+            <el-button link type="primary" @click.stop="goSetEdit(row)">编辑</el-button>
             <!-- 旧版契约:已应用到集群(set_instance_count>0)时删除置灰不可点,tooltip 不可删除 -->
             <el-tooltip v-if="(row.set_instance_count ?? 0) > 0" content="不可删除" placement="top">
               <el-button link disabled>删除</el-button>
@@ -134,63 +134,9 @@
           </el-empty>
         </template>
       </el-table>
-
-      <el-dialog v-model="setTplDialog" title="新建集群模板" width="480px">
-        <el-form label-width="110px">
-          <el-form-item label="模板名称" required>
-            <el-input v-model="setTplForm.name" placeholder="如:通用中间件集群" />
-          </el-form-item>
-          <el-form-item label="绑定服务模板" required>
-            <el-select v-model="setTplForm.service_template_ids" multiple style="width: 100%" placeholder="选择一个或多个服务模板">
-              <el-option v-for="t in templates" :key="t.id" :label="t.name" :value="t.id" />
-            </el-select>
-            <div class="hint">若无可选模板,请先到「服务模板」创建</div>
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="setTplDialog = false">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="saveSetTpl">创建</el-button>
-        </template>
-      </el-dialog>
     </template>
 
     <el-empty v-if="!bizId" description="请先选择业务" />
-
-    <!-- 集群模板详情 -->
-    <el-drawer v-model="setDetailDrawer" :title="`「${setDetail?.name}」集群模板详情`" size="60%">
-      <template v-if="setDetail">
-        <div class="detail-actions">
-          <el-button type="primary" size="small" @click="openSetTplSync(setDetail)">同步</el-button>
-          <el-button size="small" @click="loadSetTemplateHistory(setDetail)">同步历史</el-button>
-        </div>
-        <el-descriptions :column="2" border size="default" class="set-detail-desc">
-          <el-descriptions-item label="模板 ID">{{ setDetail.id }}</el-descriptions-item>
-          <el-descriptions-item label="名称">{{ setDetail.name }}</el-descriptions-item>
-          <el-descriptions-item label="绑定的服务模板">
-            {{ (setDetail.service_template_ids || []).join(', ') || '--' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="创建人">{{ setDetail.creator || setDetail.bk_created_by || '--' }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">
-            {{ formatTime(setDetail.create_time || setDetail.bk_created_at, 'YYYY-MM-DD HH:mm:ss') || '--' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="最近更新">
-            {{ formatTime(setDetail.last_time || setDetail.bk_updated_at, 'YYYY-MM-DD HH:mm:ss') || '--' }}
-          </el-descriptions-item>
-        </el-descriptions>
-        <el-divider>同步状态</el-divider>
-        <el-table :data="setDetailStatus" v-loading="setDetailLoading" size="small" border max-height="280">
-          <el-table-column prop="bk_module_id" label="模块 ID" width="100" />
-          <el-table-column prop="bk_module_name" label="模块名称" min-width="160" />
-          <el-table-column label="同步状态" width="120">
-            <template #default="{ row }">
-              <el-tag v-if="row.status === 'finished'" type="success" size="small">已同步</el-tag>
-              <el-tag v-else-if="row.status === 'failure'" type="danger" size="small">失败</el-tag>
-              <el-tag v-else type="info" size="small">{{ row.status || '未知' }}</el-tag>
-            </template>
-          </el-table-column>
-        </el-table>
-      </template>
-    </el-drawer>
 
     <!-- 集群模板同步对话框(老版:选集群 → 差异确认页) -->
     <el-dialog v-model="setSyncDialog" :title="`同步集群模板「${syncTarget?.name}」`" width="540px">
@@ -313,7 +259,7 @@ import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http,
-  getSetTemplateDetail, searchSetTemplateStatus, searchSetTemplateSyncHistory, searchSetTemplateSets,
+  searchSetTemplateStatus, searchSetTemplateSets,
   createProcTemplate, updateProcTemplate, deleteProcTemplate,
   listModulesByServiceTemplate, getServiceTemplateSyncStatus,
   searchModelAttributes
@@ -582,27 +528,6 @@ async function loadCategories() {
   } finally { catLoading.value = false }
 }
 
-const setTplDialog = ref(false)
-const setTplForm = ref({ name: '', service_template_ids: [] })
-
-async function saveSetTpl() {
-  if (!setTplForm.value.name || setTplForm.value.service_template_ids.length === 0) {
-    ElMessage.warning('请填写名称并至少绑定一个服务模板')
-    return
-  }
-  saving.value = true
-  try {
-    await http.post(`/create/topo/set_template/bk_biz_id/${bizId.value}/`, {
-      name: setTplForm.value.name,
-      service_template_ids: setTplForm.value.service_template_ids
-    })
-    ElMessage.success('集群模板已创建')
-    setTplDialog.value = false
-    setTplForm.value = { name: '', service_template_ids: [] }
-    loadSetTemplates()
-  } finally { saving.value = false }
-}
-
 async function removeSetTpl(row) {
   await ElMessageBox.confirm(`确定删除集群模板「${row.name}」?`, '删除确认', { type: 'warning' })
   await http.delete(`/deletemany/topo/set_template/bk_biz_id/${bizId.value}/`, {
@@ -612,39 +537,20 @@ async function removeSetTpl(row) {
   loadSetTemplates()
 }
 
-// ---------- 集群模板 详情 / 同步 / 差异 ----------
-const setDetailDrawer = ref(false)
-const setDetail = ref(null)
-const setDetailStatus = ref([])
-const setDetailLoading = ref(false)
+// ---------- 集群模板 详情 / 编辑 / 同步 / 差异 ----------
+// 旧版契约:行点击进详情整页,操作列编辑进编辑整页(set/template/details|edit/:templateId)
+function goSetDetails(row) {
+  router.push(`/business/${bizId.value}/set/template/details/${row.id}`)
+}
+function goSetEdit(row) {
+  router.push(`/business/${bizId.value}/set/template/edit/${row.id}`)
+}
+
 const setSyncDialog = ref(false)
 const syncTarget = ref(null)
 const syncSetIds = ref([])
 const syncSets = ref([])
 const syncSetsLoading = ref(false)
-
-async function openSetTplDetail(row) {
-  setDetail.value = row
-  setDetailDrawer.value = true
-  setDetailLoading.value = true
-  try {
-    const detail = await getSetTemplateDetail(bizId.value, row.id)
-    if (detail) setDetail.value = { ...row, ...detail }
-    const statusResp = await searchSetTemplateStatus(bizId.value, {
-      bk_biz_id: bizId.value,
-      set_template_ids: [row.id]
-    }).catch(() => ({}))
-    setDetailStatus.value = (statusResp?.info || statusResp?.modules || []).map((m) => ({
-      bk_module_id: m.bk_module_id,
-      bk_module_name: m.bk_module_name || m.bk_module_id,
-      status: m.status
-    }))
-  } catch (e) {
-    setDetailStatus.value = []
-  } finally {
-    setDetailLoading.value = false
-  }
-}
 
 async function openSetTplSync(row) {
   syncTarget.value = row
@@ -670,17 +576,6 @@ function goSetSyncDiff() {
   if (!syncTarget.value || !syncSetIds.value.length) return
   setSyncDialog.value = false
   router.push(`/business/${bizId.value}/set/sync/${syncTarget.value.id}?sets=${syncSetIds.value.join(',')}`)
-}
-
-async function loadSetTemplateHistory(row) {
-  // 用 alert 简单呈现历史(完整版另开 dialog)
-  const data = await searchSetTemplateSyncHistory(bizId.value, {
-    bk_biz_id: bizId.value, set_template_ids: [row.id]
-  }).catch(() => ({}))
-  const list = data?.info || []
-  if (!list.length) { ElMessage.info('暂无同步历史'); return }
-  const text = list.slice(0, 5).map((h) => `${h.start_time || ''} → ${h.end_time || ''}  ${h.status || ''}  同步 ${h.success_count || 0}/${h.total_count || 0}`).join('\n')
-  ElMessageBox.alert(text, `「${row.name}」最近 5 条同步历史`, { type: 'info' })
 }
 
 async function loadSetTemplates() {
@@ -874,16 +769,22 @@ function applyDeepLink() {
 // 集群模板深链定位(action 来自旧版 set/template 与 set/sync 路由重定向)
 function applySetTplDeepLink(action, tid) {
   if (action === 'create') {
-    setTplDialog.value = true
+    goSetCreate()
     return
   }
   if (!tid) return
+  if (action === 'details' || action === 'edit') {
+    router.push(`/business/${bizId.value}/set/template/${action === 'details' ? 'details' : 'edit'}/${tid}`)
+    return
+  }
+  if (action === 'history') {
+    router.push(`/business/${bizId.value}/set/instance/history/${tid}`)
+    return
+  }
   const open = () => {
     const row = setTemplates.value.find((t) => t.id === tid)
     if (!row) return false
-    if (action === 'details' || action === 'edit') openSetTplDetail(row)
-    else if (action === 'history') loadSetTemplateHistory(row)
-    else if (action === 'sync') openSetTplSync(row)
+    if (action === 'sync') openSetTplSync(row)
     return true
   }
   if (!open()) {
