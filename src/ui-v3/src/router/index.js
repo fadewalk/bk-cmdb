@@ -65,6 +65,9 @@ const router = createRouter({
         { path: 'business/:bizId/service/category', name: 'ServiceCategoryTypo', redirect: (to) => ({ path: `/business/${to.params.bizId}/service/cagetory`, query: withoutBiz(to.query) }), meta: { title: '服务分类' } },
         { path: 'custom-query', name: 'DynamicGroupBizless', redirect: (to) => ({ path: '/business/dynamic-group', query: legacyQuery(to) }), meta: { title: '动态分组' } },
         { path: 'business/:bizId/service/instance', name: 'ServiceInstanceLegacy', redirect: (to) => ({ path: '/business/topo', query: legacyBizQuery(to, { tab: 'instance' }) }), meta: { title: '服务实例' } },
+        // 老版 create/clone 路径深链(service-instance/router.config.js 同构):落到拓扑服务实例 tab 并预选模块
+        { path: 'business/:bizId/service/instance/create/set/:setId/module/:moduleId', name: 'SvcInstCreateLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/index`, query: { tab: 'serviceInstance', action: 'new-svc-instance', node: `module-${to.params.moduleId}` } }), meta: { title: '新建服务实例' } },
+        { path: 'business/:bizId/service/instance/clone/set/:setId/module/:moduleId/instance/:instanceId/host/:hostId', name: 'SvcInstCloneLegacy', redirect: (to) => ({ path: '/business/service-instance', query: { biz: to.params.bizId, cloneInstance: to.params.instanceId, module: to.params.moduleId } }), meta: { title: '克隆服务实例' } },
         { path: 'business/:bizId/service/delete/:moduleId?/:ids', name: 'ServiceDeleteLegacy', redirect: (to) => ({ path: '/business/topo', query: legacyBizQuery(to, { tab: 'instance', deleteIds: to.params.ids, module: to.params.moduleId }) }), meta: { title: '服务实例' } },
         // 注意:rest 不可选(?),否则空 rest 会与规范路由 /business/:bizId/host-apply 形成无限重定向
         { path: 'business/:bizId/host-apply/:rest(.*)', name: 'HostApplyLegacy', redirect: (to) => {

@@ -546,6 +546,8 @@ import {
   http
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
+import { pushNavHistory } from '../utils/nav-history'
+import { searchProcTemplates } from '../api/cmdb'
 import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 
 const route = useRoute()
@@ -560,7 +562,9 @@ const hostTotal = ref(0)
 const selectedHosts = ref([])
 const loading = ref(false)
 const hostLoading = ref(false)
-const rightTab = ref(route.query.tab === 'instance' ? 'instance' : 'host')
+// 老版 tab 命名空间: hostList/serviceInstance/podList(容器,独立环境回落实例)/nodeInfo
+const LEGACY_TAB_MAP = { hostList: 'host', serviceInstance: 'instance', podList: 'instance', nodeInfo: 'host' }
+const rightTab = ref(LEGACY_TAB_MAP[route.query.tab] || (route.query.tab === 'instance' ? 'instance' : 'host'))
 const svcInstances = ref([])
 const selectedInstances = ref([])
 const instLoading = ref(false)
@@ -754,6 +758,7 @@ function mapTopoNode(node, parentSetId, moduleCount = {}, setCount = {}) {
     id: `${node.bk_obj_id}-${node.bk_inst_id}`,
     setId,
     moduleId: node.bk_obj_id === 'module' ? node.bk_inst_id : undefined,
+    serviceTemplateId: node.service_template_id || undefined,
     label: node.bk_inst_name,
     hostCount: node.bk_obj_id === 'module'
       ? (moduleCount[node.bk_inst_id] || 0)
@@ -831,6 +836,15 @@ async function load() {
       children
     }]
     treeData.value = nodes
+    // 老版 node 深链恢复(module-{id}/set-{id});topo_path 为集群链回退,当前树一次拉全,直接按 id 命中
+    const queryNode = String(route.query.node || '')
+    if (queryNode) {
+      const found = findTreeNode(nodes, queryNode)
+      if (found) {
+        currentNode.value = found
+        currentKey.value = found.id
+      }
+    }
     await Promise.all([loadHosts(), loadInstances()])
     applyLegacyInstanceContext()
     const legacyAction = String(route.query.action || '')
@@ -838,6 +852,15 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function findTreeNode(list, id) {
+  for (const node of list) {
+    if (node.id === id) return node
+    const hit = node.children?.length ? findTreeNode(node.children, id) : null
+    if (hit) return hit
+  }
+  return null
 }
 
 async function loadHosts() {
@@ -908,7 +931,18 @@ function onNodeClick(node) {
   currentKey.value = node.id
   if (rightTab.value === 'host') loadHosts()
   else if (rightTab.value === 'instance') loadInstances()
+  syncTopoQuery()
 }
+
+// 老版契约:节点点击/切 tab 都把 node/tab 写回 query(tab 用老版 hostList/serviceInstance 命名),
+// 刷新与深链不丢选中节点
+function syncTopoQuery() {
+  const legacyTab = rightTab.value === 'instance' ? 'serviceInstance' : 'hostList'
+  router.replace({
+    query: { ...route.query, tab: legacyTab, ...(currentNode.value ? { node: currentNode.value.id } : {}) }
+  }).catch(() => {})
+}
+watch(rightTab, () => syncTopoQuery())
 
 function onHostSelect(rows) {
   selectedHosts.value = rows
@@ -918,6 +952,8 @@ function onInstanceSelect(rows) {
 }
 
 function goHostDetail(row) {
+  // 老版返回链:进入详情前快照当前路由,详情返回时恢复(node/tab 上下文不丢)
+  pushNavHistory(route)
   router.push({ path: '/host-detail', query: { id: row.bk_host_id, biz: bizId.value } })
 }
 
@@ -1311,8 +1347,39 @@ function goWizardStep(step) {
       __host: h,
       processes: [emptyProc()]
     }))
+    // 老版契约:模块绑定服务模板时,进程表单按模板进程预填
+    if (currentNode.value?.serviceTemplateId) prefillTemplateProcesses()
   }
   wizardStep.value = step
+}
+
+async function prefillTemplateProcesses() {
+  try {
+    const data = await searchProcTemplates(bizId.value, {
+      service_template_ids: [currentNode.value.serviceTemplateId],
+      page: { start: 0, limit: 100 }
+    })
+    const templates = data?.info || []
+    if (!templates.length) return
+    wizardInstances.value.forEach((row) => {
+      row.processes = templates.map((t) => {
+        const prop = t.property || {}
+        return {
+          process_info: {
+            bk_process_name: prop.bk_process_name || t.bk_process_name || '',
+            bk_func_name: prop.bk_func_name || '',
+            bk_bind_ip: prop.bk_bind_ip?.[0] || '127.0.0.1',
+            port: prop.port ?? '',
+            user: prop.user || 'root',
+            work_path: prop.work_path || '/tmp',
+            start_cmd: prop.start_cmd || '',
+            stop_cmd: prop.stop_cmd || '',
+            description: prop.description || ''
+          }
+        }
+      })
+    })
+  } catch { /* 模板预填失败保持空表单 */ }
 }
 function addWizardProcess() {
   // 给当前所有 instance 各加一条进程

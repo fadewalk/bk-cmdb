@@ -1,6 +1,6 @@
 <template>
   <div class="page-card" v-loading="loading">
-    <el-page-header @back="$router.back()" style="margin-bottom: 16px">
+    <el-page-header @back="goBack" style="margin-bottom: 16px">
       <template #content>主机详情 · {{ host?.bk_host_innerip || hostId }}</template>
     </el-page-header>
 
@@ -248,6 +248,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
+import { popNavHistory } from '../../utils/nav-history'
 import NewAssociation from './NewAssociation.vue'
 import {
   http, searchBusiness, searchModelAttributes, getInstTopo, searchInstAssociations,
@@ -260,6 +261,21 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+
+// 老版多上下文返回链:优先弹出来源快照(业务拓扑 node/tab、资源列表 scope 上下文随快照恢复);
+// 直达深链无快照时按上下文回相对菜单(业务主机→业务拓扑,其余→资源池主机)
+function goBack() {
+  const entry = popNavHistory()
+  if (entry) {
+    router.push(entry.path)
+    return
+  }
+  if (bizId) {
+    router.push(`/business/${bizId}/index?tab=hostList`)
+  } else {
+    router.push('/resource/host')
+  }
+}
 const hostId = Number(route.params.id || route.query.id)
 const bizId = route.params.bizId || route.params.business || route.query.biz ? Number(route.params.bizId || route.params.business || route.query.biz) : null
 

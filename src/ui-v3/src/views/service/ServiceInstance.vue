@@ -192,7 +192,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
@@ -202,6 +202,7 @@ import {
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 
+const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
 const bizId = ref(bizStore.bizId || null)
@@ -616,9 +617,24 @@ async function remove(row) {
 onMounted(async () => {
   const data = await searchBusiness({ start: 0, limit: 200 })
   bizList.value = data?.info || []
-  if (bizList.value.length > 0) {
-    bizId.value = bizList.value[0].bk_biz_id
-    load()
+  // 老版 clone 深链携带 biz query;无 query 时回退首个业务
+  const queryBiz = Number(route.query.biz)
+  bizId.value = (queryBiz && bizList.value.some((b) => b.bk_biz_id === queryBiz))
+    ? queryBiz
+    : bizList.value[0]?.bk_biz_id
+  if (bizId.value) {
+    await load()
+    // 老版克隆深链:按 instanceId 定位源实例并直接打开克隆对话框
+    const cloneId = Number(route.query.cloneInstance)
+    if (cloneId) {
+      let row = rows.value.find((r) => r.id === cloneId)
+      if (!row) {
+        const all = await searchServiceInstances(bizId.value, { start: 0, limit: 500 })
+        row = (all?.info || []).map((item) => ({ ...item, __processes: null })).find((r) => r.id === cloneId)
+      }
+      if (row) openClone(row)
+      else ElMessage.warning('未找到待克隆的服务实例')
+    }
   }
 })
 </script>

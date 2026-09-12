@@ -409,6 +409,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Monitor, Filter, MoreFilled, Setting } from '@element-plus/icons-vue'
+import { pushNavHistory } from '../utils/nav-history'
 import AdvancedHostFilter from '../components/AdvancedHostFilter.vue'
 import LegacyColumnConfigDrawer from '../components/LegacyColumnConfigDrawer.vue'
 import {
@@ -962,7 +963,9 @@ async function handleAdvancedSubmit(result) {
 }
 
 function goDetail(row) {
-  router.push({ path: '/host-detail', query: { id: row.bk_host_id } })
+  // 老版返回链:详情返回时恢复主机列表(scope/directory 上下文随路由快照)
+  pushNavHistory(route)
+  router.push({ path: '/host-detail', query: { id: row.bk_host_id, from: 'resource' } })
 }
 
 async function loadModuleOptions() {

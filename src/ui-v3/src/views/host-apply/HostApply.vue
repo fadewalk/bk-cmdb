@@ -885,6 +885,25 @@ onMounted(async () => {
   if (legacyMode === 'template' || legacyMode === 'module') mode.value = legacyMode
   await bizStore.ensureLoaded()
   if (bizStore.bizId) await loadTree()
+  // 老版 stage 深链恢复:confirm → 选中节点直接进预览向导;run/conflict/failed → 执行结果
+  // 由向导第 3 步承接,无进行中任务时保持配置页并明确提示(不静默)
+  const stage = String(route.query.stage || '')
+  if (stage === 'confirm') {
+    if (currentNode.value) {
+      wizardContext.value = {
+        bizId: bizStore.bizId,
+        mode: mode.value,
+        targets: [{ ...currentNode.value }],
+        rulesByTarget: { [String(currentNode.value.id)]: [...rules.value] }
+      }
+      wizardStep.value = 0
+      wizardVisible.value = true
+    } else {
+      ElMessage.info('请先在左侧选择要应用的模块或模板')
+    }
+  } else if (['run', 'conflict', 'failed'].includes(stage)) {
+    ElMessage.info('暂无执行中的任务,请先在配置页发起应用')
+  }
 })
 </script>
 
