@@ -250,11 +250,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import NewAssociation from './NewAssociation.vue'
 import {
-  http, searchBusiness, searchModelAttributes, getInstTopo, searchHostInstAssoc, searchInstAssociations,
+  http, searchBusiness, searchModelAttributes, getInstTopo, searchInstAssociations,
   searchObjectAssociations, searchMainlineModels,
-  searchHostDetail, getBizTopoTree, getBizInternalTopo, transferHostModule, transferHostToResource,
+  searchBizHostDetail, searchResourceHostDetail, searchNoAuthHostDetail,
+  getBizTopoTree, getBizInternalTopo, transferHostModule, transferHostToResource,
   searchServiceInstances, searchProcessInstances, deleteServiceInstances, createProcessInstance, updateProcessInstance,
-  listHostsWithoutApp, getAuditDictionary, searchInstAudit
+  getAuditDictionary, searchInstAudit
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -438,30 +439,17 @@ async function openHistoryDetail(row) {
 async function loadHost() {
   loading.value = true
   try {
-    const data = await searchHostDetail({ bk_host_id: hostId })
-    const info = data?.info || data?.data?.info || []
-    const exact = info.find((item) => Number(item?.bk_host_id ?? item?.host?.bk_host_id) === hostId)
+    // 老版契约:业务上下文走 with_biz,资源池走 resource,深链兜底 noauth;不再请求未注册的 /host/search
+    let data = null
+    if (bizId) data = await searchBizHostDetail(bizId, hostId).catch(() => null)
+    if (!data?.info?.length) data = await searchResourceHostDetail(hostId).catch(() => null)
+    if (!data?.info?.length) data = await searchNoAuthHostDetail(hostId).catch(() => null)
+    const exact = (data?.info || []).find((item) => Number(item?.host?.bk_host_id ?? item?.bk_host_id) === hostId)
     if (!exact) throw new Error('目标主机不存在')
     host.value = exact.host || exact
   } catch (e) {
-    try {
-      const data = bizId
-        ? await http.post(`/hosts/app/${bizId}/list_hosts`, {
-          page: { start: 0, limit: 1 },
-          fields: ['bk_host_id', 'bk_host_innerip', 'bk_host_name', 'bk_cloud_id', 'bk_module_id'],
-          host_property_filter: { condition: 'AND', rules: [{ field: 'bk_host_id', operator: 'equal', value: hostId }] }
-        })
-        : await listHostsWithoutApp({ start: 0, limit: 1, sort: 'bk_host_id' }, {
-          condition: 'AND', rules: [{ field: 'bk_host_id', operator: 'equal', value: hostId }]
-        })
-      const info = data?.info || data?.data?.info || []
-      const exact = info.find((item) => Number(item?.bk_host_id ?? item?.host?.bk_host_id) === hostId)
-      host.value = exact?.host || exact || null
-      if (!host.value) throw new Error('目标主机不存在')
-    } catch (fallbackError) {
-      host.value = null
-      ElMessage.error('主机加载失败: ' + (fallbackError?.message || e?.message || '后端异常'))
-    }
+    host.value = null
+    ElMessage.error('主机加载失败: ' + (e?.message || '后端异常'))
   } finally {
     loading.value = false
   }

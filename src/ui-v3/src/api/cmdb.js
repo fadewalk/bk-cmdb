@@ -110,9 +110,26 @@ export const listHostsWithoutApp = (page, filter) =>
     filter
   ))
 
-// 主机详情(全部属性)
-export const searchHostDetail = (condition) =>
-  http.post('/host/search', { page: { start: 0, limit: 1 }, condition })
+// 主机详情(老版契约: findmany/hosts/search/{with_biz|resource|noauth},后端仅注册这三个)
+// 请求体为 biz/set/module/host 四对象 condition,host 节点带 bk_host_id $eq;响应 info[].host
+function buildHostDetailBody(bizId, hostId) {
+  return {
+    bk_biz_id: bizId ?? -1,
+    condition: [
+      { bk_obj_id: 'biz', condition: [], fields: [] },
+      { bk_obj_id: 'set', condition: [], fields: [] },
+      { bk_obj_id: 'module', condition: [], fields: [] },
+      { bk_obj_id: 'host', condition: [{ field: 'bk_host_id', operator: '$eq', value: hostId }], fields: [] }
+    ],
+    page: { start: 0, limit: 1 }
+  }
+}
+export const searchBizHostDetail = (bizId, hostId) =>
+  http.post('/findmany/hosts/search/with_biz', buildHostDetailBody(bizId, hostId))
+export const searchResourceHostDetail = (hostId) =>
+  http.post('/findmany/hosts/search/resource', buildHostDetailBody(-1, hostId))
+export const searchNoAuthHostDetail = (hostId) =>
+  http.post('/findmany/hosts/search/noauth', buildHostDetailBody(-1, hostId))
 
 // 主机转移(业务内模块间/资源池进业务)
 export const transferHostModule = (bizId, hostIds, moduleIds, isIncrement = false) =>
@@ -142,16 +159,11 @@ export const transferBizHostAcrossBiz = (srcBizId, dstBizId, hostIds, moduleId) 
 export const transferHostToIdle = (bizId, hostIds) =>
   http.post('/hosts/modules/resource/idle', { bk_biz_id: bizId, bk_host_id: hostIds })
 
-// 主机详情 + 快照
-export const getHostBase = (hostId) => http.get(`/hosts/0/${hostId}`)
-export const getHostSnapshot = (hostId) => http.get(`/hosts/snapshot/${hostId}`)
 // 复杂条件搜索(老版 noauth 契约,/hosts/search 在独立后端未注册,勿用)
 export const searchHostsWithNoAuth = (data) => http.post('/findmany/hosts/search/noauth', data)
 // 实例拓扑(老版契约: find/instassttopo/object/{objId}/inst/{instId},响应为数组)
 export const getInstTopo = (objId, instId, data) =>
   http.post(`/find/instassttopo/object/${objId}/inst/${instId}`, data)
-export const searchHostInstAssoc = (data) =>
-  http.post('/findmany/inst/association', data)
 // 实例关联(老版契约: 按 obj_id/inst_id 分页查询关联关系及对端实例)
 export const searchInstAssociations = (objId, instId, start = 0, limit = 50) =>
   http.post(`/findmany/inst/association/object/${objId}/inst_id/${instId}/offset/${start}/limit/${limit}/web`, {})
@@ -373,6 +385,20 @@ export const createModel = (data) => http.post('/create/object', {
 export const updateModel = (id, data) => http.put(`/update/object/${id}`, data)
 export const deleteModel = (id) => http.delete(`/delete/object/${id}`)
 
+// 模型导入解析(web_server 根路径契约: multipart file + params{password};返回 {import_object, import_asst})
+export const analyzeModelImport = (file, password) => {
+  const form = new FormData()
+  form.append('file', file)
+  if (password) form.append('params', JSON.stringify({ password }))
+  return http.post('/object/importmany/analysis', form, { baseURL: '', timeout: 120000 })
+}
+// 模型导入提交(web_server 根路径契约: body {import_object, import_asst})
+export const importModels = (data) =>
+  http.post('/object/importmany', data, { baseURL: '', timeout: 120000 })
+// 模型导出(web_server 根路径契约: 返回 zip 文件流)
+export const exportModels = (data) =>
+  http.post('/object/exportmany', data, { baseURL: '', responseType: 'blob', timeout: 120000 })
+
 // 模型分类
 export const searchClassifications = () => http.post('/find/objectclassification', {})
 export const createClassification = (data) => http.post('/create/objectclassification', {
@@ -408,11 +434,18 @@ export const deleteFieldGroup = (id) =>
 // 交换分组顺序
 export const switchFieldGroupIndex = (data) =>
   http.put('/update/objectattgroup/groupindex', data)
-// 移动字段到分组
-export const moveAttributeToGroup = (data) =>
-  http.put('/objectatt/group/property', data)
-export const deleteAttributeGroupAssoc = (objId, propId, groupId) =>
-  http.delete(`/delete/objectattgroupasst/object/${objId}/property/${propId}/group/${groupId}`)
+// 移动字段到分组(老版/后端契约: PUT update/objectattgroupproperty,批量 data[].condition/data)
+export const moveAttributeToGroup = (ownerId, objId, items, bizId) =>
+  http.put('/update/objectattgroupproperty', {
+    data: items.map((item) => ({
+      condition: { bk_supplier_account: ownerId, bk_obj_id: objId, bk_property_id: item.propertyId },
+      data: { bk_property_group: item.groupId, bk_property_index: item.propertyIndex ?? 0 }
+    })),
+    ...(bizId != null ? { bk_biz_id: bizId } : {})
+  })
+// 删除字段与分组关联(后端注册路径含 owner/object/propertyids/groupids 四段)
+export const deleteAttributeGroupAssoc = (ownerId, objId, propId, groupId) =>
+  http.delete(`/objectatt/group/owner/${ownerId}/object/${objId}/propertyids/${propId}/groupids/${groupId}`)
 
 // ---------- 唯一约束 ----------
 export const searchUniques = (objId, data) =>
@@ -696,8 +729,6 @@ export const deleteInstanceLabels = (data) =>
   http.delete('/deletemany/proc/service_instance/labels', { data })
 // 后端以 aggregation 接口返回业务下实例标签，data 为 { key: uniqueValues[] }。
 export const listInstanceLabels = (data) =>
-  http.post('/findmany/proc/service_instance/labels/aggregation', data)
-export const getLabelHistory = (data) =>
   http.post('/findmany/proc/service_instance/labels/aggregation', data)
 
 // ---------- 业务同步 ----------

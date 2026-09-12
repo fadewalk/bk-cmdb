@@ -82,6 +82,69 @@ const onlyLegacy = legacyRoutes.filter((route) => !v3Routes.includes(route))
 const onlyV3 = v3Routes.filter((route) => !legacyRoutes.includes(route))
 const apiPrefixMismatches = v3Apis.filter((api) => api.startsWith('/api/v3') && !legacyApis.some((legacy) => legacy.endsWith(api.replace('/api/v3', ''))))
 
+// B38: v3 每个导出 API 请求路径 ↔ 后端注册路由对齐扫描
+function normalizeApiPath(value) {
+  let out = value
+    .replace(/\$\{[^}]*\}/g, '*')
+    .replace(/\{[^}]*\}/g, '*')
+    .replace(/:[A-Za-z0-9_]+/g, '*')
+    .replace(/\?.*$/, '')
+    .replace(/\/+/g, '/')
+  if (!out.startsWith('/')) out = `/${out}`
+  return out.replace(/\/$/, '') || '/'
+}
+
+// 分段通配:后端 * 匹配客户端任意单段;apiserver 还会把 /admin 前缀代理到 admin_server
+function pathMatches(clientPath, backendSet) {
+  const candidates = [clientPath, clientPath.replace(/^\/admin(?=\/)/, '')]
+  for (const candidate of candidates) {
+    const segs = candidate.split('/')
+    for (const route of backendSet) {
+      if (route === candidate) return true
+      const rsegs = route.split('/')
+      if (rsegs.length !== segs.length) continue
+      if (rsegs.every((seg, i) => seg === '*' || seg === segs[i])) return true
+    }
+  }
+  return false
+}
+
+function collectClientApiCalls() {
+  const calls = new Set()
+  const pattern = /http\.(?:get|post|put|delete)\(\s*[`'"]([^`'"]+)[`'"]/g
+  const files = [...v3Files.filter((file) => file.includes(`${path.sep}api${path.sep}`)), ...scanFiles(path.join(root, 'src/ui-v3/src/views'), (file) => /\.vue$/.test(file))]
+  for (const file of files) {
+    const text = read(path.relative(root, file))
+    for (const match of text.matchAll(pattern)) calls.add(match[1])
+  }
+  return [...calls].map(normalizeApiPath)
+}
+
+function collectBackendRoutes() {
+  const routes = new Set()
+  const serviceRoots = ['scene_server', 'source_controller', 'web_server', 'apiserver'].map((dir) => path.join(root, 'src', dir))
+  const goFiles = serviceRoots.flatMap((dir) => scanFiles(dir, (file) => file.endsWith('.go') && !file.endsWith('_test.go')))
+  // 三种注册形态:声明式 Path 表、链式调用、apiserver "{.*}" 通用代理兜底
+  const pattern = /Path:\s*"([^"]+)"|\b(?:GET|POST|PUT|DELETE)\s*\(\s*"(\/[^"]+)"/g
+  const genericPattern = /\b(?:GET|POST|PUT|DELETE)\s*\(\s*"\{[^"]*\}"/g
+  let hasGenericProxy = false
+  for (const file of goFiles) {
+    const text = read(path.relative(root, file))
+    for (const match of text.matchAll(pattern)) {
+      const value = match[1] || match[2]
+      if (value) routes.add(normalizeApiPath(value))
+    }
+    if (genericPattern.test(text)) hasGenericProxy = true
+  }
+  return { routes: [...routes], hasGenericProxy }
+}
+
+const clientApiCalls = collectClientApiCalls()
+const { routes: backendRoutes, hasGenericProxy } = collectBackendRoutes()
+const specificMatch = (call) => pathMatches(call, backendRoutes)
+const apiGaps = clientApiCalls.filter((call) => !specificMatch(call) && !hasGenericProxy)
+const apiGenericProxyOnly = clientApiCalls.filter((call) => !specificMatch(call) && hasGenericProxy)
+
 const report = {
   generatedAt: new Date().toISOString(),
   root,
@@ -97,12 +160,18 @@ const report = {
     legacy: legacyApis,
     v3: v3Apis,
     registeredHint: registeredApis,
-    v3PrefixMismatches: apiPrefixMismatches
+    v3PrefixMismatches: apiPrefixMismatches,
+    clientApiCalls,
+    backendRouteCount: backendRoutes.length,
+    hasGenericProxy,
+    apiGaps,
+    apiGenericProxyOnly
   },
   fixedIdentityHits,
   gates: {
     fixedIdentityHeadersRemoved: !/X-Bkcmdb-User.*admin|X-Bkcmdb-Supplier-Account.*0/.test(v3Http),
     webRegistrationDiscovered: registeredApis.length > 0,
+    apiGaps,
     productionReady: false
   }
 }

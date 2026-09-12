@@ -493,12 +493,7 @@ async function saveGroup() {
     if (groupForm.value.id) {
       const realGroup = fieldGroups.value.find((g) => g.id === groupForm.value.id)
       if (realGroup && realGroup._raw) {
-        await updateFieldGroup({
-          id: realGroup._raw.id,
-          bk_obj_id: objId,
-          bk_group_id: realGroup._raw.bk_group_id,
-          bk_group_name: groupForm.value.name
-        })
+        await updateFieldGroup(objId, realGroup._raw.id, groupForm.value.name)
       }
       ElMessage.success('已重命名')
     } else {
