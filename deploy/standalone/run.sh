@@ -21,6 +21,18 @@ STANDALONE_PROFILE=${STANDALONE_PROFILE:-core}
 STANDALONE_ENV=${STANDALONE_ENV:-development}
 STANDALONE_LISTEN_ADDR=${STANDALONE_LISTEN_ADDR:-127.0.0.1:8090}
 CMDB_API_KEY_REQUIRED=${CMDB_API_KEY_REQUIRED:-0}
+# 内置账号登录开关:development 默认 skip-login(免登录);
+# shared/production 建议显式 CMDB_LOGIN_VERSION=opensource + CMDB_SESSION_USERINFO=用户:密码[,用户:密码...]
+CMDB_LOGIN_VERSION=${CMDB_LOGIN_VERSION:-}
+CMDB_SESSION_USERINFO=${CMDB_SESSION_USERINFO:-}
+if [ -n "${CMDB_LOGIN_VERSION}" ] && [ -f "${CMDB_HOME}/cmdb_webserver/web.yaml" ]; then
+    sed -i "s/^    version: skip-login/    version: ${CMDB_LOGIN_VERSION}/" "${CMDB_HOME}/cmdb_webserver/web.yaml"
+    echo "login version overridden to ${CMDB_LOGIN_VERSION}"
+fi
+if [ -n "${CMDB_SESSION_USERINFO}" ] && [ -f "${CMDB_HOME}/cmdb_webserver/web.yaml" ]; then
+    sed -i "s/^    userInfo: .*/    userInfo: ${CMDB_SESSION_USERINFO}/" "${CMDB_HOME}/cmdb_webserver/web.yaml"
+    echo "session userInfo overridden (value not printed)"
+fi
 case "${STANDALONE_ENV}" in
     development|shared|production) ;;
     *) echo "unsupported STANDALONE_ENV: ${STANDALONE_ENV}" >&2; exit 1 ;;
@@ -61,6 +73,20 @@ if [ "${external_listener}" -eq 1 ]; then
     if [ "${STANDALONE_ENV}" != "development" ] && [ "${CMDB_SESSION_SECRET:-}" = "" ]; then
         echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_SESSION_SECRET" >&2
         exit 1
+    fi
+    if [ "${STANDALONE_ENV}" != "development" ]; then
+        if grep -Eiq 'version:[[:space:]]*skip-login' "${CMDB_HOME}/cmdb_webserver/web.yaml" 2>/dev/null; then
+            echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_LOGIN_VERSION=opensource (or oidc), not skip-login" >&2
+            exit 1
+        fi
+        if [ -z "${CMDB_SESSION_USERINFO}" ]; then
+            echo "ERROR: external ${STANDALONE_ENV} listener requires CMDB_SESSION_USERINFO (built-in accounts)" >&2
+            exit 1
+        fi
+        if echo "${CMDB_SESSION_USERINFO}" | grep -q 'admin:admin'; then
+            echo "ERROR: external ${STANDALONE_ENV} listener forbids default admin:admin credentials" >&2
+            exit 1
+        fi
     fi
 fi
 mkdir -p "${LOG_DIR}"

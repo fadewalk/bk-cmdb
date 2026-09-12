@@ -72,9 +72,11 @@ func (s *Service) WebService() *gin.Engine {
 	middleware.Engine = s.Engine
 	middleware.CacheCli = s.CacheCli
 
-	ws.Use(middleware.RequestIDMiddleware)
-	// Strip caller-controlled identity before any authentication or authorization.
+	// Strip caller-controlled identity BEFORE any server-side marking:
+	// RequestIDMiddleware sets X-Bkcmdb-Request-From-Web, which must never
+	// inherit a caller-supplied value.
 	ws.Use(middleware.SanitizeExternalIdentityHeaders())
+	ws.Use(middleware.RequestIDMiddleware)
 	ws.Use(sessions.Sessions(s.Config.Session.Name, s.Session))
 	// Machine clients can authenticate with the standalone API key without a browser session.
 	// When no key is configured, the existing browser session/skip-login flow is unchanged.

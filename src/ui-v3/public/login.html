@@ -18,24 +18,24 @@
   <body>
     <main>
       <h1>蓝鲸配置平台</h1>
-      <form method="post" action="/login">
+      <form method="post" action="/login" id="login-form">
         <input type="hidden" name="c_url" id="c_url" />
         <label for="username">用户名</label>
         <input id="username" name="username" autocomplete="username" required />
         <label for="password">密码</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required />
         <button type="submit">登录</button>
-        <div class="error" id="error" role="alert"></div>
+        <div class="error" id="error" role="alert">{{.error}}</div>
       </form>
       <a class="oidc" href="/login/oidc/start" id="oidc">使用单点登录</a>
     </main>
     <script>
       const params = new URLSearchParams(window.location.search)
       const returnUrl = params.get('c_url') || '/'
+      // 后端 LoginUser 从 query 读取 c_url,form action 必须携带(隐藏域仅作展示冗余)
+      document.getElementById('login-form').action = `/login?c_url=${encodeURIComponent(returnUrl)}`
       document.getElementById('c_url').value = returnUrl
       document.getElementById('oidc').href += `?c_url=${encodeURIComponent(returnUrl)}`
-      const error = params.get('error')
-      if (error) document.getElementById('error').textContent = error
     </script>
   </body>
 </html>

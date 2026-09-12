@@ -36,6 +36,11 @@ import (
 func (s *Service) LogOutUser(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
+	// Clear 只改内存视图,必须 Save 才会持久化到 redis,否则登出后会话仍然有效
+	if err := session.Save(); err != nil {
+		sCtx, _ := c.Get("rid")
+		blog.Errorf("logout save session failed, err: %s, rid: %v", err.Error(), sCtx)
+	}
 	c.Request.URL.Path = ""
 	userManger := user.NewUser(*s.Config, s.Engine, s.CacheCli, s.ApiCli)
 	loginURL := userManger.GetLoginUrl(c)

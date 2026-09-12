@@ -71,6 +71,19 @@ profile 只裁剪镜像构建目标和启动进程，不删除公共 API 契约�
 
 共享/生产环境必须显式设置 `STANDALONE_ENV=shared|production`、外部 IdP/OIDC 或 `CMDB_API_KEY` + `CMDB_API_KEY_REQUIRED=true`，并提供非 admin 的 `CMDB_API_USER`、supplier/app code 和随机 `CMDB_SESSION_SECRET`。启动脚本会在任何子进程启动前拒绝不安全组合。
 
+### 内置账号登录(可选,替代 skip-login)
+
+```bash
+# 强制账号登录(内置账号存于 webServer.session.userInfo,多个账号逗号分隔)
+CMDB_LOGIN_VERSION=opensource \
+CMDB_SESSION_USERINFO='ops:强密码1,dev:强密码2' \
+docker compose -f deploy/standalone/docker-compose.yml up -d
+```
+
+- 未登录访问任意页面会 302 到 `/login`(用户名/密码表单),登录后回跳原地址;`/logout` 清会话。
+- 注意:`login.version` 的生效值由 adminserver 刷入 ZooKeeper 的配置中心提供,**单独修改容器内 web.yaml 不会生效**;必须通过上述环境变量在容器启动阶段注入并整体重建/重启。
+- shared/production 启动门禁强制要求:非 skip-login 登录模式、显式 `CMDB_SESSION_USERINFO` 且禁止默认 `admin:admin`。
+
 # 构建并启动(首次构建约 10-20 分钟,需网络下载 go/npm 依赖)
 docker compose -f deploy/standalone/docker-compose.yml up -d --build
 
