@@ -604,8 +604,17 @@ onMounted(async () => {
 .init-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 48px; padding: 0;
 }
-.init-item { display: flex; align-items: flex-start; gap: 8px; }
-.init-label { font-size: 14px; color: #63656E; line-height: 32px; flex: none; }
+.init-item { display: flex; align-items: flex-start; gap: 0; }
+.init-label {
+  flex: 0 0 150px;
+  width: 150px;
+  box-sizing: border-box;
+  padding-right: 22px;
+  text-align: right;
+  font-size: 14px;
+  color: #63656E;
+  line-height: 32px;
+}
 .init-label .req { color: #EA3636; font-style: normal; margin-right: 2px; }
 .init-field { flex: 1; min-width: 0; }
 
