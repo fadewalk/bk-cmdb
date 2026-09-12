@@ -18,7 +18,7 @@
     </div>
 
     <div class="menu-list">
-      <template v-for="child in currentTop?.children || []" :key="child.id">
+      <template v-for="child in visibleChildren" :key="child.id">
         <router-link
           v-if="canOpenChild(child)"
           class="menu-item"
@@ -55,8 +55,9 @@
 <script setup>
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { resolveMenuByRoute, menuLinkPath } from './menu-config'
+import { resolveMenuByRoute, menuLinkPath, RESOURCE_DYNAMIC_CHILDREN } from './menu-config'
 import { useBizStore } from '../stores/biz'
+import { useResourceStore, BUILTIN_RESOURCE_ROUTES } from '../stores/resource'
 import BizMixSelector from '../components/BizMixSelector.vue'
 import { usePermissionStore } from '../stores/permission'
 
@@ -65,6 +66,7 @@ const NAV_STICK_KEY = 'navStick'
 const route = useRoute()
 const bizStore = useBizStore()
 const permissionStore = usePermissionStore()
+const resourceStore = useResourceStore()
 
 // 旧版 global store 初始语义:navStick 未写入或非 'false' 时视为固定
 const navStick = ref(localStorage.getItem(NAV_STICK_KEY) !== 'false')
@@ -76,12 +78,41 @@ const currentTop = computed(() => {
   return top
 })
 const currentChild = computed(() => resolveMenuByRoute(route)?.child || null)
+const resourceChildren = computed(() => {
+  if (currentTop.value?.id !== 'resource') return []
+  const staticChildren = currentTop.value.children || []
+  const index = staticChildren.findIndex((child) => child.id === 'index')
+  const collectionChildren = RESOURCE_DYNAMIC_CHILDREN.map((entry) => {
+    const modelId = entry.id === 'biz-set' ? 'bk_biz_set_obj' : entry.id === 'business' ? 'biz' : entry.id === 'project' ? 'bk_project' : 'host'
+    const model = resourceStore.models.find((item) => item.bk_obj_id === modelId)
+    return {
+      ...entry,
+      id: `collection-${modelId}`,
+      name: model?.bk_obj_name || entry.name,
+      icon: model?.bk_obj_icon || entry.icon,
+      path: BUILTIN_RESOURCE_ROUTES[modelId],
+      collectionModelId: modelId
+    }
+  }).filter((entry) => resourceStore.collectionModels.includes(entry.collectionModelId))
+  const extraChildren = resourceStore.collectionModels
+    .filter((modelId) => !RESOURCE_DYNAMIC_CHILDREN.some((entry) => entry.id === modelId || (entry.id === 'biz-set' && modelId === 'bk_biz_set_obj') || (entry.id === 'business' && modelId === 'biz') || (entry.id === 'project' && modelId === 'bk_project') || (entry.id === 'host' && modelId === 'host')))
+    .map((modelId) => {
+      const model = resourceStore.models.find((item) => item.bk_obj_id === modelId)
+      return { id: `collection-${modelId}`, name: model?.bk_obj_name || modelId, icon: model?.bk_obj_icon || 'icon-cc-model', path: `/resource/instance/${modelId}`, collectionModelId: modelId }
+    })
+  const collection = [...collectionChildren, ...extraChildren]
+  const children = [...staticChildren]
+  children.splice(index + 1, 0, ...collection)
+  return children
+})
+const visibleChildren = computed(() => currentTop.value?.id === 'resource' ? resourceChildren.value : (currentTop.value?.children || []))
 const unfold = computed(() => navStick.value || !navFold.value)
 
 // 旧版混合选择器的值格式为 `${id}-biz`
 const selectedId = computed(() => (bizStore.bizId == null ? '' : `${bizStore.bizId}-biz`))
 
 function isActive(child) {
+  if (child.collectionModelId) return currentChild.value?.path === child.path
   return currentChild.value?.path === child.path
 }
 
@@ -126,6 +157,7 @@ function handleToggleBusiness(value, newId, isBizSet) {
 onMounted(() => {
   bizStore.ensureLoaded()
   permissionStore.ensureLoaded()
+  resourceStore.ensureLoaded()
 })
 
 onBeforeUnmount(() => {

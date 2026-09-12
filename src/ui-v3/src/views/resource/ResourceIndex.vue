@@ -58,15 +58,16 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Star, StarFilled } from '@element-plus/icons-vue'
 import { http, searchClassificationWithObjects } from '../../api/cmdb'
+import { useResourceStore } from '../../stores/resource'
 
 const router = useRouter()
+const resourceStore = useResourceStore()
 const filter = ref('')
 const loading = ref(false)
 const classifications = ref([])
 const counts = ref({})
-// 收藏状态(老版存 userCustom,独立模式存 localStorage)
-const COLLECT_KEY = 'resource.collection'
-const collected = ref([])
+// 收藏状态统一由 resource store 管理(usercustom;兼容旧 localStorage 迁移)
+const collected = computed(() => resourceStore.collections)
 
 // 内置模型 → 资源菜单跳转(对齐老版 BUILTIN_MODEL_RESOURCE_MENUS)
 const BUILTIN_RESOURCE_MENUS = {
@@ -111,14 +112,8 @@ const isEmpty = computed(() => classifyColumns.value.length === 0)
 function isCollected(model) {
   return collected.value.includes(model.bk_obj_id)
 }
-function toggleCollect(model) {
-  const id = model.bk_obj_id
-  if (collected.value.includes(id)) {
-    collected.value = collected.value.filter((x) => x !== id)
-  } else {
-    collected.value = [...collected.value, id]
-  }
-  try { localStorage.setItem(COLLECT_KEY, JSON.stringify(collected.value)) } catch { /* ignore */ }
+async function toggleCollect(model) {
+  await resourceStore.toggleCollect(model.bk_obj_id)
 }
 
 function redirect(model) {
@@ -131,23 +126,25 @@ function redirect(model) {
 }
 
 async function loadCounts(objIds) {
-  // /object/count 挂在 web_server 根路径(不在 /api/v3 下)
+  // /object/count 挂在 web_server 根路径(不在 /api/v3 下);后端单次最多 20 个 obj_id
+  const map = {}
   try {
-    const data = await http.post('/object/count', { condition: { obj_ids: objIds } }, { baseURL: '' })
-    const map = {}
-    for (const item of data || []) map[item.bk_obj_id] = item.inst_count
+    for (let start = 0; start < objIds.length; start += 20) {
+      const batch = objIds.slice(start, start + 20)
+      const data = await http.post('/object/count', { condition: { obj_ids: batch } }, { baseURL: '' })
+      for (const item of data || []) map[item.bk_obj_id] = item.inst_count
+    }
     counts.value = map
-  } catch { counts.value = {} }
+  } catch { counts.value = map }
 }
 
 onMounted(async () => {
   loading.value = true
   try {
-    try { collected.value = JSON.parse(localStorage.getItem(COLLECT_KEY) || 'null') } catch { collected.value = null }
-    // 老版默认收藏内置资源模型(黄星)
-    if (!Array.isArray(collected.value)) collected.value = Object.keys(BUILTIN_RESOURCE_MENUS)
     const data = await searchClassificationWithObjects()
     classifications.value = data || []
+    // 与导航共享同一份可用模型集合和收藏状态
+    await resourceStore.ensureLoaded()
     const ids = classifications.value
       .flatMap((c) => c.bk_objects || [])
       .filter((m) => !m.bk_ishidden && !m.bk_ispaused && !EXCLUDED.has(m.bk_obj_id))

@@ -1,4 +1,4 @@
-// 一级 / 二级菜单结构:与旧版 src/ui/src/dictionary/menu.js 保持一致
+// 资源固定菜单;主机/业务/业务集/项目由老版 dynamic-navigation 的收藏逻辑在 TheNav 中动态插入
 // icon 取自旧版 bk-icon-cmdb 字体(iconcool.json),在 TheNav 中渲染
 // 业务下七个二级菜单的 path 为旧版同构路由模板(:bizId 在渲染时由 menuLinkPath 注入当前业务 ID)
 export const MENUS = [
@@ -64,6 +64,13 @@ export const MENUS = [
   }
 ]
 
+export const RESOURCE_DYNAMIC_CHILDREN = [
+  { id: 'project', name: '项目', icon: 'icon-cc-project', path: '/resource/project' },
+  { id: 'biz-set', name: '业务集', icon: 'icon-cc-business-set', path: '/resource/biz-set' },
+  { id: 'business', name: '业务', icon: 'icon-cc-business', path: '/resource/business' },
+  { id: 'host', name: '主机', icon: 'icon-cc-host', path: '/resource/host' }
+]
+
 // 把菜单模板路径(:bizId)渲染成真实跳转地址;旧版由 getMenuLink 注入 params.bizId
 export function menuLinkPath(child, bizId) {
   if (!child.path?.includes(':bizId')) return child.path
@@ -112,10 +119,12 @@ const LEGACY_ROUTE_FAMILIES = [
   { pattern: /^\/business\/[^/]+\/set\/sync(?:\/.*)?$/, path: '/business/:bizId/set/template' },
   { pattern: /^\/business-set\/[^/]+(?:\/.*)?$/, path: '/biz-set/topo' },
   { pattern: /^\/business\/details\/[^/]+$/, path: '/resource/business' },
-  { pattern: /^\/resource\/(?:business-set|biz-set)(?:\/.*)?$/, path: '/resource/biz-set' },
   { pattern: /^\/resource\/project(?:\/.*)?$/, path: '/resource/project' },
-  { pattern: /^\/resource\/(?:biz-set|business-set)(?:\/.*)?$/, path: '/resource/biz-set' },
+  { pattern: /^\/resource\/project\/details(?:\/.*)?$/, path: '/resource/project' },
+  { pattern: /^\/resource\/(?:business-set|biz-set)(?:\/.*)?$/, path: '/resource/biz-set' },
+  { pattern: /^\/resource\/biz-set\/details(?:\/.*)?$/, path: '/resource/biz-set' },
   { pattern: /^\/resource\/business(?:\/.*)?$/, path: '/resource/business' },
+  { pattern: /^\/resource\/business\/details(?:\/.*)?$/, path: '/resource/business' },
   { pattern: /^\/resource\/host(?:\/.*)?$/, path: '/resource/host' },
   { pattern: /^\/resource\/instance(?:\/.*)?$/, path: '/resource/index' },
   { pattern: /^\/resource\/(?:catalog|history)(?:\/.*)?$/, path: '/resource/index' },
@@ -139,6 +148,12 @@ export function resolveMenuByRoute(route) {
   const path = typeof route === 'string' ? route : route?.path || ''
   const exact = findMenuByPath(path)
   if (exact) return exact
+  // 动态资源收藏入口仍需有资源导航上下文,即使它们不在静态 children 中
+  if (path.startsWith('/resource/')) {
+    const resource = MENUS.find((menu) => menu.id === 'resource')
+    const dynamic = RESOURCE_DYNAMIC_CHILDREN.find((child) => path === child.path || path.startsWith(`${child.path}/`))
+    if (dynamic) return { top: resource, child: dynamic, params: {} }
+  }
 
   const family = LEGACY_ROUTE_FAMILIES.find((item) => item.pattern.test(path))
   return family ? findMenuByPath(family.path) : null

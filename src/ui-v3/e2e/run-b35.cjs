@@ -18,11 +18,36 @@ function fail(label, detail) { console.error(`✗ ${label}: ${detail}`); process
     await page.goto('http://localhost:8090/#/resource/index', { waitUntil: 'load' })
     await page.waitForTimeout(1200)
 
-    // 旧版最终资源菜单只有 4 项;项目/业务集/业务/主机仍可由旧深链访问,但不应成为资源同级导航
+    // 旧版最终资源菜单 = 4 个固定项 + 4 个默认收藏模型(主机/业务/业务集/项目)
     const resourceLinkNames = await page.locator('.the-nav .menu-item .menu-name').allInnerTexts()
-    const expectedResource = ['资源目录', '管控区域', '云账户', '云资源发现']
-    if (JSON.stringify(resourceLinkNames) === JSON.stringify(expectedResource)) ok('资源菜单严格对齐旧版 4 项')
+    const expectedResource = ['资源目录', '项目', '业务集', '业务', '主机', '管控区域', '云账户', '云资源发现']
+    if (JSON.stringify(resourceLinkNames) === JSON.stringify(expectedResource)) ok('资源菜单严格对齐旧版 8 项(含动态收藏)')
     else fail('资源菜单', JSON.stringify(resourceLinkNames))
+    const resourceHrefs = await page.locator('.the-nav .menu-item').evaluateAll((links) => links.map((link) => link.getAttribute('href')))
+    for (const [name, path] of [['项目', '/resource/project'], ['业务集', '/resource/biz-set'], ['业务', '/resource/business'], ['主机', '/resource/host']]) {
+      const index = resourceLinkNames.indexOf(name)
+      if (index < 0 || !resourceHrefs[index]?.includes(`#${path}`)) fail(`${name} 菜单链接`, resourceHrefs[index])
+    }
+    ok('资源动态收藏入口 href 对齐 canonical route')
+
+    // 资源目录卡片收藏与导航同步:usercustom 关闭主机收藏后导航项消失,重新收藏后恢复
+    await page.goto('http://localhost:8090/#/resource/index', { waitUntil: 'networkidle' })
+    await page.waitForTimeout(900)
+    const hostCard = page.locator('.models-link').filter({ hasText: '主机' }).first()
+    if (await hostCard.count()) {
+      await hostCard.locator('.model-star').click()
+      await page.waitForTimeout(900)
+      const afterUncollect = await page.locator('.the-nav .menu-name').allInnerTexts()
+      if (afterUncollect.includes('主机')) fail('资源收藏关闭', `主机仍在导航: ${afterUncollect}`)
+      else ok('资源收藏关闭同步导航')
+      await hostCard.locator('.model-star').click()
+      await page.waitForTimeout(900)
+      const afterCollect = await page.locator('.the-nav .menu-name').allInnerTexts()
+      if (afterCollect.includes('主机')) ok('资源收藏恢复同步导航')
+      else fail('资源收藏恢复', `主机未恢复: ${afterCollect}`)
+    } else {
+      fail('资源目录主机卡片', '未找到主机模型卡片')
+    }
 
     // 模型菜单保持旧版最终可见四项
     await page.goto('http://localhost:8090/#/model/management', { waitUntil: 'load' })
