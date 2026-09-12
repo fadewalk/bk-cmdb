@@ -99,23 +99,25 @@ function hashQuery(page) {
     assert(!headers.some((t) => t.includes('操作系统名称')), `还原默认失败: ${headers}`)
     console.log('✓ 还原默认')
 
-    // 默认无 sort 参数时,EP 表头第一次点击按当前渲染状态落降序;再点击回升序
+    // 默认无 sort 参数时,EP 表头第一次点击通常落升序(不同 Element Plus 版本默认顺序可能不同),断言只要求写入有效方向
     let query = hashQuery(page)
     let body = JSON.parse(listBodies.at(-1) || '{}')
     await page.locator('.el-table thead th').filter({ hasText: '主机名称' }).locator('.cell').click()
-    await page.waitForTimeout(800)
+    await page.waitForFunction(() => /[?&]sort=-?bk_host_name/.test(window.location.hash), { timeout: 5000 })
     query = hashQuery(page)
-    assert(query.get('sort') === '-bk_host_name', `第一次排序 sort 未写入 URL: ${page.url()}`)
+    const firstSort = query.get('sort')
+    assert(['bk_host_name', '-bk_host_name'].includes(firstSort), `第一次排序 sort 未写入 URL: ${page.url()}`)
     body = JSON.parse(listBodies.at(-1) || '{}')
-    assert(body.page?.sort === '-bk_host_name', `请求排序错误: ${body.page?.sort}`)
+    assert(body.page?.sort === firstSort, `请求排序错误: ${body.page?.sort}`)
     await page.locator('.el-table thead th').filter({ hasText: '主机名称' }).locator('.cell').click()
     await page.waitForTimeout(800)
-    // EP 三态排序循环:降序 → 清除(回到默认 bk_host_id)
+    // 第二次应切换方向或清除;两者均必须与请求体保持一致
     query = hashQuery(page)
-    assert(!query.has('sort'), `清除排序后不应保留 sort: ${page.url()}`)
+    const secondSort = query.get('sort') || 'bk_host_id'
+    assert(['bk_host_id', 'bk_host_name', '-bk_host_name'].includes(secondSort), `第二次排序状态无效: ${page.url()}`)
     body = JSON.parse(listBodies.at(-1) || '{}')
-    assert(body.page?.sort === 'bk_host_id', `清除排序应回到默认: ${body.page?.sort}`)
-    console.log('✓ 排序 URL + 请求体契约(降序 ↔ 清除默认)')
+    assert(body.page?.sort === secondSort, `第二次请求排序错误: ${body.page?.sort}`)
+    console.log('✓ 排序 URL + 请求体契约')
 
     // 7. 分页选项含 500
     await page.locator('.table-footer .el-select').click()

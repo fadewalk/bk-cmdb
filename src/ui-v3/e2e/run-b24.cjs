@@ -26,7 +26,7 @@ function hashQuery(page) {
     route.continue({ headers })
   })
   page.on('request', (request) => {
-    if (request.url().includes('list_hosts_without_app') && request.method() === 'POST') {
+    if (request.url().includes('findmany/hosts/search/resource') && request.method() === 'POST') {
       bodies.push(request.postData())
     }
   })
@@ -64,7 +64,7 @@ function hashQuery(page) {
     const restoredIp = await drawer.locator('textarea').inputValue()
     assert(restoredIp === '10.0.0.5', `主机页侧滑 IP 未恢复: ${restoredIp}`)
     const listBody = bodies.at(-1) || ''
-    assert(listBody.includes('"bk_host_innerip"') && listBody.includes('"equal"'), `请求体缺少 IP 精确规则: ${listBody.slice(0, 300)}`)
+    assert(listBody.includes('"bk_host_innerip"') && listBody.includes('"$eq"'), `请求体缺少 IP 精确规则: ${listBody.slice(0, 300)}`)
 
     // 3. 关闭侧滑后由漏斗按钮重开,默认条件行存在;添加条件(操作系统名称 属于 linux)→ 提交后侧滑关闭且不被 watch 重开,URL 带 filter
     await drawer.locator('.sideslider-collapse').click()

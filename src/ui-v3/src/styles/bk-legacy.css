@@ -185,3 +185,42 @@
 .legacy-select .el-select__selected-item {
   color: #63656e;
 }
+
+/* ---- 老版表格契约(资源各列表页共用):白底表头灰字 12px,42px 行高,浅分隔线 ---- */
+.legacy-table.el-table { font-size: 12px; color: #63656e; --el-table-header-bg-color: #fafbfd; --el-table-header-text-color: #63656e; --el-table-text-color: #63656e; --el-table-border-color: #ebeef5; }
+.legacy-table.el-table th.el-table__cell { font-weight: normal; font-size: 12px; height: 40px; padding: 6px 0; }
+.legacy-table.el-table td.el-table__cell { padding: 10px 0; }
+.legacy-table.el-table .cell { line-height: 22px; }
+.legacy-table.el-table .sort-caret.ascending { border-bottom-color: #c4c6cc; }
+.legacy-table.el-table .sort-caret.descending { border-top-color: #c4c6cc; }
+.legacy-table.el-table .ascending .sort-caret.ascending { border-bottom-color: #3a84ff; }
+.legacy-table.el-table .descending .sort-caret.descending { border-top-color: #3a84ff; }
+.legacy-table .cell-link { color: #3a84ff; cursor: pointer; }
+.legacy-table .cell-empty { color: #c4c6cc; }
+.legacy-table .col-model-suffix { color: #979ba5; margin-left: 4px; }
+.legacy-table .col-setting-icon { cursor: pointer; color: #63656e; font-size: 14px; vertical-align: middle; }
+.legacy-table .col-setting-icon:hover { color: #3a84ff; }
+
+/* ---- 列表显示属性配置抽屉(600px 双栏,teleport 到 body 须全局) ---- */
+.columns-config-drawer .el-drawer__body { padding: 0; overflow: hidden; }
+.columns-config-drawer .config-layout { position: relative; height: 100%; display: flex; font-size: 14px; padding-bottom: 62px; box-sizing: border-box; }
+.columns-config-drawer .config-wrapper { width: 50%; border-right: 1px solid #e7e9ef; display: flex; flex-direction: column; overflow: hidden; }
+.columns-config-drawer .config-wrapper:last-of-type { border-right: none; }
+.columns-config-drawer .wrapper-header { height: 78px; padding: 20px 24px; line-height: 36px; display: flex; align-items: center; flex: none; }
+.columns-config-drawer .selected-header { font-size: 14px; color: #313238; }
+.columns-config-drawer .property-list { flex: 1; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.columns-config-drawer .property-item { position: relative; height: 42px; line-height: 42px; padding: 0 42px 0 24px; cursor: pointer; overflow: hidden; }
+.columns-config-drawer .property-item:hover { background-color: #f9f9f9; }
+.columns-config-drawer .property-item.disabled { cursor: not-allowed; }
+.columns-config-drawer .property-item .property-name { display: inline-block; max-width: calc(100% - 50px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; color: #63656e; }
+.columns-config-drawer .property-item .item-arrow { position: absolute; top: 11px; right: 15px; font-size: 20px; color: #c4c6cc; }
+.columns-config-drawer .property-item .item-close { position: absolute; top: 0; right: 0; width: 42px; height: 42px; align-items: center; justify-content: center; color: #c4c6cc; font-size: 16px; }
+.columns-config-drawer .property-item .item-close:hover { color: #7d8088; }
+.columns-config-drawer .property-item .drag-dot { position: absolute; left: 12px; top: 15px; width: 8px; height: 12px; background-image: radial-gradient(#c4c6cc 1.5px, transparent 1.6px); background-size: 8px 6px; }
+.columns-config-drawer .config-empty { padding: 40px 0; text-align: center; color: #979ba5; font-size: 12px; }
+.columns-config-drawer .config-options { position: absolute; bottom: 0; left: 0; width: 100%; height: 62px; padding: 13px 24px; background-color: #f9f9f9; display: flex; align-items: center; box-sizing: border-box; }
+.columns-config-drawer .config-options .reset-btn { margin-left: auto; }
+
+/* ---- 列表工具栏右侧属性配置齿轮(老版 icon-cc-setting) ---- */
+.legacy-toolbar-gear { cursor: pointer; color: #63656e; font-size: 16px; }
+.legacy-toolbar-gear:hover { color: #3a84ff; }

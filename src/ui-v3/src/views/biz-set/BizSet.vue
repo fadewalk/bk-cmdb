@@ -14,11 +14,11 @@
           @clear="load"
         />
         <el-tooltip content="列表显示属性配置" placement="top">
-          <el-button text circle :icon="'Setting'" @click="openColPicker" />
+          <el-icon class="legacy-toolbar-gear" @click="openColPicker"><Setting /></el-icon>
         </el-tooltip>
       </div>
 
-      <el-table :data="filtered" v-loading="loading" stripe>
+      <el-table :data="filtered" v-loading="loading" class="legacy-table">
         <el-table-column prop="bk_biz_set_id" label="ID" width="100" sortable />
         <el-table-column prop="bk_biz_set_name" label="业务集名" min-width="180" show-overflow-tooltip />
         <el-table-column
@@ -83,21 +83,15 @@
       </template>
     </el-dialog>
 
-    <!-- 列配置(对齐老版 biz_set_custom_table_columns,固定列 ID/业务集名不可配) -->
-    <el-drawer v-model="colPickerVisible" title="列表显示属性配置" size="420px">
-      <el-checkbox-group v-model="colDraft">
-        <div class="col-grid">
-          <el-checkbox v-for="c in colPool" :key="c.bk_property_id" :value="c.bk_property_id">
-            {{ c.bk_property_name }}
-          </el-checkbox>
-        </div>
-      </el-checkbox-group>
-      <template #footer>
-        <el-button @click="resetCols">恢复默认</el-button>
-        <el-button @click="colPickerVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!colDraft.length" @click="applyCols">确定</el-button>
-      </template>
-    </el-drawer>
+    <!-- 列配置(老版 columns-config 600px 双栏抽屉,固定列 ID/业务集名不可配;usercustom 持久化) -->
+    <LegacyColumnConfigDrawer
+      v-model="colPickerVisible"
+      :pool="attrs"
+      :selected="drawerSelected"
+      :fixed-ids="DISABLED_COLS"
+      @apply="applyCols"
+      @reset="resetCols"
+    />
   </div>
 </template>
 
@@ -106,7 +100,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { http, searchBusiness, searchBizSetAttributes } from '../../api/cmdb'
+import { Setting } from '@element-plus/icons-vue'
+import { http, searchBusiness, searchBizSetAttributes, searchUserCustom, saveUserCustom } from '../../api/cmdb'
+import LegacyColumnConfigDrawer from '../../components/LegacyColumnConfigDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,7 +130,10 @@ const DISABLED_COLS = ['bk_biz_set_id', 'bk_biz_set_name']
 const DEFAULT_COLS = ['bk_biz_set_desc', 'bk_biz_maintainer', 'bk_created_at', 'bk_created_by']
 const attrs = ref([])
 const colPickerVisible = ref(false)
-const colDraft = ref([])
+
+// 老版契约:配置持久化到 usercustom(不再用 localStorage);抽屉固定列锁定
+const drawerSelected = computed(() => ([...DISABLED_COLS, ...pickedColIds.value])
+  .filter((id) => attrs.value.some((c) => c.bk_property_id === id)))
 
 const colPool = computed(() => attrs.value.filter((f) => !DISABLED_COLS.includes(f.bk_property_id)))
 
@@ -153,28 +152,27 @@ const displayCols = computed(() => {
   return pickedColIds.value.map((id) => map.get(id)).filter(Boolean)
 })
 
-function loadPickedCols() {
-  let saved = null
-  try { saved = JSON.parse(localStorage.getItem(COL_KEY) || 'null') } catch { saved = null }
-  pickedColIds.value = Array.isArray(saved)
+async function loadPickedCols() {
+  const uc = await searchUserCustom().catch(() => ({}))
+  const saved = uc?.[COL_KEY]
+  pickedColIds.value = Array.isArray(saved) && saved.length
     ? saved.filter((id) => colPool.value.some((c) => c.bk_property_id === id))
     : defaultCols()
 }
-function savePickedCols() {
-  try { localStorage.setItem(COL_KEY, JSON.stringify(pickedColIds.value)) } catch { /* ignore */ }
+async function savePickedCols(ids) {
+  await saveUserCustom({ [COL_KEY]: ids }).catch(() => {})
 }
 function openColPicker() {
-  colDraft.value = [...pickedColIds.value]
   colPickerVisible.value = true
 }
-function applyCols() {
-  pickedColIds.value = [...colDraft.value]
-  savePickedCols()
+async function applyCols(ids) {
+  pickedColIds.value = ids.filter((id) => !DISABLED_COLS.includes(id))
+  await savePickedCols(pickedColIds.value)
   colPickerVisible.value = false
 }
-function resetCols() {
+async function resetCols() {
   pickedColIds.value = defaultCols()
-  savePickedCols()
+  await savePickedCols([])
   colPickerVisible.value = false
 }
 

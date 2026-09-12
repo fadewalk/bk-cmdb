@@ -15,8 +15,8 @@
       >{{ t.label }}</span>
     </div>
     <div class="host-body">
-      <!-- 左:分组目录树 -->
-      <div class="group-col">
+      <!-- 左:资源池目录(老版仅在未分配资源池显示) -->
+      <div v-if="groupTab === 'unassigned'" class="group-col">
         <div class="dir-search-row">
           <el-input v-model="dirKeyword" placeholder="分组目录" size="small" clearable :prefix-icon="'Search'" />
           <el-button class="dir-add" size="small" :icon="'Plus'" link @click="openCreateDir()" />
@@ -26,6 +26,7 @@
           :data="dirTreeData"
           :props="{ label: 'name', children: 'children' }"
           node-key="id"
+          :current-node-key="currentDirId"
           default-expand-all
           highlight-current
           :filter-node-method="filterDir"
@@ -37,14 +38,25 @@
             <span class="dir-row">
               <i :class="['bk-cmdb-icon', data.__icon || 'icon-cc-host']" />
               <span class="d-name">{{ data.name }}</span>
+              <!-- 老版契约:仅非默认目录悬停显示点菜单(重命名/删除);主机池根与空闲机无此入口 -->
+              <el-dropdown
+                v-if="data.id !== 'default' && data.id !== 'empty' && !data.default"
+                class="dir-op"
+                trigger="click"
+                @command="(cmd) => onDirNodeCmd(cmd, data)"
+              >
+                <span class="dir-op-trigger" title="更多操作" @click.stop><el-icon><MoreFilled /></el-icon></span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="delete">删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
               <span v-if="data.__count !== undefined" class="d-count">{{ data.__count }}</span>
             </span>
           </template>
         </el-tree>
-        <div class="dir-actions">
-          <el-button size="small" :icon="'Edit'" link :disabled="currentDirId === 'default'" @click="onDirCmd('rename')">重命名</el-button>
-          <el-button size="small" :icon="'Delete'" link :disabled="currentDirId === 'default'" @click="onDirCmd('delete')">删除</el-button>
-        </div>
       </div>
 
       <!-- 右:列表 -->
@@ -109,31 +121,34 @@
           :data="pagedHosts"
           v-loading="loading"
           size="small"
-          class="bk-table"
+          class="bk-table legacy-table"
           @selection-change="onSelect"
+          @sort-change="onSortChange"
         >
-          <el-table-column type="selection" width="36" />
-          <el-table-column label="ID" width="80" sortable>
+          <el-table-column type="selection" width="60" align="center" fixed />
+          <el-table-column
+            v-for="col in tableHeader"
+            :key="col.bk_property_id"
+            :prop="col.bk_property_id"
+            :min-width="colMinWidth(col)"
+            :fixed="col.bk_property_id === 'bk_host_id'"
+            :sortable="isSortable(col) ? 'custom' : false"
+            :show-overflow-tooltip="col.bk_property_type !== 'topology'"
+          >
+            <template #header>
+              <span>{{ headerName(col) }}</span>
+              <span v-if="col.bk_obj_id !== 'host'" class="col-model-suffix">({{ MODEL_NAMES[col.bk_obj_id] }})</span>
+            </template>
             <template #default="{ row }">
-              <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_id }}</el-link>
+              <span v-if="col.bk_property_id === 'bk_host_id'" class="cell-link" @click="goDetail(row)">{{ row.bk_host_id }}</span>
+              <span v-else-if="col.bk_property_type === 'topology'" :title="topoPath(row)">{{ topoPath(row) }}</span>
+              <span v-else :class="{ 'cell-empty': displayValue(row, col) === '--' }">{{ displayValue(row, col) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="内网IPv4" min-width="130">
-            <template #default="{ row }">
-              <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
+          <el-table-column width="42" fixed="right" align="center" class-name="col-setting">
+            <template #header>
+              <el-icon class="col-setting-icon" title="列表显示属性配置" @click="openColumnConfig"><Setting /></el-icon>
             </template>
-          </el-table-column>
-          <el-table-column label="内网IPv6" min-width="120">
-            <template #default="{ row }">{{ row.bk_host_innerip_v6 || '--' }}</template>
-          </el-table-column>
-          <el-table-column label="管控区域" min-width="120">
-            <template #default="{ row }">{{ cloudName(row.bk_cloud_id) }}</template>
-          </el-table-column>
-          <el-table-column label="业务拓扑" min-width="200" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.__topo || '资源池 / 空闲机池 / 空闲机' }}</template>
-          </el-table-column>
-          <el-table-column label="主机名称" min-width="150" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.bk_host_name || '--' }}</template>
           </el-table-column>
         </el-table>
 
@@ -141,7 +156,7 @@
           <span>共计{{ total }}条</span>
           <span>每页</span>
           <el-select v-model="pageSize" size="small" style="width: 76px" @change="reload">
-            <el-option v-for="n in [20, 50, 100]" :key="n" :label="String(n)" :value="n" />
+            <el-option v-for="n in [20, 50, 100, 500]" :key="n" :label="String(n)" :value="n" />
           </el-select>
           <span>条</span>
           <span class="spacer" />
@@ -151,6 +166,7 @@
             :page-size="pageSize"
             :total="total"
             layout="prev, pager, next"
+            @current-change="load"
           />
         </div>
       </div>
@@ -349,6 +365,17 @@
       </template>
     </el-dialog>
 
+    <!-- 列表显示属性配置(老版 columns-config 600px 双栏抽屉,共享组件) -->
+    <LegacyColumnConfigDrawer
+      v-model="columnConfigVisible"
+      :pool="columnPool"
+      :selected="tableHeader.map((p) => p.bk_property_id)"
+      :fixed-ids="FIXED_COLUMN_IDS"
+      :name-resolver="propName"
+      @apply="onColumnApply"
+      @reset="onColumnReset"
+    />
+
     <AdvancedHostFilter
       v-model="advancedFilterVisible"
       :properties="advancedProperties"
@@ -381,18 +408,22 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Monitor, Filter } from '@element-plus/icons-vue'
+import { ArrowDown, Monitor, Filter, MoreFilled, Setting } from '@element-plus/icons-vue'
 import AdvancedHostFilter from '../components/AdvancedHostFilter.vue'
+import LegacyColumnConfigDrawer from '../components/LegacyColumnConfigDrawer.vue'
 import {
-  parseHostSearch, serializeIpCondition, conditionToHostPropertyFilter,
-  fetchHostFilterProperties, resolveInitialConditions, toUserBehavior, RESOURCE_FILTER_USERCUSTOM_KEY
+  propertyPriority, legacyHeaderName, legacyColMinWidth, computeLegacyHeader, legacyCellValue, legacyIsSortable
+} from '../utils/legacy-columns'
+import {
+  parseHostSearch, serializeIpCondition, fetchHostFilterProperties, resolveInitialConditions, toUserBehavior, RESOURCE_FILTER_USERCUSTOM_KEY
 } from '../utils/host-filter'
 import {
-  http, listHostsWithoutApp, transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
+  http, transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   transferHostsToDirectory, importHosts, updateHostsByExcel, downloadHostTemplate, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
-  getBizTopoTree, getBizInternalTopo, searchModelAttributes, searchUserCustom, saveUserCustom
+  getBizTopoTree, getBizInternalTopo, searchModelAttributes, searchUserCustom, saveUserCustom,
+  searchHostsResource
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
 
@@ -401,27 +432,21 @@ const router = useRouter()
 const bizStore = useBizStore()
 
 const groupTabs = [
-  { key: 'unassigned', label: '未分配' },
-  { key: 'assigned', label: '已分配' },
-  { key: 'all', label: '全部' }
+  { key: 'unassigned', label: '未分配', legacy: 1 },
+  { key: 'assigned', label: '已分配', legacy: 0 },
+  { key: 'all', label: '全部', legacy: 'all' }
 ]
-const groupTab = ref('all')
+const groupTab = ref('unassigned')
 
 // 资源目录
 const dirTreeRef = ref()
 const dirTreeData = ref([])
 const dirKeyword = ref('')
-const currentDirId = ref(null)
+const currentDirId = ref('default')
 const dirOptions = computed(() => {
   // dirTreeData 已是树形,递归取所有 node 即可
   return dirTreeData.value
 })
-
-const groupList = ref([
-  { id: 'idle-pool', name: '空闲机池', count: 0 },
-  { id: 'host-pool', name: '主机池', count: 0 }
-])
-const activeGroup = ref('idle-pool')
 
 const keyword = ref('')
 const page = ref(1)
@@ -490,10 +515,120 @@ function cloudName(id) {
   return n ? `${n}[${id}]` : '--'
 }
 
-const pagedHosts = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return rows.value.slice(start, start + pageSize.value)
+const pagedHosts = computed(() => rows.value)
+
+// ---------- 表格列(老版 FilterStore.getHeader + columns-config 契约) ----------
+const MODEL_NAMES = { host: '主机', module: '模块', set: '集群', biz: '业务' }
+const COLUMN_CONFIG_USERCUSTOM_KEY = 'resource_host_table_column_config'
+const FIXED_COLUMN_IDS = ['bk_host_id', 'bk_host_innerip', 'bk_host_innerip_v6', 'bk_cloud_id']
+// 资源池视图的前端注入虚拟属性(老版 isInject,不传后台);standalone 属性接口不返回 bk_host_id,老版同为注入(createIdProperty)
+const HOST_ID_PROPERTY = {
+  id: 'bk_host_id', bk_obj_id: 'host', bk_property_id: 'bk_host_id',
+  bk_property_name: 'ID', bk_property_index: -1, bk_property_type: 'int', isonly: true, ispre: true
+}
+const TOPOLOGY_PROPERTY = {
+  id: '__bk_host_topology__', bk_obj_id: 'host', bk_property_id: '__bk_host_topology__',
+  bk_property_name: '业务拓扑', bk_property_type: 'topology', isInject: true
+}
+
+const tableHeader = ref([])
+const columnConfigVisible = ref(false)
+
+// 老版 setModuleNamePropertyState:模块名属性随 scope 变化(未分配=目录名)
+const modulePropertyName = computed(() => ({
+  unassigned: '目录名', assigned: '模块名', all: '目录名/模块名'
+})[groupTab.value] || '模块名')
+
+function propName(property) {
+  if (property.bk_property_id === 'bk_module_name' && property.bk_obj_id === 'module') {
+    return modulePropertyName.value
+  }
+  return property.bk_property_name
+}
+
+// 表头展示名(老版 getHeaderPropertyName:带单位时补 (unit))
+function headerName(property) {
+  return legacyHeaderName(property, propName)
+}
+
+// 列配置属性池(老版 columnConfigProperties:host 全量 + 模块名/集群名/业务名;host 含注入的 ID/业务拓扑)
+const columnPool = computed(() => {
+  const props = advancedProperties.value || []
+  const hostProps = props.filter((p) => p.bk_obj_id === 'host')
+  const extra = ['module', 'set', 'biz']
+    .map((objId) => props.find((p) => p.bk_obj_id === objId && p.bk_property_id === `bk_${objId === 'biz' ? 'biz' : objId}_name`))
+    .filter(Boolean)
+  return [...hostProps, HOST_ID_PROPERTY, TOPOLOGY_PROPERTY, ...extra]
 })
+
+// 老版 getHeader/presetHeader:默认表头仅取 host 属性优先级前 6,固定列(ID/IP/v6/云区域/业务拓扑)置顶
+function computeTableHeader(usercustom) {
+  tableHeader.value = computeLegacyHeader({
+    pool: columnPool.value.filter((p) => p.bk_obj_id === 'host'),
+    customIds: usercustom?.[COLUMN_CONFIG_USERCUSTOM_KEY],
+    fixedProperties: [...FIXED_COLUMN_IDS.map((id) => columnPool.value.find((p) => p.bk_property_id === id)), TOPOLOGY_PROPERTY],
+    totalLimit: 6
+  })
+}
+
+const isSortable = legacyIsSortable
+
+function colMinWidth(property) {
+  return legacyColMinWidth(property, isSortable(property), { bk_host_id: 80 })
+}
+
+// 单元格取值(老版 hostValueFilter:host 直取,其余从模型数组取;bk_cloud_id 数字旧数据走 cloudName)
+function displayValue(row, property) {
+  return legacyCellValue(row, property, (r, p) => {
+    let value
+    if (p.bk_obj_id === 'host') {
+      value = r[p.bk_property_id]
+    } else {
+      const list = r[`__${p.bk_obj_id}`]
+      value = Array.isArray(list) ? list.map((item) => item[p.bk_property_id]) : undefined
+    }
+    if (p.bk_property_id === 'bk_cloud_id' && (typeof value === 'number' || typeof value === 'string')) return cloudName(value)
+    return value
+  })
+}
+
+// 业务拓扑列(老版 cmdb-host-topo-path:业务/集群/模块;资源池主机固定以 资源池 开头)
+function topoPath(row) {
+  const modules = row.__module?.map((m) => m.bk_module_name) || []
+  if (!modules.length) return '资源池'
+  const biz = row.__biz?.map((b) => b.bk_biz_name) || ['资源池']
+  const sets = row.__set?.map((s) => s.bk_set_name) || []
+  return [...biz, ...sets, ...modules].join(' / ')
+}
+
+async function onSortChange({ prop, order }) {
+  const sort = order === 'ascending' ? prop : order === 'descending' ? `-${prop}` : ''
+  page.value = 1
+  await router.replace({ query: { ...route.query, sort: sort || undefined, page: undefined, _t: Date.now() } })
+  load()
+}
+
+// ---------- 列配置抽屉(共享 LegacyColumnConfigDrawer,老版 columns-config 契约) ----------
+function openColumnConfig() {
+  columnConfigVisible.value = true
+}
+
+async function onColumnApply(ids) {
+  await saveUserCustom({ [COLUMN_CONFIG_USERCUSTOM_KEY]: ids })
+  columnConfigVisible.value = false
+  // ensureFilterUsercustom 有缓存,保存后同步更新缓存再重算表头
+  if (filterUsercustom !== null) filterUsercustom[COLUMN_CONFIG_USERCUSTOM_KEY] = [...ids]
+  computeTableHeader(filterUsercustom)
+  reload()
+}
+
+async function onColumnReset() {
+  await saveUserCustom({ [COLUMN_CONFIG_USERCUSTOM_KEY]: [] })
+  columnConfigVisible.value = false
+  if (filterUsercustom !== null) filterUsercustom[COLUMN_CONFIG_USERCUSTOM_KEY] = []
+  computeTableHeader(filterUsercustom)
+  reload()
+}
 
 function filterDir(value, data) {
   if (!value) return true
@@ -501,16 +636,25 @@ function filterDir(value, data) {
 }
 watch(dirKeyword, (v) => dirTreeRef.value?.filter(v))
 
-function onDirClick(node) {
-  currentDirId.value = node.id
-  if (node.id !== 'default') {
-    ElMessage.info(`已选中目录:${node.name}(独立模式后端暂未支持按目录筛选)`)
-  }
+async function onDirClick(node) {
+  if (node.id === 'empty') return
+  currentDirId.value = String(node.id)
+  selectedHosts.value = []
+  page.value = 1
+  await router.replace({
+    query: {
+      ...route.query,
+      directory: node.id === 'default' ? undefined : String(node.id),
+      page: undefined,
+      _t: Date.now()
+    }
+  })
+  await load()
 }
 
 function onDirContext(event, data) {
   // 阻止默认右键
-  currentDirId.value = data.id
+  currentDirId.value = String(data.id)
 }
 
 function openCreateDir() {
@@ -574,6 +718,12 @@ function removeFav(row) {
     .catch(() => {})
 }
 
+// 点菜单操作:先选中该目录,再执行重命名/删除(老版 dot-menu 语义)
+function onDirNodeCmd(cmd, data) {
+  currentDirId.value = String(data.id)
+  onDirCmd(cmd)
+}
+
 async function onDirCmd(cmd) {
   if (cmd === 'rename') {
     if (currentDirId.value === 'default') { ElMessage.warning('默认目录不能重命名'); return }
@@ -597,27 +747,74 @@ async function onDirCmd(cmd) {
   }
 }
 
-function onGroupClick(g) {
-  activeGroup.value = g.id
-  reload()
+function buildResourceSearchBody() {
+  // 老版契约:condition[].fields 跟随当前表头列
+  const headerFields = (objId) => tableHeader.value
+    .filter((p) => p.bk_obj_id === objId && !p.isInject)
+    .map((p) => p.bk_property_id)
+  const unique = (list) => [...new Set(list)]
+  const hostFields = unique(headerFields('host'))
+  if (!hostFields.length) hostFields.push('bk_host_id', 'bk_host_innerip', 'bk_host_innerip_v6', 'bk_cloud_id', 'bk_host_name')
+
+  const conditions = [
+    { bk_obj_id: 'biz', fields: unique(['bk_biz_id', 'bk_biz_name', ...headerFields('biz')]), condition: [] },
+    { bk_obj_id: 'set', fields: unique(['bk_set_id', 'bk_set_name', ...headerFields('set')]), condition: [] },
+    { bk_obj_id: 'module', fields: unique(['bk_module_id', 'bk_module_name', ...headerFields('module')]), condition: [] },
+    { bk_obj_id: 'host', fields: hostFields, condition: [] }
+  ]
+  const addCondition = (objId, field, operator, value) => {
+    const target = conditions.find((item) => item.bk_obj_id === objId)
+    if (target) target.condition.push({ field, operator, value })
+  }
+  const scope = groupTabs.find((item) => item.key === groupTab.value)?.legacy
+  if (scope !== 'all') addCondition('biz', 'default', '$eq', scope)
+  if (groupTab.value === 'unassigned' && currentDirId.value && currentDirId.value !== 'default') {
+    addCondition('module', 'bk_module_id', '$eq', Number(currentDirId.value))
+  }
+
+  const routeIp = parseIpQuery(route.query.ip)
+  const parsedIp = parseHostSearch(routeIp.text)
+  const ipValues = [
+    ...parsedIp.IPv4List,
+    ...parsedIp.IPv6List,
+    ...parsedIp.IPv4WithCloudList.map(([, ip]) => ip),
+    ...parsedIp.IPv6WithCloudList.map(([, ip]) => ip)
+  ]
+  if (ipValues.length) {
+    addCondition('host', 'bk_host_innerip', routeIp.exact ? '$eq' : '$regex', ipValues.length === 1 ? ipValues[0] : ipValues)
+  }
+  if (parsedIp.assetList.length) addCondition('host', 'bk_asset_id', '$in', parsedIp.assetList)
+  if (!routeIp.text && keyword.value) addCondition('host', 'bk_host_innerip', '$regex', keyword.value)
+  if (route.query.cloudId !== undefined) addCondition('host', 'bk_cloud_id', '$eq', Number(route.query.cloudId))
+
+  for (const item of parseFilterQuery(route.query.filter)) {
+    let value = item.value
+    if (['in', 'nin', 'range'].includes(item.operator) && !Array.isArray(value)) value = [value]
+    addCondition(item.property.bk_obj_id, item.property.bk_property_id, `$${item.operator}`, value)
+  }
+  return {
+    condition: conditions,
+    // 老版排序契约:URL sort(-field / field),默认 bk_host_id
+    page: { start: (page.value - 1) * pageSize.value, limit: pageSize.value, sort: String(route.query.sort || 'bk_host_id') }
+  }
 }
+
 
 async function loadDirectoryTree() {
   try {
-    const list = await listResourceDirectory()
-    // 老版契约:空闲机模块排首位;树形为 主机池(计数=子项合计) → [空闲机, 自定义目录...]
-    const items = (list?.info || list || []).map((d) => ({
+    const list = await listResourceDirectory({ page: { sort: 'bk_module_name' } })
+    const rawItems = list?.info || list || []
+    const items = rawItems.map((d) => ({
       id: String(d.bk_module_id || d.id),
       name: d.bk_module_name || d.name,
-      __count: d.host_count ?? 0
-    }))
-    const sum = items.reduce((acc, it) => acc + (Number(it.__count) || 0), 0)
-    dirTreeData.value = [
-      {
-        id: 'default', name: '主机池', __count: sum, __icon: 'icon-cc-host',
-        children: items.length ? items : [{ id: 'empty', name: '(空)' }]
-      }
-    ]
+      __count: Number(d.host_count) || 0,
+      default: Number(d.default) === 1,
+      __icon: 'icon-cc-folder'
+    })).sort((a, b) => Number(b.default) - Number(a.default))
+    const sum = items.reduce((acc, it) => acc + it.__count, 0)
+    dirTreeData.value = [{
+      id: 'default', name: '主机池', __count: sum, __icon: 'icon-cc-host', children: items.length ? items : [{ id: 'empty', name: '(空)' }]
+    }]
   } catch (e) {
     dirTreeData.value = [{ id: 'default', name: '主机池', __count: 0, children: [] }]
   }
@@ -626,45 +823,16 @@ async function loadDirectoryTree() {
 async function load() {
   loading.value = true
   try {
-    const body = {
-      page: { start: 0, limit: 1000, sort: 'bk_host_id' },
-      fields: ['bk_host_id', 'bk_host_innerip', 'bk_host_innerip_v6', 'bk_host_name', 'bk_cloud_id', 'bk_os_name', 'bk_module_id']
-    }
-    const routeIp = parseIpQuery(route.query.ip)
-    const parsedIp = parseHostSearch(routeIp.text)
-    const rules = []
-    if (routeIp.text) {
-      const ipValues = [...parsedIp.IPv4List, ...parsedIp.IPv6List,
-        ...parsedIp.IPv4WithCloudList.map(([, ip]) => ip), ...parsedIp.IPv6WithCloudList.map(([, ip]) => ip)]
-      if (ipValues.length) rules.push({ field: 'bk_host_innerip', operator: routeIp.exact ? 'equal' : 'contains', value: ipValues.length === 1 ? ipValues[0] : ipValues })
-      if (parsedIp.assetList.length) rules.push({ field: 'bk_asset_id', operator: 'in', value: parsedIp.assetList })
-    } else if (keyword.value) {
-      rules.push({ field: 'bk_host_innerip', operator: 'contains', value: keyword.value })
-    }
-    const routeConditions = parseFilterQuery(route.query.filter)
-    const advancedFilter = conditionToHostPropertyFilter(routeConditions.map((item) => {
-      let value = item.value
-      const numeric = ['int', 'float'].includes(item.property.bk_property_type)
-      const multi = ['in', 'nin', 'range'].includes(item.operator)
-      if (multi && !Array.isArray(value)) value = [value]
-      if (numeric) value = Array.isArray(value) ? value.map(Number) : Number(value)
-      return { field: item.property.bk_property_id, operator: item.operator, value }
+    const raw = await searchHostsResource(buildResourceSearchBody())
+    const info = raw?.info || raw?.data?.info || []
+    rows.value = info.map((item) => ({
+      ...(item.host || item),
+      __biz: item.biz,
+      __set: item.set,
+      __module: item.module
     }))
-    if (advancedFilter?.rules?.length) rules.push(...advancedFilter.rules)
-    if (rules.length) body.host_property_filter = { condition: 'AND', rules }
-    if (route.query.cloudId !== undefined) {
-      body.host_property_filter = body.host_property_filter || { condition: 'AND', rules: [] }
-      body.host_property_filter.rules.push({ field: 'bk_cloud_id', operator: 'equal', value: Number(route.query.cloudId) })
-    }
-    const raw = await http.post('/hosts/list_hosts_without_app', body)
-    const list = (raw?.info || []).map((h) => h.host || h)
-    rows.value = list
-    total.value = list.length
+    total.value = Number(raw?.count ?? raw?.data?.count ?? rows.value.length)
     refreshText.value = '刚刚刷新'
-    groupList.value = [
-      { id: 'idle-pool', name: '空闲机池', count: list.length },
-      { id: 'host-pool', name: '主机池', count: list.length }
-    ]
   } finally {
     loading.value = false
   }
@@ -1080,8 +1248,11 @@ function openInNewTab() {
 
 function switchTab(key) {
   groupTab.value = key
-  router.replace({ query: { ...route.query, scope: key } })
-  reload()
+  currentDirId.value = key === 'unassigned' ? currentDirId.value : 'default'
+  selectedHosts.value = []
+  page.value = 1
+  router.replace({ query: { ...route.query, scope: key, directory: key === 'unassigned' ? route.query.directory : undefined, page: undefined, _t: Date.now() } })
+  load()
 }
 
 // 旧版契约:仅"无 adv → 有 adv"的跳变才自动展开侧滑(对齐 host-options 对 prev._t 的判断),
@@ -1095,20 +1266,19 @@ onMounted(async () => {
   const ip = route.query.ip
   if (ip) keyword.value = parseIpQuery(ip).text || String(ip)
   await openAdvancedFromRoute()
-  // 老版默认落在「未分配」;query.scope 可指定
+  // 先取属性与用户习惯,算出表头,再发首个列表请求(fields 跟随表头)
+  await ensureAdvancedProperties()
+  computeTableHeader(await ensureFilterUsercustom())
   const scope = ({ '1': 'unassigned', '0': 'assigned' })[String(route.query.scope)] || String(route.query.scope || 'unassigned')
   if (groupTabs.some((t) => t.key === scope)) groupTab.value = scope
-  loadDirectoryTree().then(() => {
-    // 老版默认选中「空闲机」(directory=1)
-    const dir = route.query.directory
-      ? String(route.query.directory)
-      : String((dirTreeData.value[0]?.children || []).find((c) => c.id !== 'empty')?.id || '')
-    if (dir) {
-      currentDirId.value = dir
-      dirTreeRef.value?.setCurrentKey(dir)
-    }
-  })
-  load()
+  await loadDirectoryTree()
+  const requestedDir = route.query.directory ? String(route.query.directory) : 'default'
+  const children = dirTreeData.value[0]?.children || []
+  currentDirId.value = requestedDir === 'empty' || (requestedDir !== 'default' && !children.some((c) => c.id === requestedDir))
+    ? 'default'
+    : requestedDir
+  dirTreeRef.value?.setCurrentKey(currentDirId.value)
+  await load()
 })
 </script>
 
@@ -1151,6 +1321,14 @@ onMounted(async () => {
 .dir-tree { background: transparent; padding: 6px 0; }
 .dir-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .dir-row .d-name { flex: 1; }
+/* 老版 dot-menu:仅悬停目录行时出现 */
+.dir-op { display: none; color: #979ba5; margin-right: 2px; }
+.dir-row:hover .dir-op { display: inline-flex; }
+.dir-op-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 14px;
+}
+.dir-op-trigger:hover { background: #fff; color: #3a84ff; }
 .d-count { color: #979ba5; font-size: 12px; }
 .import-steps {
   display: flex; align-items: center; justify-content: center;
@@ -1174,6 +1352,7 @@ onMounted(async () => {
 .relation-section { margin-top: 6px; }
 .relation-title { font-size: 14px; font-weight: 700; color: #313238; margin-bottom: 8px; }
 .main-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 12px 16px 12px; }
+/* 表格视觉契约统一在全局 .legacy-table(bk-legacy.css) */
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .toolbar .spacer { flex: 1; }
 .refresh-time { color: #979ba5; font-size: 12px; margin: 0 4px; }

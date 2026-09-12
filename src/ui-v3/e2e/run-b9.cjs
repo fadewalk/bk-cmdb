@@ -48,13 +48,73 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     // 资源目录树
     const dirTree = await page.locator('.dir-tree .el-tree-node').count()
     if (dirTree > 0) ok(`资源目录树: ${dirTree} 节点`)
-    // 目录操作按钮
+    // 新建目录按钮(老版:搜索框旁 + 号)
     const createDirBtn = await page.locator('.dir-add').count()
-    const renameBtn = await page.locator('button:has-text("重命名")').count()
-    const delDirBtn = await page.locator('button:has-text("删除")').first().count()
     if (createDirBtn > 0) ok('"新建目录"按钮')
-    if (renameBtn > 0) ok('"重命名"按钮')
-    if (delDirBtn > 0) ok('"删除"按钮')
+    else fail('新建目录按钮', '未渲染')
+
+    // 老版契约:重命名/删除不是常驻按钮,而是自定义目录行悬停点菜单;根(主机池)与默认目录(空闲机)无入口
+    if (await page.locator('.dir-actions').count() === 0) ok('无常驻重命名/删除按钮')
+    else fail('常驻按钮', '仍存在 .dir-actions 常驻操作区')
+    // 只看各自行内容(el-tree-node 会把子节点的菜单算进来)
+    const rootOp = await page.locator('.dir-tree > .el-tree-node > .el-tree-node__content .dir-op').count()
+    if (rootOp === 0) ok('主机池根节点无点菜单')
+    else fail('主机池根节点', '不应有点菜单')
+    const idleOp = await page.locator('.dir-tree .el-tree-node__content').filter({ hasText: '空闲机' }).locator('.dir-op').count()
+    if (idleOp === 0) ok('默认目录(空闲机)无点菜单')
+    else fail('默认目录(空闲机)', '不应有点菜单')
+
+    // 建一个自定义目录 → 悬停出现点菜单 → 菜单含 重命名/删除
+    const stamp = Date.now()
+    // 前置清理:历史失败运行遗留的临时目录
+    const preDirs = await page.evaluate(async () => {
+      const res = await fetch('/api/v3/findmany/resource/directory', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ page: { sort: 'bk_module_name' } })
+      })
+      return res.json()
+    })
+    for (const d of (preDirs.data?.info || [])) {
+      if (String(d.bk_module_name || '').startsWith('e2e-dir-')) {
+        await page.evaluate(async (id) => {
+          await fetch(`/api/v3/delete/resource/directory/${id}`, { method: 'DELETE', credentials: 'include' })
+        }, d.bk_module_id)
+      }
+    }
+    const created = await page.evaluate(async (name) => {
+      const res = await fetch('/api/v3/create/resource/directory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ bk_module_name: name, bk_supplier_account: '0' })
+      })
+      return res.json()
+    }, `e2e-dir-${stamp}`)
+    if (created.result) {
+      await page.reload({ waitUntil: 'networkidle' })
+      await page.waitForSelector('.dir-tree .el-tree-node', { timeout: 15000 })
+      // 注意:按行内容定位,el-tree-node 会同时命中包含子节点文本的父节点
+      const row = page.locator('.dir-tree .el-tree-node__content').filter({ hasText: `e2e-dir-${stamp}` }).first()
+      await row.hover()
+      await page.waitForTimeout(300)
+      const opVisible = await row.locator('.dir-op').isVisible().catch(() => false)
+      if (opVisible) ok('自定义目录悬停显示点菜单')
+      else fail('自定义目录点菜单', '悬停后未出现')
+      await row.locator('.dir-op-trigger').click({ force: true })
+      await page.waitForTimeout(400)
+      const menuText = await page.locator('.el-dropdown-menu:visible').textContent().catch(() => '')
+      if (menuText.includes('重命名') && menuText.includes('删除')) ok('点菜单含 重命名/删除')
+      else fail('点菜单内容', `缺少操作项: ${menuText}`)
+      await page.keyboard.press('Escape')
+      // 清理
+      const dirId = created.data?.created?.id
+      await page.evaluate(async (id) => {
+        await fetch(`/api/v3/delete/resource/directory/${id}`, { method: 'DELETE', credentials: 'include' })
+      }, dirId)
+      ok('临时目录已清理')
+    } else {
+      fail('创建临时目录', created.bk_error_msg || '接口失败')
+    }
 
     // 新建目录对话框
     await page.locator('.dir-add').click()

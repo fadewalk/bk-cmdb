@@ -19,27 +19,32 @@
       <el-button v-if="scope === 'normal'" type="primary" :icon="'Plus'" @click="openForm()">新建</el-button>
       <el-button v-if="scope === 'normal'" :disabled="!selectedRows.length" @click="openBatchEdit">批量编辑</el-button>
       <el-button :icon="'Refresh'" @click="load">刷新</el-button>
+      <el-tooltip content="列表显示属性配置" placement="top">
+        <el-icon class="legacy-toolbar-gear" @click="columnConfigVisible = true"><Setting /></el-icon>
+      </el-tooltip>
     </div>
 
-    <el-table :data="filtered" v-loading="loading" stripe @selection-change="onSelect">
-      <el-table-column type="selection" width="40" :selectable="() => scope === 'normal'" />
-      <el-table-column prop="bk_biz_id" label="ID" width="100" sortable />
-      <el-table-column prop="bk_biz_name" label="业务名" min-width="200" show-overflow-tooltip>
-        <template #default="{ row }">
-          <el-link type="primary" :underline="false" @click="goDetail(row)">{{ row.bk_biz_name }}</el-link>
+    <el-table :data="filtered" v-loading="loading" class="legacy-table" @selection-change="onSelect" @sort-change="onSortChange">
+      <el-table-column type="selection" width="60" align="center" fixed :selectable="() => scope === 'normal'" />
+      <el-table-column
+        v-for="col in tableHeader"
+        :key="col.bk_property_id"
+        :prop="col.bk_property_id"
+        :min-width="legacyColMinWidth(col, true)"
+        sortable="custom"
+        :show-overflow-tooltip="!['objuser', 'organization', 'enumquote', 'table'].includes(col.bk_property_type)"
+      >
+        <template #header>
+          <span>{{ legacyHeaderName(col) }}</span>
         </template>
-      </el-table-column>
-      <el-table-column prop="bk_biz_maintainer" label="运维人员" width="160" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.bk_biz_maintainer || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="创建时间" width="170">
-        <template #default="{ row }">{{ (row.create_time || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="创建人" width="120">
-        <template #default="{ row }">{{ row.bk_created_by || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="更新时间" width="170">
-        <template #default="{ row }">{{ (row.last_time || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+        <template #default="{ row }">
+          <span
+            v-if="col.bk_property_id === 'bk_biz_id'"
+            class="cell-link"
+            @click="goDetail(row)"
+          >{{ legacyCellValue(row, col) }}</span>
+          <span v-else :class="{ 'cell-empty': legacyCellValue(row, col) === '--' }">{{ legacyCellValue(row, col) }}</span>
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
@@ -61,7 +66,7 @@
       <span class="page-size">
         每页
         <el-select v-model="pageSize" size="small" style="width: 72px" @change="() => { page = 1; load() }">
-          <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n" :value="n" />
+          <el-option v-for="n in [20, 50, 100, 500]" :key="n" :label="n" :value="n" />
         </el-select>
         条
       </span>
@@ -174,6 +179,16 @@
         <el-button type="primary" :loading="batchSaving" @click="submitBatch">保存</el-button>
       </template>
     </el-drawer>
+
+    <!-- 列表显示属性配置(老版 columns-config 600px 双栏抽屉,共享组件) -->
+    <LegacyColumnConfigDrawer
+      v-model="columnConfigVisible"
+      :pool="bizPool"
+      :selected="drawerSelected"
+      :fixed-ids="FIXED_COLS"
+      @apply="onColumnApply"
+      @reset="onColumnReset"
+    />
   </div>
 </template>
 
@@ -181,10 +196,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Setting } from '@element-plus/icons-vue'
+import LegacyColumnConfigDrawer from '../components/LegacyColumnConfigDrawer.vue'
+import { legacyHeaderName, legacyColMinWidth, computeLegacyHeader, legacyCellValue } from '../utils/legacy-columns'
 import {
   searchBusiness, createBusiness, updateBusiness,
-  archiveBusiness, recoverBusiness, deleteArchivedBiz, http
+  archiveBusiness, recoverBusiness, deleteArchivedBiz, http,
+  searchUserCustom, saveUserCustom
 } from '../api/cmdb'
+import { fetchHostFilterProperties } from '../utils/host-filter'
 
 const route = useRoute()
 const router = useRouter()
@@ -217,6 +237,53 @@ const timeZones = [
 
 const filtered = computed(() => rows.value)
 
+// ---------- 表格列(老版业务列表契约:配置键 biz_custom_table_columns,固定 ID/业务名) ----------
+const COLUMN_CONFIG_KEY = 'biz_custom_table_columns'
+const FIXED_COLS = ['bk_biz_id', 'bk_biz_name']
+// standalone biz 属性接口不返回 bk_biz_id,老版同为注入(createIdProperty)
+const BIZ_ID_PROPERTY = {
+  id: 'bk_biz_id', bk_obj_id: 'biz', bk_property_id: 'bk_biz_id',
+  bk_property_name: 'ID', bk_property_index: -1, bk_property_type: 'int', isonly: true, ispre: true
+}
+const bizAttrs = ref([])
+const bizPool = computed(() => [...bizAttrs.value, BIZ_ID_PROPERTY])
+const tableHeader = ref([])
+const columnConfigVisible = ref(false)
+const drawerSelected = computed(() => tableHeader.value.map((p) => p.bk_property_id))
+let ucCache = null
+
+function computeHeader() {
+  tableHeader.value = computeLegacyHeader({
+    pool: bizPool.value,
+    customIds: ucCache?.[COLUMN_CONFIG_KEY],
+    fixedProperties: FIXED_COLS.map((id) => bizPool.value.find((p) => p.bk_property_id === id)).filter(Boolean)
+  })
+}
+
+async function onColumnApply(ids) {
+  await saveUserCustom({ [COLUMN_CONFIG_KEY]: ids })
+  columnConfigVisible.value = false
+  if (ucCache) ucCache[COLUMN_CONFIG_KEY] = [...ids]
+  computeHeader()
+  reloadFromFirst()
+}
+
+async function onColumnReset() {
+  await saveUserCustom({ [COLUMN_CONFIG_KEY]: [] })
+  columnConfigVisible.value = false
+  if (ucCache) ucCache[COLUMN_CONFIG_KEY] = []
+  computeHeader()
+  reloadFromFirst()
+}
+
+// 老版排序契约:内部 sort(默认 bk_biz_id),随请求 page.sort 下发
+const sort = ref('bk_biz_id')
+
+function onSortChange({ prop, order }) {
+  sort.value = order === 'ascending' ? prop : order === 'descending' ? `-${prop}` : 'bk_biz_id'
+  reloadFromFirst()
+}
+
 function reloadFromFirst() {
   page.value = 1
   load()
@@ -229,7 +296,7 @@ async function load() {
       ...(scope.value === 'archived' ? { bk_data_status: 'disabled' } : { bk_data_status: { $ne: 'disabled' } }),
       ...(keyword.value.trim() ? { bk_biz_name: keyword.value.trim() } : {})
     }
-    const data = await searchBusiness({ start: (page.value - 1) * pageSize.value, limit: pageSize.value }, condition, keyword.value.trim() ? true : undefined)
+    const data = await searchBusiness({ start: (page.value - 1) * pageSize.value, limit: pageSize.value, sort: sort.value }, condition, keyword.value.trim() ? true : undefined)
     rows.value = data?.info || []
     total.value = data?.count || 0
   } catch {
@@ -379,7 +446,11 @@ async function removeForever(row) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 先取属性与用户习惯算出表头,再发首个列表请求
+  bizAttrs.value = ((await fetchHostFilterProperties()) || []).filter((p) => p.bk_obj_id === 'biz')
+  ucCache = await searchUserCustom().catch(() => ({}))
+  computeHeader()
   load()
   if (String(route.query.create || '') === '1') {
     openForm()
