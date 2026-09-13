@@ -341,3 +341,26 @@ node run-all.cjs
 - **IAM**：`run-iam.cjs` 已 mock `auth/verify` deny 和 `auth/skip_url`，验证 `resources` 契约、权限页和申请动作。
 
 结果：mock 核心域 contract suite 全部通过。Mock 证明的是前端请求/响应/页面/错误态契约，不替代真实 Kubernetes、Elasticsearch、collector、IAM 或云厂商集成测试。
+
+
+## 12. Mock error matrix and E2E support helpers（2026-09-13）
+
+新增 `run-core-domains-errors.cjs`，使用真实接口 envelope 做以下失败/空态契约：
+
+- IAM `auth/verify` 网络错误：fail-closed 到权限状态；
+- IAM `auth/skip_url` 500：留在当前路由并展示失败；
+- K8s Pod 500：显示依赖阻塞态；
+- ES 空结果：显示“未搜索到结果”；
+- K8s 空列表：显示“暂无 Pod”。
+
+新增共享 E2E 支撑模块：
+
+```text
+src/ui-v3/e2e/support/browser.cjs
+src/ui-v3/e2e/support/api.cjs
+src/ui-v3/e2e/support/navigation.cjs
+src/ui-v3/e2e/support/observe.cjs
+src/ui-v3/e2e/support/mock.cjs
+```
+
+它们统一了 no-cache、API envelope、root/API-v3 请求、hash 导航、请求采集和 JSON route mock。已有旧脚本暂不强制重写，避免扩大回归面；新 mock 场景从这些 helper 开始迁移。
