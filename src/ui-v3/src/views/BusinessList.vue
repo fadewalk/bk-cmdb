@@ -271,7 +271,9 @@ async function onColumnApply(ids) {
 async function onColumnReset() {
   await saveUserCustom({ [COLUMN_CONFIG_KEY]: [] })
   columnConfigVisible.value = false
-  if (ucCache) ucCache[COLUMN_CONFIG_KEY] = []
+  // 用新对象替换而非原地改写,确保 computed/custom 列状态立即失效(老版 reset 后重算表头)
+  ucCache = { ...(ucCache || {}), [COLUMN_CONFIG_KEY]: [] }
+  tableHeader.value = []
   computeHeader()
   reloadFromFirst()
 }

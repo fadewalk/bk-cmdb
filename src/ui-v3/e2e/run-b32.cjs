@@ -43,6 +43,7 @@ async function resetUsercustom(request, keys) {
 
     // 默认表头:固定 ID/业务名 在前 + 优先前列;齿轮在工具栏
     let headers = await headerTexts()
+    const defaultBizHeaders = [...headers]
     assert(headers.some((t) => t.trim() === 'ID'), `业务表缺 ID 列: ${headers}`)
     assert(headers.some((t) => t.includes('业务名')), `业务表缺 业务名: ${headers}`)
     assert(headers.some((t) => t.includes('运维人员')), `业务表缺 运维人员: ${headers}`)
@@ -85,8 +86,10 @@ async function resetUsercustom(request, keys) {
     await page.waitForTimeout(400)
     await page.locator('.el-message-box button').filter({ hasText: '确定' }).click()
     await page.waitForTimeout(800)
-    assert(!(await headerTexts()).some((t) => t.includes('创建时间')), '业务列还原默认失败')
-    console.log('✓ 业务列表:刷新保留 + 还原默认')
+    const restoredBizHeaders = await headerTexts()
+    assert(JSON.stringify(restoredBizHeaders) === JSON.stringify(defaultBizHeaders),
+      `业务列还原默认失败: expected ${defaultBizHeaders}, got ${restoredBizHeaders}`)
+    console.log('✓ 业务列表:刷新保留 + 还原默认(回到初始表头基线)')
 
     // 排序契约:点表头 → 请求 page.sort(老版为内部 sort,不写 URL)
     bizListBodies.length = 0

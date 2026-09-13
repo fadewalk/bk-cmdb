@@ -9,6 +9,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
+const auditScript = path.join(__dirname, 'audit-parity.cjs')
 
 const root = path.resolve(__dirname, '../..')
 const v3ApiFile = path.join(root, 'src/ui-v3/src/api/cmdb.js')
@@ -65,8 +66,28 @@ function normalize(endpoint) {
   return endpoint.replace(/\$\{[^}]+\}/g, '*').replace(/\{[^}]+\}/g, '*').replace(/:[A-Za-z0-9_?]+/g, '*').replace(/^\/+/, '').replace(/\?.*$/, '').replace(/\/+$/, '')
 }
 
+function loadAudit() {
+  try { return JSON.parse(execFileSync(process.execPath, [auditScript], { cwd: root, encoding: 'utf8' })) } catch { return null }
+}
+function manifestMatch(endpoint, method, audit) {
+  if (!audit) return { kind: 'unknown', reason: 'audit unavailable' }
+  const normalized = `/${normalize(endpoint)}`
+  if (audit.apis.apiGaps?.includes(normalized)) return { kind: 'unmatched', reason: 'not matched by backend scanner' }
+  if (audit.apis.apiGenericProxyOnly?.includes(normalized)) return { kind: 'generic-proxy', reason: 'covered by apiserver generic proxy' }
+  const direct = audit.apis.backendRouteCount > 0
+  return { kind: direct ? 'route-scan-match' : 'unknown', reason: direct ? 'backend route inventory contains a compatible path' : 'no backend inventory' }
+}
+
+const audit = loadAudit()
+
 const legacy = legacyDefinitions()
-const normalizedV3 = v3Exports.map((item) => ({ ...item, normalizedEndpoint: normalize(item.endpoint) }))
+const normalizedV3 = v3Exports.map((item) => ({
+  ...item,
+  normalizedEndpoint: normalize(item.endpoint),
+  routeMatch: manifestMatch(item.endpoint, item.method, audit),
+  usageStatus: item.callerCount > 0 ? (audit?.apis?.apiGaps?.includes(`/${normalize(item.endpoint)}`) ? 'caller-but-route-gap' : 'used') : 'wrapped-unused',
+  evidenceStatus: item.callerCount > 0 ? 'static-caller-only' : 'no-caller-evidence'
+}))
 const normalizedLegacy = legacy.map((item) => ({ ...item, normalizedEndpoint: normalize(item.endpoint) }))
 const manifest = {
   schemaVersion: 1,
@@ -77,7 +98,10 @@ const manifest = {
     legacyUniqueMethodEndpoints: new Set(normalizedLegacy.map((x) => `${x.method} ${x.normalizedEndpoint}`)).size,
     v3Exports: normalizedV3.length,
     v3ExportsWithCallers: normalizedV3.filter((x) => x.callerCount > 0).length,
-    v3UnusedExports: normalizedV3.filter((x) => x.callerCount === 0).length
+    v3UnusedExports: normalizedV3.filter((x) => x.callerCount === 0).length,
+    v3RouteGaps: normalizedV3.filter((x) => x.routeMatch.kind === 'unmatched').length,
+    v3GenericProxyMatches: normalizedV3.filter((x) => x.routeMatch.kind === 'generic-proxy').length,
+    v3StaticCallerOnly: normalizedV3.filter((x) => x.evidenceStatus === 'static-caller-only').length
   },
   legacy: normalizedLegacy,
   v3: normalizedV3,
