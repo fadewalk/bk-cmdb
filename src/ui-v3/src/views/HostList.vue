@@ -521,7 +521,7 @@ const pagedHosts = computed(() => rows.value)
 // ---------- 表格列(老版 FilterStore.getHeader + columns-config 契约) ----------
 const MODEL_NAMES = { host: '主机', module: '模块', set: '集群', biz: '业务' }
 const COLUMN_CONFIG_USERCUSTOM_KEY = 'resource_host_table_column_config'
-const FIXED_COLUMN_IDS = ['bk_host_id', 'bk_host_innerip', 'bk_host_innerip_v6', 'bk_cloud_id']
+const FIXED_COLUMN_IDS = ['bk_host_id', 'bk_host_innerip', 'bk_host_name', 'bk_host_innerip_v6', 'bk_cloud_id']
 // 资源池视图的前端注入虚拟属性(老版 isInject,不传后台);standalone 属性接口不返回 bk_host_id,老版同为注入(createIdProperty)
 const HOST_ID_PROPERTY = {
   id: 'bk_host_id', bk_obj_id: 'host', bk_property_id: 'bk_host_id',
