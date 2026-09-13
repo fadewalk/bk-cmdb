@@ -328,3 +328,16 @@ node run-all.cjs
 | 服务实例高级 | 已补/已接线 | ServiceInstance | 构建通过，需高级数据 fixture 才能完整读回 | 核心流程 |
 | 模板生命周期 | 已接差异/同步状态 | FieldTemplate/SetTemplate | 既有 B41/B45 + 构建 | 核心流程/部分迁移 |
 
+
+
+## 11. Mock contract verification（2026-09-13）
+
+由于当前 Colima 未运行 Kubernetes、没有 Elasticsearch、也没有云厂商账号，本轮新增 `run-core-domains-mock.cjs`，使用老版/后端真实 envelope 与 payload shape 做前端 contract mock：
+
+- **K8s**：mock `/findmany/kube/pod` capability probe、Pod list/detail，验证 `bk_biz_id/filter/fields/page` 请求与 `data.count/info` 响应；
+- **ES**：mock `/find/full_text` capability probe 和查询结果，验证 `query_string/filter/page` 及 `hits/aggregations` 渲染；
+- **服务实例**：mock服务实例列表和 `/delete/proc/template_binding_on_module`，验证解绑请求体与列表读回；
+- **网络采集**：验证 collector 依赖阻塞页不伪造 `/collector/*` 请求；
+- **IAM**：`run-iam.cjs` 已 mock `auth/verify` deny 和 `auth/skip_url`，验证 `resources` 契约、权限页和申请动作。
+
+结果：mock 核心域 contract suite 全部通过。Mock 证明的是前端请求/响应/页面/错误态契约，不替代真实 Kubernetes、Elasticsearch、collector、IAM 或云厂商集成测试。

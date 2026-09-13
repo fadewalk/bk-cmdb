@@ -17,6 +17,7 @@ import { useRoute } from 'vue-router'
 import StatusPage from './StatusPage.vue'
 
 const route = useRoute()
+const props = defineProps({ kind: { type: String, default: '' }, reason: { type: String, default: '' } })
 const META = {
   pod: {
     title: '容器管理',
@@ -35,7 +36,7 @@ const META = {
     desc: '网络采集依赖 collector 采集器注册和设备数据链路;当前部署未接入采集器,已保留老版 API 契约。'
   }
 }
-const key = computed(() => (route.meta.blockedKind in META ? route.meta.blockedKind : 'pod'))
+const key = computed(() => (props.kind || route.meta.blockedKind) in META ? (props.kind || route.meta.blockedKind) : 'pod')
 const title = computed(() => META[key.value].title)
-const desc = computed(() => META[key.value].desc)
+const desc = computed(() => props.reason || META[key.value].desc)
 </script>

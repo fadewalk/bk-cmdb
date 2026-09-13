@@ -15,7 +15,7 @@ const scripts = [
   'run-b30.cjs', 'run-b31.cjs', 'run-b32.cjs', 'run-b33.cjs', 'run-b34.cjs', 'run-b35.cjs', 'run-field-template.cjs',
   // B38 API 契约清理;B39 路由/权限/错误状态;B40 拓扑/服务实例深链;B41 实例关联/模型深度;
   // 内置账号登录契约;B45 关联拓扑全屏/导入已存在/导出密码强度
-  'run-b38.cjs', 'run-b39.cjs', 'run-b40.cjs', 'run-b41.cjs', 'run-login.cjs', 'run-iam.cjs', 'run-core-domains.cjs', 'run-b45.cjs'
+  'run-b38.cjs', 'run-b39.cjs', 'run-b40.cjs', 'run-b41.cjs', 'run-login.cjs', 'run-iam.cjs', 'run-core-domains.cjs', 'run-core-domains-mock.cjs', 'run-b45.cjs'
 ]
 
 // cmdb-mongodb 被外部周期性重启(约 1 次/分钟),写接口在重启窗口会失败。
