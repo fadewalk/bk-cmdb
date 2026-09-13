@@ -229,7 +229,7 @@
 - `docs/architecture/ui-v3-parity-register.yaml`；
 - `scripts/ui-v3/audit-parity.cjs`；
 - 各批真实数据夹具和回读报告；
-- API 注册/契约扫描报告；
+- API 注册/契约扫描报告：`docs/architecture/ui-v3-api-parity-report-20260913.md`；
 - 权限矩阵报告；
 - 新旧截图/DOM 对照报告；
 - 生产安全检查表；
