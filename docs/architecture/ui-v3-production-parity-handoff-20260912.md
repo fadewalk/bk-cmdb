@@ -125,7 +125,7 @@
 - **B40（完成）**：业务拓扑复刻 node/tab query 契约（写回用老版 hostList/serviceInstance 命名、深链恢复选中节点）；恢复老版服务实例 create/clone 路径深链；向导按绑定模板预填进程；主机详情 nav-history 返回链；host-apply stage 深链恢复。E2E run-b40 全过。
 - **B41（完成）**：实例详情补关联 tab（列表/拓扑、方向/类型/对端名、新增/取消关联真实写回——E2E 抓到并修复 `create/instassociation` 需 `bk_obj_asst_id` 别名的契约差异）；唯一校验内置保护+只读查看；字段模板绑定 diff 预览/冲突阻断/停用过滤/同步任务轮询；自定义字段跨组移动与分组排序；模型导入关联类型冲突覆盖/跳过。E2E run-b41 全过。
 - **B42（依赖阻塞，可交付部分完成）**：新增 DependencyBlocked 阻塞页与 `/business/:bizId/pod`、`/pod-details/*`、`/full-text-search` 路由——深链可达、明确阻塞态，不再 404/空白。真实 K8s/ES/云凭据接入后自动解除。
-- **B43（本地可做部分完成）**：新增 backup-mongo.sh/restore-mongo.sh（auth+gzip+保留策略+最小体积门禁），备份演练真实通过（195KB 有效档，空档被拒）；恢复演练需停写窗口。一进程一容器、PITR、镜像签名/SBOM 等仍依赖基础设施。
+- **B43（本地部分完成,演练闭环）**：backup-mongo.sh/restore-mongo.sh（auth+gzip+保留策略+体积门禁）；备份与**恢复演练**均真实通过（2026-09-13:220KB 备份→造标记→停写→恢复→标记消失且备份点数据完好,详见 reliability runbook 演练记录）。一进程一容器、PITR、镜像签名/SBOM 等仍依赖基础设施。
 - **B44（工具就绪，放行未通过）**：audit-parity 作为放行前门禁扫描（路由/菜单/API 注册/固定身份头/固定口令命中）；干净环境全量回归、镜像签名/SBOM、恢复演练未完成——旧前端不得下线、不得宣称全量生产替代。
 
 ### B38：前后端 API 契约清理（P0/P1）

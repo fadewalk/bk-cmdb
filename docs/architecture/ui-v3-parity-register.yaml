@@ -131,10 +131,11 @@ entries:
     permission: operator via docker context
     error: 认证失败/空档直接失败退出
     deep_link: N/A
-    e2e: backup drill pass; restore drill 待停写窗口
-    dependency: 停写窗口与恢复演练
-    evidence: [/tmp/cmdb-backup-drill/cmdb-20260913-020733]
-    state: 部分迁移
+    e2e: restore drill pass 2026-09-13(备份 220KB→造标记→停 cmdb→restore→重启:
+      标记消失/分类 5 个/业务 1 个/主机读写正常)
+    dependency: 无(本地演练已完成;生产需按同流程在停写窗口执行)
+    evidence: [/tmp/cmdb-restore-drill/cmdb-20260913-084949]
+    state: 核心流程
 
   - id: release-gate
     legacy_routes: []
