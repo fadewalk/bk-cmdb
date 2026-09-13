@@ -38,13 +38,20 @@ function classifyFailure(output) {
   if (/payload|契约|endpoint|路由|API|请求/i.test(output)) return 'contract'
   return 'assertion'
 }
+function testKind(script) {
+  if (/core-domains-errors|core-domains-mock|iam/.test(script)) return 'mock-contract'
+  if (/core-domains\.cjs|b38|b39|b40|b41|b45|b27|b31|b32/.test(script)) return 'real-backend'
+  if (/login/.test(script)) return 'auth-contract'
+  return 'legacy-regression'
+}
+
 function runScript(script, attempt) {
   const startedAt = new Date().toISOString(); const started = Date.now()
   const result = spawnSync(process.execPath, [path.join(e2eDir, script)], { encoding: 'utf8', timeout: 600000 })
   const output = `${result.stdout || ''}${result.stderr || ''}`
   const status = result.status === 0 ? 'pass' : 'fail'
   return {
-    attempt, status, exitCode: result.status ?? 1, signal: result.signal || null,
+    attempt, testKind: testKind(script), status, exitCode: result.status ?? 1, signal: result.signal || null,
     startedAt, finishedAt: new Date().toISOString(), durationMs: Date.now() - started,
     failureClass: status === 'pass' ? null : classifyFailure(output),
     outputTail: output.slice(-4000)
@@ -57,13 +64,13 @@ function runScript(script, attempt) {
   for (const script of scripts) {
     const file = path.join(e2eDir, script)
     if (!fs.existsSync(file)) {
-      results.push({ script, status: 'skipped', reason: 'script-not-found', attempts: [] })
+      results.push({ script, testKind: testKind(script), status: 'skipped', reason: 'script-not-found', attempts: [] })
       continue
     }
     const quiet = await waitForQuietWindow()
     console.log(`\n========== 运行 ${script} (mongo=${quiet.status}) ==========`)
     const first = runScript(script, 1)
-    const item = { script, status: first.status, attempts: [first], quietWindow: quiet }
+    const item = { script, testKind: first.testKind, status: first.status, attempts: [first], quietWindow: quiet }
     if (first.status === 'fail') {
       console.log(`↻ ${script} 首跑失败(${first.failureClass}),自动重跑一次`)
       const quietRetry = await waitForQuietWindow()
@@ -84,10 +91,20 @@ function runScript(script, attempt) {
       scriptCount: scripts.length, executed: results.filter((r) => r.status !== 'skipped').length,
       passed: results.filter((r) => r.status === 'pass').length, failed: results.filter((r) => r.status === 'fail').length,
       skipped: results.filter((r) => r.status === 'skipped').length, retried: results.filter((r) => r.attempts.length > 1).length,
-      stopped, firstFailurePreserved: results.some((r) => r.attempts.some((a) => a.attempt === 1 && a.status === 'fail'))
+      stopped, firstFailurePreserved: results.some((r) => r.attempts.some((a) => a.attempt === 1 && a.status === 'fail')),
+      byTestKind: Object.fromEntries([...new Set(results.map((r) => r.testKind))].map((kind) => [kind, {
+        total: results.filter((r) => r.testKind === kind).length,
+        passed: results.filter((r) => r.testKind === kind && r.status === 'pass').length,
+        failed: results.filter((r) => r.testKind === kind && r.status === 'fail').length
+      }]))
     },
+    evidence: { apiManifest: null },
     scripts: results
   }
+  try {
+    const manifest = spawnSync(process.execPath, [path.resolve(__dirname, '../../../scripts/ui-v3/api-migration-manifest.cjs')], { encoding: 'utf8' })
+    if (manifest.status === 0) report.evidence.apiManifest = JSON.parse(manifest.stdout)
+  } catch { /* manifest evidence is best effort */ }
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
   console.log(`\n报告已写入 ${reportPath}`)
   if (stopped) process.exitCode = 1

@@ -30,9 +30,17 @@ const v3Files = filesUnder(path.join(root, 'src/ui-v3/src'), '.vue').concat(
   filesUnder(path.join(root, 'src/ui-v3/src'), '.js')
 )
 const v3Exports = []
-const exportPattern = /export const (\w+)\s*=\s*(?:\([^\n]*\)|\w+)\s*=>\s*\w+\.(get|post|put|delete)\(\s*([`'\"])([^`'\"]+)\3/g
-for (const match of v3Source.matchAll(exportPattern)) {
-  const [, name, method, , endpoint] = match
+const exportDecls = [...v3Source.matchAll(/export const (\w+)\s*=/g)]
+for (let i = 0; i < exportDecls.length; i += 1) {
+  const decl = exportDecls[i]
+  const name = decl[1]
+  const bodyStart = decl.index
+  const bodyEnd = exportDecls[i + 1]?.index ?? v3Source.length
+  const body = v3Source.slice(bodyStart, bodyEnd)
+  const call = body.match(/\bhttp\.(get|post|put|delete|patch)\(\s*([`'\"])([^`'\"]+)\2/)
+  if (!call) continue
+  const method = call[1].toUpperCase()
+  const endpoint = call[3]
   const callers = []
   for (const file of v3Files) {
     const rel = path.relative(root, file)
@@ -42,8 +50,8 @@ for (const match of v3Source.matchAll(exportPattern)) {
     const hit = re.exec(source)
     if (hit) callers.push({ file: rel, line: source.slice(0, hit.index).split('\n').length })
   }
-  const baseURL = /baseURL:\s*['"]['"]/.test(v3Source.slice(Math.max(0, match.index - 250), match.index + 500)) ? 'root' : 'api-v3'
-  v3Exports.push({ name, method: method.toUpperCase(), endpoint, transport: baseURL, callerCount: callers.length, callers })
+  const transport = /baseURL:\s*['"]['"]/.test(body) ? 'root' : 'api-v3'
+  v3Exports.push({ name, method, endpoint, transport, callerCount: callers.length, callers })
 }
 
 function legacyDefinitions() {

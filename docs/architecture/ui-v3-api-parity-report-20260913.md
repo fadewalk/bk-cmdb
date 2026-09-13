@@ -364,3 +364,12 @@ src/ui-v3/e2e/support/mock.cjs
 ```
 
 它们统一了 no-cache、API envelope、root/API-v3 请求、hash 导航、请求采集和 JSON route mock。已有旧脚本暂不强制重写，避免扩大回归面；新 mock 场景从这些 helper 开始迁移。
+
+
+## 13. B47 structured evidence（2026-09-13）
+
+- `run-all.cjs` 现在生成 `/tmp/ui-v3-regression-report.json`，逐脚本记录：`testKind`、两次 attempt、首跑失败、failure class、exit code、耗时、Mongo 静默窗口、Git commit、served bundle hash；失败仍停止，但首跑信息不会丢失。
+- `api-migration-manifest.cjs` 现在统一解析多行 `cmdb.js` export，保留 method、transport、caller 文件/行号、routeMatch、usageStatus、evidenceStatus。
+- 当前 manifest 计数：老版定义 335、老版去重 method+endpoint 306、新版 wrapper 249、新版有源码 caller 204、新版未使用 45、路径缺口 0、通用代理匹配 18。这个数字取代早期正则口径的 226/194/32。
+- 最近一次结构化 runner 结果：38/38 通过；之后 B32 默认表头断言修正为“还原后回到初始基线”（业务默认列本来就包含创建时间）。
+- `run-core-domains-mock.cjs` 与 `run-core-domains-errors.cjs` 分别覆盖外部依赖正常契约和错误/空态契约；mock 通过不等同真实 K8s/ES/collector/IAM 生产集成通过。
