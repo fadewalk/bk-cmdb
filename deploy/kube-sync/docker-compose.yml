@@ -1,0 +1,29 @@
+# K8s → CMDB sync development configuration
+# The first release is intentionally existing-only: every node must map to
+# an already-created CMDB host. Never put API keys in this file.
+services:
+  kube-sync:
+    build:
+      context: ../..
+      dockerfile: deploy/kube-sync/Dockerfile
+    container_name: cmdb-kube-sync
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      CMDB_KUBE_SYNC_BIZ_ID: ${CMDB_KUBE_SYNC_BIZ_ID:?set a test business id}
+      CMDB_KUBE_SYNC_KUBECONFIG: /run/secrets/kubeconfig
+      CMDB_KUBE_SYNC_CMDB_URL: ${CMDB_KUBE_SYNC_CMDB_URL:-http://host.docker.internal:8090}
+      CMDB_KUBE_SYNC_API_KEY: ${CMDB_KUBE_SYNC_API_KEY:?set CMDB API key}
+      CMDB_KUBE_SYNC_USER: ${CMDB_KUBE_SYNC_USER:-kube-sync}
+      CMDB_KUBE_SYNC_HOST_POLICY: existing-only
+      CMDB_KUBE_SYNC_HOST_MAP: ${CMDB_KUBE_SYNC_HOST_MAP:?json node-to-host map}
+    ports:
+      - "127.0.0.1:60014:60014"
+    secrets:
+      - kubeconfig
+secrets:
+  kubeconfig:
+    file: ${CMDB_KUBE_SYNC_KUBECONFIG_FILE:?set a local kubeconfig path}
