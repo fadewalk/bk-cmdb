@@ -16,13 +16,20 @@
 import { ref, onMounted } from 'vue'
 import { searchFullText } from '../api/cmdb'
 import { useCapabilityStore } from '../stores/capabilities'
+import { useResourceStore } from '../stores/resource'
 import DependencyBlocked from './status/DependencyBlocked.vue'
-const capabilities = useCapabilityStore(); const keyword = ref(''); const loading = ref(false); const searched = ref(false); const hits = ref([])
+const capabilities = useCapabilityStore(); const resourceStore = useResourceStore(); const keyword = ref(''); const loading = ref(false); const searched = ref(false); const hits = ref([])
 async function search() {
   if (!keyword.value.trim()) return
   loading.value = true; searched.value = true
   try {
-    const data = await searchFullText({ bk_biz_id: Number(localStorage.getItem('selectedBusiness')) || 0, filter: { models: [], instances: [] }, query_string: keyword.value.trim().slice(0, 50), page: { start: 0, limit: 20 } })
+    await resourceStore.ensureLoaded()
+    const modelIds = [...new Set(resourceStore.models
+      .filter((model) => model.bk_ishidden !== true && model.bk_ispaused !== true)
+      .map((model) => model.bk_obj_id)
+      .filter(Boolean))]
+    if (!modelIds.length) { hits.value = []; return }
+    const data = await searchFullText({ bk_biz_id: Number(localStorage.getItem('selectedBusiness')) || 0, filter: { models: modelIds, instances: modelIds }, query_string: keyword.value.trim().slice(0, 50), page: { start: 0, limit: 20 } })
     hits.value = data?.hits || []
   } catch { hits.value = [] } finally { loading.value = false }
 }

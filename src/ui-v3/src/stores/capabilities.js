@@ -54,7 +54,7 @@ export const useCapabilityStore = defineStore('capabilities', {
       try {
         const data = await searchFullText({
           bk_biz_id: Number(localStorage.getItem('selectedBusiness')) || 0,
-          filter: { models: [], instances: [] },
+          filter: { models: [], instances: ['biz'] },
           query_string: '__cmdb_capability_probe__',
           page: { start: 0, limit: 1 }
         })

@@ -18,6 +18,15 @@ async function installCommonMocks(page) {
   await page.route('**/api/v3/biz/search/0', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ok({ count: 1, info: [{ bk_biz_id: 2, bk_biz_name: 'Mock Biz' }] })) }))
   await page.route('**/api/v3/findmany/biz_set', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ok({ count: 0, info: [] })) }))
   await page.route('**/api/v3/usercustom/user/search', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ok({})) }))
+  await page.route('**/api/v3/find/classificationobject', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify(ok([{ bk_objects: [
+      { bk_obj_id: 'biz' },
+      { bk_obj_id: 'host' },
+      { bk_obj_id: 'hidden_model', bk_ishidden: true },
+      { bk_obj_id: 'paused_model', bk_ispaused: true }
+    ] }]))
+  }))
 }
 
 ;(async () => {
@@ -65,8 +74,13 @@ async function installCommonMocks(page) {
     await page.locator('.search-row button').click()
     await page.waitForTimeout(600)
     assert((await page.locator('.result-item').textContent()).includes('mock-host'), 'ES mock hit missing')
-    assert(textBodies.some((body) => body.query_string === 'mock-host' && body.page?.limit === 20), 'ES query payload mismatch')
-    log('ES mock: full_text query, aggregation/hit response and render')
+    const probeBody = textBodies.find((body) => body.query_string === '__cmdb_capability_probe__')
+    assert(probeBody?.filter?.instances?.includes('biz'), 'ES capability probe filter missing')
+    const queryBody = textBodies.find((body) => body.query_string === 'mock-host')
+    assert(queryBody?.page?.limit === 20, 'ES query page payload mismatch')
+    assert(JSON.stringify(queryBody?.filter?.models) === JSON.stringify(['biz', 'host']) && JSON.stringify(queryBody?.filter?.instances) === JSON.stringify(['biz', 'host']), 'ES query model filter mismatch')
+    assert(!queryBody.filter.models.includes('hidden_model') && !queryBody.filter.models.includes('paused_model'), 'ES query included hidden or paused model')
+    log('ES mock: full_text query, capability filter, model visibility and render')
     await page.close()
   }
 

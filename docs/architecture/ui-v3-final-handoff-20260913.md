@@ -378,7 +378,37 @@ web/healthz 200
 - 不要在没有真实 IAM/secret/TLS/干净环境证据时做生产切流；
 - 不要使用 `git add -A`。
 
-## 12. 下一步
+## 12. 2026-09-13 真实外部集成验证追记
+
+本轮没有重做 B38~B47，只验证真实外部依赖并修复一个真实全文检索契约缺口。完整证据见：
+
+```text
+docs/architecture/ui-v3-external-integration-evidence-20260913.md
+/tmp/ui-v3-external-evidence-20260913/
+```
+
+### K8s
+
+- Colima `xwssd` 已启用 K3s；节点 `colima-xwssd` Ready，系统 Pod Running。
+- 创建真实 `cmdb-k8s-chain-probe` Pod，Kubernetes 侧为 Running、container ready；CMDB `/findmany/kube/pod` 对业务 2 合法返回 `count:0`。
+- 代码和进程审计确认仓库没有生产 Kubernetes client-go informer/collector；K3s 原生对象不会自动写入 CMDB `cc_PodBase/cc_ContainerBase`。测试 Pod 已清理。
+- 状态：**K3s 基础设施可用，K8s→CMDB 数据链路依赖阻塞**，不能宣称 Pod/Container 真实能力完成。
+
+### Elasticsearch / FullTextSearch
+
+- 临时 ES 7.17 单节点 green；将运行态连接从容器内 loopback 修正为 Docker 网络地址后，CMDB topo/healthz 恢复。
+- 合法非空 filter 的 `/find/full_text` 返回 `result:true` 空结果；证明查询链路可用，不证明有业务索引数据。
+- Monstache 运行包缺少可执行文件和 `monstache-plugin.so`，Mongo→ES 真实同步未通过；临时 aliases、ES 容器和运行态 `fullTextSearch=on` 已清理/恢复默认 off。
+- 修复 `FullTextSearch.vue`：按老版规则加载并过滤可见、未暂停、未隐藏模型 ID，填充 `filter.models/instances`；无可见模型不发请求。修复 capability probe 使用 `instances:['biz']`，并补充 mock payload 断言。
+- 验证：`npm run build`、`run-core-domains-mock.cjs`、`run-core-domains-errors.cjs`、`run-core-domains.cjs`、`run-iam.cjs` 均通过；served bundle `index-BtVN_cv-.js`，web/healthz 200。
+
+### IAM / collector / 生产放行
+
+- IAM deny/申请仍只有 mock 契约证据；真实 IdP/OIDC、多用户 allow/deny/cross-user、正式资源级 IAM 未提供。
+- collector 服务/真实设备数据未提供，保留阻塞页，不伪造 collector 请求。
+- 当前运行态仍为 OIDC/auth disabled、TLS verify disabled、rootfs 可写、无 cap drop；生产放行继续未通过。
+
+## 13. 下一步
 
 如果外部资源到位，按此顺序推进：
 
