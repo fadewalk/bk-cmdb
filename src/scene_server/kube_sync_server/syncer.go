@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,22 +22,29 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
+type podMapping struct {
+	ID  int64
+	UID string
+}
+
 type Syncer struct {
-	cfg        Config
-	kube       kubernetes.Interface
-	cmdb       *cmdbClient
-	pods       coreinformers.PodInformer
-	nodes      coreinformers.NodeInformer
-	namespaces coreinformers.NamespaceInformer
-	queue      workqueue.RateLimitingInterface
-	ready      atomic.Bool
-	lastErr    atomic.Value
-	once       sync.Once
+	cfg            Config
+	kube           kubernetes.Interface
+	cmdb           *cmdbClient
+	pods           coreinformers.PodInformer
+	nodes          coreinformers.NodeInformer
+	namespaces     coreinformers.NamespaceInformer
+	queue          workqueue.RateLimitingInterface
+	ready          atomic.Bool
+	lastErr        atomic.Value
+	retryExhausted atomic.Int64
+	mu             sync.Mutex
+	podMappings    map[string]podMapping
 }
 
 func NewSyncer(cfg Config, kube kubernetes.Interface) *Syncer {
 	factory := kubeinformers.NewSharedInformerFactoryWithOptions(kube, cfg.SyncInterval)
-	s := &Syncer{cfg: cfg, kube: kube, cmdb: newCMDBClient(cfg), pods: factory.Core().V1().Pods(), nodes: factory.Core().V1().Nodes(), namespaces: factory.Core().V1().Namespaces(), queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "cmdb-kube-sync")}
+	s := &Syncer{cfg: cfg, kube: kube, cmdb: newCMDBClient(cfg), pods: factory.Core().V1().Pods(), nodes: factory.Core().V1().Nodes(), namespaces: factory.Core().V1().Namespaces(), queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "cmdb-kube-sync"), podMappings: map[string]podMapping{}}
 	for _, informer := range []cache.SharedIndexInformer{s.pods.Informer(), s.nodes.Informer(), s.namespaces.Informer()} {
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { s.enqueue(obj) },
@@ -48,22 +56,53 @@ func NewSyncer(cfg Config, kube kubernetes.Interface) *Syncer {
 }
 
 func (s *Syncer) enqueue(obj interface{}) {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
+	deleting := false
+	var key string
+	var err error
+	switch value := obj.(type) {
+	case cache.DeletedFinalStateUnknown:
+		deleting = true
+		key, err = tombstoneKey(value.Key, value.Obj)
+		obj = value.Obj
+	case *cache.DeletedFinalStateUnknown:
+		deleting = true
+		key, err = tombstoneKey(value.Key, value.Obj)
+		obj = value.Obj
+	default:
+		key, err = cache.MetaNamespaceKeyFunc(obj)
+	}
 	if err != nil {
 		return
 	}
-	prefix := ""
+	var resourcePrefix string
 	switch obj.(type) {
 	case *corev1.Namespace:
-		prefix = "namespace:"
+		resourcePrefix = "namespace:"
 	case *corev1.Node:
-		prefix = "node:"
-	case *corev1.Pod, cache.DeletedFinalStateUnknown:
-		prefix = "pod:"
+		resourcePrefix = "node:"
+	case *corev1.Pod:
+		resourcePrefix = "pod:"
 	default:
 		return
 	}
-	s.queue.Add(prefix + key)
+	if deleting && resourcePrefix == "pod:" {
+		pod, ok := obj.(*corev1.Pod)
+		if !ok || pod.UID == "" {
+			return
+		}
+		key += "@" + string(pod.UID)
+	}
+	if deleting {
+		resourcePrefix = "delete:" + resourcePrefix
+	}
+	s.queue.Add(resourcePrefix + key)
+}
+
+func tombstoneKey(key string, obj interface{}) (string, error) {
+	if key != "" {
+		return key, nil
+	}
+	return cache.MetaNamespaceKeyFunc(obj)
 }
 
 func (s *Syncer) Run(ctx context.Context) error {
@@ -103,6 +142,7 @@ func (s *Syncer) processNext(ctx context.Context) bool {
 		if s.queue.NumRequeues(key) < 8 {
 			s.queue.AddRateLimited(key)
 		} else {
+			s.retryExhausted.Add(1)
 			s.queue.Forget(item)
 		}
 		return true
@@ -111,9 +151,17 @@ func (s *Syncer) processNext(ctx context.Context) bool {
 	return true
 }
 
-func (s *Syncer) reconcile(ctx context.Context, key string) error {
+func (s *Syncer) reconcile(ctx context.Context, rawKey string) error {
 	kind := ""
+	deleting := false
+	key := rawKey
 	switch {
+	case len(key) > 15 && key[:15] == "delete:namespace:":
+		kind, deleting, key = "namespace", true, key[15:]
+	case len(key) > 11 && key[:11] == "delete:node:":
+		kind, deleting, key = "node", true, key[11:]
+	case len(key) > 10 && key[:10] == "delete:pod:":
+		kind, deleting, key = "pod", true, key[10:]
 	case len(key) > 9 && key[:10] == "namespace:":
 		kind, key = "namespace", key[10:]
 	case len(key) > 5 && key[:5] == "node:":
@@ -121,7 +169,7 @@ func (s *Syncer) reconcile(ctx context.Context, key string) error {
 	case len(key) > 4 && key[:4] == "pod:":
 		kind, key = "pod", key[4:]
 	default:
-		return fmt.Errorf("unsupported queue key %q", key)
+		return fmt.Errorf("unsupported queue key %q", rawKey)
 	}
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if kind == "namespace" {
@@ -131,25 +179,51 @@ func (s *Syncer) reconcile(ctx context.Context, key string) error {
 	}
 	deadline, cancel := contextWithTimeout(ctx, s.cfg.HTTPTimeout)
 	defer cancel()
+	if deleting {
+		if kind == "pod" {
+			return s.deletePodIfMapped(deadline, key)
+		}
+		return nil
+	}
 	clusterID, err := s.cmdb.cluster(deadline, s.cfg)
 	if err != nil {
 		return err
 	}
 	if kind == "namespace" {
-		if namespace, err := s.namespaces.Lister().Get(name); err == nil {
-			return s.syncNamespace(deadline, clusterID, namespace)
+		if obj, err := s.namespaces.Lister().Get(name); err == nil {
+			return s.syncNamespace(deadline, clusterID, obj)
 		}
 		return nil
 	}
 	if kind == "node" {
-		if node, err := s.nodes.Lister().Get(name); err == nil {
-			return s.syncNode(deadline, clusterID, node)
+		if obj, err := s.nodes.Lister().Get(name); err == nil {
+			return s.syncNode(deadline, clusterID, obj)
 		}
 		return nil
 	}
-	if pod, err := s.pods.Lister().Pods(namespace).Get(name); err == nil {
-		return s.syncPod(deadline, clusterID, pod)
+	if obj, err := s.pods.Lister().Pods(namespace).Get(name); err == nil {
+		return s.syncPod(deadline, clusterID, obj)
 	}
+	return nil
+}
+
+func (s *Syncer) deletePodIfMapped(ctx context.Context, key string) error {
+	baseKey, uid := key, ""
+	if idx := strings.LastIndex(key, "@"); idx > 0 {
+		baseKey, uid = key[:idx], key[idx+1:]
+	}
+	s.mu.Lock()
+	mapping, ok := s.podMappings[baseKey]
+	s.mu.Unlock()
+	if !ok || uid == "" || mapping.UID != uid {
+		return nil
+	}
+	if err := s.cmdb.deletePod(ctx, s.cfg, mapping.ID); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	delete(s.podMappings, key)
+	s.mu.Unlock()
 	return nil
 }
 
@@ -188,6 +262,9 @@ func (s *Syncer) syncPod(ctx context.Context, clusterID int64, pod *corev1.Pod) 
 	if hostID <= 0 {
 		return fmt.Errorf("pod %s unresolved: existing-only policy requires CMDB_KUBE_SYNC_HOST_MAP or CMDB_KUBE_SYNC_HOST_ID", pod.Name)
 	}
+	if pod.Spec.NodeName == "" {
+		return fmt.Errorf("pod %s is pending: nodeName is empty", pod.Name)
+	}
 	nsID, err := s.cmdb.namespace(ctx, s.cfg, clusterID, pod.Namespace, nil)
 	if err != nil {
 		return err
@@ -201,12 +278,25 @@ func (s *Syncer) syncPod(ctx context.Context, clusterID int64, pod *corev1.Pod) 
 		if node, err := s.nodes.Lister().Get(pod.Spec.NodeName); err == nil {
 			nodeObj := node
 			ips := []string{}
+			hostname := nodeObj.Name
+			ready := false
+			for _, condition := range nodeObj.Status.Conditions {
+				if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
+					ready = true
+				}
+			}
+			if !ready {
+				return fmt.Errorf("node %s is not Ready", nodeObj.Name)
+			}
 			for _, address := range nodeObj.Status.Addresses {
 				if address.Type == corev1.NodeInternalIP {
 					ips = append(ips, address.Address)
 				}
+				if address.Type == corev1.NodeHostName {
+					hostname = address.Address
+				}
 			}
-			nodeID, err = s.cmdb.node(ctx, s.cfg, clusterID, hostID, nodeObj.Name, nodeObj.Name, ips, nodeObj.Labels)
+			nodeID, err = s.cmdb.node(ctx, s.cfg, clusterID, hostID, nodeObj.Name, hostname, ips, nodeObj.Labels)
 			if err != nil {
 				return err
 			}
@@ -217,21 +307,39 @@ func (s *Syncer) syncPod(ctx context.Context, clusterID int64, pod *corev1.Pod) 
 	}
 	containers := make([]map[string]interface{}, 0, len(pod.Spec.Containers))
 	for _, c := range pod.Spec.Containers {
-		containers = append(containers, map[string]interface{}{"name": c.Name, "container_uid": string(findContainerUID(pod.Status.ContainerStatuses, c.Name)), "image": c.Image, "args": c.Args})
+		uid, uidErr := findContainerUID(pod.Status.ContainerStatuses, c.Name)
+		if uidErr != nil {
+			return uidErr
+		}
+		containers = append(containers, map[string]interface{}{"name": c.Name, "container_uid": string(uid), "image": c.Image, "args": c.Args})
 	}
-	return s.cmdb.pod(ctx, s.cfg, clusterID, nsID, nodeID, hostID, workloadID, pod.Name, pod.Spec.NodeName, pod.Status.PodIP, pod.Labels, containers)
+	podID, err := s.cmdb.pod(ctx, s.cfg, clusterID, nsID, nodeID, hostID, workloadID, pod.Name, pod.Spec.NodeName, string(pod.UID), pod.Status.PodIP, pod.Labels, containers)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.podMappings[pod.Namespace+"/"+pod.Name] = podMapping{ID: podID, UID: string(pod.UID)}
+	s.mu.Unlock()
+	return nil
 }
 
-func findContainerUID(statuses []corev1.ContainerStatus, name string) typesUID {
+func findContainerUID(statuses []corev1.ContainerStatus, name string) (typesUID, error) {
 	for _, status := range statuses {
 		if status.Name == name {
-			return typesUID(status.ContainerID)
+			if status.ContainerID == "" {
+				return "", fmt.Errorf("container %s has no runtime ID yet", name)
+			}
+			return typesUID(status.ContainerID), nil
 		}
 	}
-	return typesUID("kube-sync-" + name)
+	return "", fmt.Errorf("container %s has no status yet", name)
 }
 
 type typesUID string
+
+func (s *Syncer) QueueDepth() int { return s.queue.Len() }
+
+func (s *Syncer) RetryExhausted() int64 { return s.retryExhausted.Load() }
 
 func (s *Syncer) Ready() bool { return s.ready.Load() }
 func (s *Syncer) LastError() string {

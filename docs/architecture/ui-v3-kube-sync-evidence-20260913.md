@@ -46,10 +46,17 @@ CMDB API → ui-v3 read path for the isolated fixture.
    relation and prevents accidental cross-business binding.
 3. The first delete attempts used guessed payloads and were rejected. The correct
    Pod delete contract is `data:[{bk_biz_id,ids}]`; other K8s delete contracts are
-   resource-specific. Pod/workload deletion succeeded, but the existing backend
-   still reported residual Pod association while deleting the Node/Cluster. No
-   direct Mongo cleanup was performed. Residual P48/old test records require
-   manual audited cleanup before a clean production database claim.
+   resource-specific. P49 now sends Pod deletes only for tombstones with a known
+   Kubernetes UID and a matching in-memory CMDB mapping. Namespace/Node/Workload/
+   Cluster deletion remains guarded by CMDB association checks and is not forced.
+   Residual P48/old test records require manual audited cleanup before a clean
+   production database claim.
+4. P49 rejects malformed host maps, zero workers and missing Host mappings at
+   startup; refuses fake container IDs; requires scheduled Pods, Ready Nodes and
+   runtime container IDs; and emits Prometheus-format readiness, queue depth and
+   retry-exhausted metrics. Namespace/Node/Workload/Pod update convergence is not
+   yet complete: existing records are still create-or-find for most fields and
+   must not be called production-ready.
 
 ## Delivered implementation
 

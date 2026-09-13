@@ -37,7 +37,7 @@ Endpoints:
 
 - `/healthz`: process is alive
 - `/readyz`: informer caches have synchronized
-- `/metrics`: compact readiness and last error JSON (replace with Prometheus metrics before production)
+- `/metrics`: Prometheus text exposition with readiness, queue depth and exhausted retry counters
 
 ## Kubernetes deployment
 

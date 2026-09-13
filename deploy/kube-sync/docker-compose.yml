@@ -15,8 +15,8 @@ services:
     environment:
       CMDB_KUBE_SYNC_BIZ_ID: ${CMDB_KUBE_SYNC_BIZ_ID:?set a test business id}
       CMDB_KUBE_SYNC_KUBECONFIG: /run/secrets/kubeconfig
-      CMDB_KUBE_SYNC_CMDB_URL: ${CMDB_KUBE_SYNC_CMDB_URL:-http://host.docker.internal:8090}
-      CMDB_KUBE_SYNC_API_KEY: ${CMDB_KUBE_SYNC_API_KEY:?set CMDB API key}
+      CMDB_KUBE_SYNC_CMDB_URL: ${CMDB_KUBE_SYNC_CMDB_URL:?set an HTTPS CMDB URL}
+      CMDB_KUBE_SYNC_API_KEY_FILE: /run/secrets/cmdb_api_key
       CMDB_KUBE_SYNC_USER: ${CMDB_KUBE_SYNC_USER:-kube-sync}
       CMDB_KUBE_SYNC_HOST_POLICY: existing-only
       CMDB_KUBE_SYNC_HOST_MAP: ${CMDB_KUBE_SYNC_HOST_MAP:?json node-to-host map}
@@ -24,6 +24,9 @@ services:
       - "127.0.0.1:60014:60014"
     secrets:
       - kubeconfig
+      - cmdb_api_key
 secrets:
   kubeconfig:
     file: ${CMDB_KUBE_SYNC_KUBECONFIG_FILE:?set a local kubeconfig path}
+  cmdb_api_key:
+    file: ${CMDB_KUBE_SYNC_API_KEY_FILE:?set a CMDB API key file}

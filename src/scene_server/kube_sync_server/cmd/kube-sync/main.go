@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	syncer "configcenter/src/scene_server/kube_sync_server"
@@ -41,9 +41,12 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ready\n"))
 	})
-	h.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ready": s.Ready(), "last_error": s.LastError()})
-	})
+		h.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+			ready := 0
+			if s.Ready() { ready = 1 }
+			_, _ = w.Write([]byte("# TYPE cmdb_kube_sync_ready gauge\ncmdb_kube_sync_ready " + strconv.Itoa(ready) + "\n# TYPE cmdb_kube_sync_queue_depth gauge\ncmdb_kube_sync_queue_depth " + strconv.Itoa(s.QueueDepth()) + "\n# TYPE cmdb_kube_sync_retry_exhausted counter\ncmdb_kube_sync_retry_exhausted " + strconv.FormatInt(s.RetryExhausted(), 10) + "\n"))
+		})
 	server := &http.Server{Addr: cfg.ListenAddr, Handler: h}
 	go func() { <-ctx.Done(); _ = server.Shutdown(context.Background()) }()
 	log.Printf("kube sync server listening on %s", cfg.ListenAddr)

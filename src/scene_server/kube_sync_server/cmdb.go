@@ -26,12 +26,12 @@ func newCMDBClient(c Config) *cmdbClient {
 	}
 }
 
-func (c *cmdbClient) post(ctx context.Context, path string, body interface{}, out interface{}) error {
+func (c *cmdbClient) request(ctx context.Context, method, path string, body interface{}, out interface{}) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v3/"+strings.TrimPrefix(path, "/"), strings.NewReader(string(payload)))
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/api/v3/"+strings.TrimPrefix(path, "/"), strings.NewReader(string(payload)))
 	if err != nil {
 		return err
 	}
@@ -63,6 +63,14 @@ func (c *cmdbClient) post(ctx context.Context, path string, body interface{}, ou
 	return nil
 }
 
+func (c *cmdbClient) post(ctx context.Context, path string, body interface{}, out interface{}) error {
+	return c.request(ctx, http.MethodPost, path, body, out)
+}
+
+func (c *cmdbClient) deletePod(ctx context.Context, cfg Config, podID int64) error {
+	return c.request(ctx, http.MethodDelete, "deletemany/kube/pod", map[string]interface{}{"data": []interface{}{map[string]interface{}{"bk_biz_id": cfg.BizID, "ids": []int64{podID}}}}, nil)
+}
+
 func (c *cmdbClient) find(ctx context.Context, path string, bizID int64, filter interface{}, fields []string, out interface{}) error {
 	return c.post(ctx, path, map[string]interface{}{
 		"bk_biz_id": bizID,
@@ -88,20 +96,30 @@ type cmdbCluster struct {
 	BizID int64  `json:"bk_biz_id"`
 }
 type cmdbNamespace struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	ClusterID int64  `json:"bk_cluster_id"`
+	ID        int64             `json:"id"`
+	Name      string            `json:"name"`
+	ClusterID int64             `json:"bk_cluster_id"`
+	Labels    map[string]string `json:"labels"`
 }
 type cmdbWorkload struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	NamespaceID int64  `json:"bk_namespace_id"`
+	ID          int64             `json:"id"`
+	Name        string            `json:"name"`
+	NamespaceID int64             `json:"bk_namespace_id"`
+	Labels      map[string]string `json:"labels"`
 }
 type cmdbNode struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	HostID    int64  `json:"bk_host_id"`
-	ClusterID int64  `json:"bk_cluster_id"`
+	ID         int64             `json:"id"`
+	Name       string            `json:"name"`
+	HostID     int64             `json:"bk_host_id"`
+	ClusterID  int64             `json:"bk_cluster_id"`
+	Hostname   string            `json:"hostname"`
+	Labels     map[string]string `json:"labels"`
+	InternalIP []string          `json:"internal_ip"`
+}
+type cmdbPod struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	UID  string `json:"uid"`
 }
 type listData[T any] struct {
 	Info []T `json:"info"`
@@ -154,7 +172,7 @@ func (c *cmdbClient) cluster(ctx context.Context, cfg Config) (int64, error) {
 func (c *cmdbClient) namespace(ctx context.Context, cfg Config, clusterID int64, name string, labels map[string]string) (int64, error) {
 	var data listData[cmdbNamespace]
 	filter := queryFilter{Condition: "AND", Rules: []queryRule{{Field: "bk_cluster_id", Operator: "equal", Value: clusterID}, {Field: "name", Operator: "equal", Value: name}}}
-	if err := c.find(ctx, "findmany/kube/namespace", cfg.BizID, filter, []string{"id", "name", "bk_cluster_id"}, &data); err != nil {
+	if err := c.find(ctx, "findmany/kube/namespace", cfg.BizID, filter, []string{"id", "name", "bk_cluster_id", "labels"}, &data); err != nil {
 		return 0, err
 	}
 	if item, ok := first(data.Info); ok {
@@ -205,18 +223,25 @@ func (c *cmdbClient) node(ctx context.Context, cfg Config, clusterID, hostID int
 	return created.IDs[0], nil
 }
 
-func (c *cmdbClient) pod(ctx context.Context, cfg Config, clusterID, namespaceID, nodeID, hostID, workloadID int64, name, nodeName string, ip string, labels map[string]string, containers []map[string]interface{}) error {
-	var data listData[map[string]interface{}]
-	filter := queryFilter{Condition: "AND", Rules: []queryRule{{Field: "bk_cluster_id", Operator: "equal", Value: clusterID}, {Field: "name", Operator: "equal", Value: name}}}
+func (c *cmdbClient) pod(ctx context.Context, cfg Config, clusterID, namespaceID, nodeID, hostID, workloadID int64, name, nodeName string, uid string, ip string, labels map[string]string, containers []map[string]interface{}) (int64, error) {
+	var data listData[cmdbPod]
+	filter := queryFilter{Condition: "AND", Rules: []queryRule{{Field: "bk_cluster_id", Operator: "equal", Value: clusterID}, {Field: "bk_namespace_id", Operator: "equal", Value: namespaceID}, {Field: "name", Operator: "equal", Value: name}}}
 	if err := c.find(ctx, "findmany/kube/pod", cfg.BizID, filter, []string{"id", "name"}, &data); err != nil {
-		return err
+		return 0, err
 	}
-	if len(data.Info) > 0 {
-		return nil
+	if item, ok := first(data.Info); ok {
+		return item.ID, nil
 	}
 	podPayload := map[string]interface{}{"spec": map[string]interface{}{"bk_cluster_id": clusterID, "bk_namespace_id": namespaceID, "bk_node_id": nodeID, "ref": map[string]interface{}{"kind": "pods", "id": workloadID, "name": name}}, "bk_host_id": hostID, "name": name, "operator": []string{cfg.CMDBUser}, "labels": labels, "ip": ip, "ips": []interface{}{}, "containers": containers, "node_name": nodeName}
 	dataPayload := map[string]interface{}{"bk_biz_id": cfg.BizID, "pods": []interface{}{podPayload}}
-	return c.post(ctx, "createmany/kube/pod", map[string]interface{}{"data": []interface{}{dataPayload}}, nil)
+	created := idsData{}
+	if err := c.post(ctx, "createmany/kube/pod", map[string]interface{}{"data": []interface{}{dataPayload}}, &created); err != nil {
+		return 0, err
+	}
+	if len(created.IDs) != 1 || created.IDs[0] <= 0 {
+		return 0, fmt.Errorf("pod create returned no id")
+	}
+	return created.IDs[0], nil
 }
 
 func contextWithTimeout(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
