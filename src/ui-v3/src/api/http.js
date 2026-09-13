@@ -48,6 +48,7 @@ http.interceptors.response.use(
         ElMessage.error('无权限执行该操作')
         const permissionError = new Error('无权限执行该操作')
         permissionError.permission = res.permission
+        window.dispatchEvent(new CustomEvent('cmdb-permission-denied', { detail: res.permission }))
         return Promise.reject(permissionError)
       }
       ElMessage.error(`${msg} (code: ${res.bk_error_code})`)

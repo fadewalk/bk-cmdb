@@ -59,6 +59,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openClone(row)">克隆</el-button>
+            <el-button v-if="row.service_template_id" link type="warning" @click="unbindTemplate(row)">解绑模板</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -196,7 +197,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
-  searchBusiness, searchServiceInstances, deleteServiceInstances, searchProcessInstances,
+  searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewCreateServiceInstances, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, deleteInstanceLabels,
   syncServiceInstances, getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
@@ -388,10 +389,13 @@ async function loadCloneHosts() {
 async function submitClone() {
   cloning.value = true
   try {
-    await createServiceInstance(bizId.value, cloneModulePath.value, [{
-      bk_host_id: cloneHostId.value,
-      service_instance_name: `${cloneSource.value.name || cloneSource.value.id}-clone`,
-      processes: cloneSourceProcesses.value.map((p) => ({
+    const clonePayload = {
+      bk_biz_id: bizId.value,
+      bk_module_id: cloneModulePath.value,
+      instances: [{
+        bk_host_id: cloneHostId.value,
+        service_instance_name: `${cloneSource.value.name || cloneSource.value.id}-clone`,
+        processes: cloneSourceProcesses.value.map((p) => ({
         process_info: {
           bk_process_name: p.bk_process_name || p.bk_func_name || '',
           bk_func_name: p.bk_func_name || '',
@@ -404,7 +408,14 @@ async function submitClone() {
           description: p.description || ''
         }
       }))
-    }])
+      }]
+    }
+    const preview = await previewCreateServiceInstances(clonePayload)
+    const previewRows = preview?.info || preview?.plans || preview?.data?.info || []
+    if (previewRows.length) {
+      await ElMessageBox.confirm(`预览将创建 ${previewRows.length} 个服务实例,确认继续?`, '克隆预览', { type: 'info' })
+    }
+    await createServiceInstance(bizId.value, cloneModulePath.value, clonePayload.instances)
     ElMessage.success('克隆成功')
     cloneDialog.value = false
     load()
@@ -509,13 +520,28 @@ async function submitBatchLabels() {
     batchLabelSaving.value = false
   }
 }
+async function unbindTemplate(row) {
+  try {
+    await ElMessageBox.confirm(`确定解除实例「${row.name || row.id}」的服务模板绑定?`, '解绑确认', { type: 'warning' })
+    await unbindServiceTemplateFromModule({ bk_biz_id: bizId.value, service_instance_ids: [row.id], module_id: row.bk_module_id })
+    ElMessage.success('模板绑定已解除')
+    await load()
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error('解绑失败: ' + (e?.message || '后端异常'))
+  }
+}
+
 async function batchDelete() {
   if (!selectedRows.value.length) return
   try {
     await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 个服务实例?`, '删除确认', { type: 'warning' })
   } catch { return }
   try {
-    await deleteServiceInstances(bizId.value, selectedRows.value.map((row) => row.id))
+    const ids = selectedRows.value.map((row) => row.id)
+    const preview = await previewDeleteServiceInstances({ bk_biz_id: bizId.value, service_instance_ids: ids })
+    const count = preview?.count ?? preview?.data?.count ?? ids.length
+    await ElMessageBox.confirm(`删除预览:将删除 ${count} 个服务实例,确认继续?`, '删除预览', { type: 'warning' })
+    await deleteServiceInstances(bizId.value, ids)
     ElMessage.success('批量删除成功')
     selectedRows.value = []
     await load()

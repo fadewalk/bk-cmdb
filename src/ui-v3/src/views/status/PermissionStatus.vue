@@ -10,17 +10,31 @@
   </StatusPage>
   <StatusPage v-else icon="icon-cc-no-authority" title="无操作权限"
     desc="您还没有相应操作的权限，请先申请相关操作的权限">
-    <slot />
+    <el-button type="primary" :loading="applying" :disabled="!permission" @click="apply">去申请权限</el-button>
   </StatusPage>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { usePermissionStore } from '../../stores/permission'
 import { useRoute } from 'vue-router'
 import StatusPage from './StatusPage.vue'
 
 // 分支开关由业务 interceptor 写入 route.meta.extra(老版 isNotFound/isUnauthed 同名)
 const route = useRoute()
+const permissionStore = usePermissionStore()
+const applying = ref(false)
+const permission = computed(() => route.meta.extra?.permission || route.meta.permission || null)
+async function apply() {
+  applying.value = true
+  try {
+    await permissionStore.applyPermission(permission.value)
+    ElMessage.success('已打开权限申请页面')
+  } catch (error) {
+    ElMessage.error(error?.message || '权限申请失败')
+  } finally { applying.value = false }
+}
 const isNotFound = computed(() => route.meta.extra?.isNotFound === true)
 const isUnauthed = computed(() => route.meta.extra?.isUnauthed === true)
 </script>

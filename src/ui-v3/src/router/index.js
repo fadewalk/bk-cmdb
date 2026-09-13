@@ -50,6 +50,9 @@ const router = createRouter({
 
         // 旧版深链(与老前端 URL 同构)
         { path: 'business/:bizId/host/:id', name: 'BusinessHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
+        { path: 'business/:bizId/pod/:podId', name: 'KubePodDetail', component: () => import('../views/KubePods.vue'), meta: { title: 'Pod 详情', blockedKind: 'pod' } },
+        { path: 'business/:bizId/index/pod/:podId', name: 'KubePodLegacy', redirect: (to) => `/business/${to.params.bizId}/pod/${to.params.podId}`, meta: { title: 'Pod 详情' } },
+        { path: 'business/:bizId/index/pod/:podId/container/:containerId', name: 'KubeContainerLegacy', redirect: (to) => `/business/${to.params.bizId}/pod/${to.params.podId}?containerId=${to.params.containerId}`, meta: { title: '容器详情' } },
         { path: 'biz-set/topo', name: 'BizSetTopo', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
         { path: 'business-set/:bizSetId/index', name: 'BizSetTopoLegacy', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
         { path: 'business-set/:bizSetId/host/:id', name: 'BizSetHostDetailLegacy', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
@@ -96,15 +99,15 @@ const router = createRouter({
         { path: 'resource/business/details/:bizId', name: 'BusinessDetail', component: () => import('../views/business/BusinessDetail.vue'), meta: { title: '业务详情' } },
         { path: 'business/details/:bizId', name: 'BusinessDetailLegacy', redirect: (to) => ({ path: `/resource/business/details/${to.params.bizId}` }), meta: { title: '业务详情' } },
         { path: 'resource/catalog/:objId', name: 'ResourceCatalog', component: () => import('../views/resource/ResourceCatalog.vue'), meta: { title: '资源分类' } },
-        { path: 'resource/instance/:objId', name: 'InstanceList', component: () => import('../views/instance/InstanceList.vue'), meta: { title: '模型实例' } },
+        { path: 'resource/instance/:objId', name: 'InstanceList', component: () => import('../views/instance/InstanceList.vue'), meta: { title: '模型实例', auth: (to) => ({ resource_type: `comobj_${to.params.objId}`, action: 'find', resource_id: to.params.objId }) } },
         { path: 'resource/history/host', name: 'HostDeleteHistory', component: () => import('../views/history/DeleteHistory.vue'), meta: { title: '主机删除历史' } },
         { path: 'resource/history/instance/:objId', name: 'InstanceDeleteHistory', component: () => import('../views/history/DeleteHistory.vue'), meta: { title: '删除历史' } },
         { path: 'resource/instance/:objId/history', redirect: (to) => `/resource/history/instance/${to.params.objId}`, meta: { title: '删除历史' } },
         { path: 'resource/instance/:objId/:instId', name: 'InstanceDetailLegacy', redirect: (to) => ({ path: `/resource/instance/${to.params.objId}`, query: { instId: to.params.instId } }), meta: { title: '模型实例' } },
-        { path: 'resource/host', name: 'ResourceHost', component: () => import('../views/HostList.vue'), meta: { title: '主机' } },
+        { path: 'resource/host', name: 'ResourceHost', component: () => import('../views/HostList.vue'), meta: { title: '主机', auth: { resource_type: 'host', action: 'find' } } },
         { path: 'resource/host/:id', name: 'ResourceHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'resource/host/:business/:id', name: 'ResourceBizHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
-        { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/CloudArea.vue'), meta: { title: '管控区域' } },
+        { path: 'resource/cloud-area', name: 'CloudArea', component: () => import('../views/cloud/CloudArea.vue'), meta: { title: '管控区域', auth: { resource_type: 'cloud_area', action: 'find' } } },
         { path: 'resource/cloud-account', name: 'CloudAccount', component: () => import('../views/cloud/CloudAccount.vue'), meta: { title: '云账户' } },
         { path: 'resource/cloud-discover', name: 'CloudDiscover', component: () => import('../views/cloud/CloudDiscover.vue'), meta: { title: '云资源发现' } },
         { path: 'resource/cloud-resource', name: 'CloudResourceLegacy', redirect: '/resource/cloud-discover', meta: { title: '云资源发现' } },
@@ -114,7 +117,7 @@ const router = createRouter({
         { path: 'model/management', name: 'Models', component: () => import('../views/model/ModelManage.vue'), meta: { title: '模型管理' } },
         { path: 'model/index', name: 'ModelsLegacy', redirect: '/model/management', meta: { title: '模型管理' } },
         { path: 'model/index/details/:modelId', name: 'ModelDetailLegacy', redirect: (to) => `/model/management/details/${to.params.modelId}`, meta: { title: '模型详情' } },
-        { path: 'model/management/details/:objId', name: 'ModelDetail', component: () => import('../views/model/ModelDetail.vue'), meta: { title: '模型详情' } },
+        { path: 'model/management/details/:objId', name: 'ModelDetail', component: () => import('../views/model/ModelDetail.vue'), meta: { title: '模型详情', auth: (to) => ({ resource_type: 'model', action: 'find', resource_id: to.params.objId }) } },
         { path: 'model/topology', name: 'ModelTopology', component: () => import('../views/model/ModelTopology.vue'), meta: { title: '模型拓扑' } },
         { path: 'model/all/topology/new', name: 'ModelTopologyLegacy', redirect: '/model/topology', meta: { title: '模型拓扑' } },
         { path: 'model/relation', name: 'ModelRelation', component: () => import('../views/model/AssociationType.vue'), meta: { title: '模型关系', tab: 'relations' } },
@@ -134,9 +137,10 @@ const router = createRouter({
         // 运营分析
         { path: 'analysis/audit', name: 'Audit', component: () => import('../views/audit/AuditList.vue'), meta: { title: '操作审计' } },
         { path: 'analysis/operation', name: 'Operation', component: () => import('../views/operation/Operation.vue'), meta: { title: '运营统计' } },
+        { path: 'analysis/network-collect', name: 'NetworkCollectBlocked', component: () => import('../views/NetworkCollectBlocked.vue'), meta: { title: '网络采集' } },
 
         // 平台管理
-        { path: 'platform/global-config', name: 'GlobalConfig', component: () => import('../views/platform/GlobalConfig.vue'), meta: { title: '全局配置' } },
+        { path: 'platform/global-config', name: 'GlobalConfig', component: () => import('../views/platform/GlobalConfig.vue'), meta: { title: '全局配置', auth: { resource_type: 'configAdmin', action: 'update' } } },
         { path: 'platform-management/global-config', name: 'GlobalConfigLegacy', redirect: (to) => ({ path: '/platform/global-config', query: to.query }), meta: { title: '全局配置' } },
         { path: 'platform-management', name: 'PlatformLegacy', redirect: '/platform/global-config', meta: { title: '平台管理' } },
         { path: 'platform/roadmap', name: 'Roadmap', component: () => import('../views/Roadmap.vue'), meta: { title: '功能路线' } },
@@ -152,9 +156,9 @@ const router = createRouter({
     { path: '/no-business', name: 'NoBusiness', component: () => import('../views/status/NoBusiness.vue'), meta: { title: '无业务权限' } },
     // 依赖阻塞型能力:深链可达并给出明确阻塞态(老版行为一致性:独立环境无 K8s/ES 数据链路)
     { path: '/dependency-blocked/:kind', name: 'DependencyBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '依赖阻塞' } },
-    { path: '/business/:bizId/pod/:rest(.*)*', name: 'PodBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '容器管理', blockedKind: 'pod' } },
+    { path: '/business/:bizId/pod/:rest(.*)*', name: 'PodBlocked', component: () => import('../views/KubePods.vue'), meta: { title: '容器管理', blockedKind: 'pod' } },
     { path: '/pod-details/:rest(.*)*', name: 'PodDetailsBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '容器管理', blockedKind: 'pod' } },
-    { path: '/full-text-search', name: 'FullTextBlocked', component: () => import('../views/status/DependencyBlocked.vue'), meta: { title: '全文检索', blockedKind: 'es' } }
+    { path: '/full-text-search', name: 'FullTextSearch', component: () => import('../views/FullTextSearch.vue'), meta: { title: '全文检索', blockedKind: 'es' } }
   ]
 })
 
@@ -264,10 +268,12 @@ router.beforeEach(async (to, from) => {
     }
 
     // 老版 checkViewAuthorize 映射:standalone 非 IAM 模式 auth/verify 恒真,IAM 模式下 superView 失败整页 permission
-    if (to.meta.auth && (to.meta.auth.superView || to.meta.auth.view)) {
-      const passed = await verifyViewAuth(to.meta.auth)
-      if (!passed && to.meta.auth.superView) {
+    if (to.meta.auth && (to.meta.auth.superView || to.meta.auth.view || to.meta.auth.resource_type || typeof to.meta.auth === 'function')) {
+      const authDecl = typeof to.meta.auth === 'function' ? to.meta.auth(to) : to.meta.auth
+      const passed = await verifyViewAuth(authDecl)
+      if (!passed) {
         to.meta.view = 'permission'
+        to.meta.extra = { ...(to.meta.extra || {}), permission: toIamPermission(authDecl) }
         return true
       }
     }
@@ -283,21 +289,38 @@ router.beforeEach(async (to, from) => {
   return true
 })
 
+function toIamPermission(auth) {
+  if (auth?.system_id && auth?.actions) return auth
+  const resourceType = auth?.resource_type || 'resource'
+  const action = auth?.action || 'find'
+  const resourceId = auth?.resource_id
+  return {
+    system_id: 'bk_cmdb',
+    system_name: '配置平台',
+    actions: [{
+      id: `${action}_${resourceType}`,
+      name: '申请访问权限',
+      related_resource_types: [{
+        system_id: 'bk_cmdb',
+        system_name: '配置平台',
+        type: resourceType,
+        type_name: resourceType,
+        instances: [[{ type: resourceType, type_name: resourceType, id: String(resourceId ?? ''), name: String(resourceId ?? '') }]]
+      }]
+    }]
+  }
+}
+
 // auth/verify 结果按 auths 摘要缓存,避免每帧重复请求(老版 getViewAuth 有 store 缓存)
 const viewAuthCache = new Map()
 async function verifyViewAuth(auth) {
   const key = JSON.stringify(auth)
   if (viewAuthCache.has(key)) return viewAuthCache.get(key)
-  const { default: http } = await import('../api/http')
-  try {
-    const res = await http.post('/auth/verify', { auths: [auth] })
-    viewAuthCache.set(key, res === true)
-    return res === true
-  } catch {
-    // verify 接口不可用时按老版 fail-closed 语义处理
-    viewAuthCache.set(key, false)
-    return false
-  }
+  const { usePermissionStore } = await import('../stores/permission')
+  const permissionStore = usePermissionStore()
+  const passed = await permissionStore.verifyResource(auth)
+  viewAuthCache.set(key, passed)
+  return passed
 }
 
 router.afterEach((to) => {

@@ -731,7 +731,24 @@ export const deleteInstanceLabels = (data) =>
 export const listInstanceLabels = (data) =>
   http.post('/findmany/proc/service_instance/labels/aggregation', data)
 
-// ---------- 业务同步 ----------
+// ---------- 网络采集(老版仅有 API 模块,没有实际页面;外部采集链路缺失时由阻塞页承接) ----------
+export const searchNetcollectDevices = (data) => http.post('/collector/netcollect/device/action/search', data)
+export const createNetcollectDevice = (data) => http.post('/collector/netcollect/device/action/create', data)
+export const updateNetcollectDevice = (deviceId, data) => http.post(`/collector/netcollect/device/${deviceId}/action/update`, data)
+export const deleteNetcollectDevices = (data) => http.delete('/collector/netcollect/device/action/delete', { data })
+export const searchNetcollectProperties = (data) => http.post('/collector/netcollect/property/action/search', data)
+export const createNetcollectProperty = (data) => http.post('/collector/netcollect/property/action/create', data)
+export const updateNetcollectProperty = (propertyId, data) => http.post(`/collector/netcollect/property/${propertyId}/action/update`, data)
+export const deleteNetcollectProperties = (data) => http.delete('/collector/netcollect/property/action/delete', { data })
+export const importNetcollectDevices = (form) => http.post('/collector/netdevice/import', form, { baseURL: '', timeout: 120000 })
+export const exportNetcollectDevices = (data) => http.post('/collector/netdevice/export', data, { baseURL: '', responseType: 'blob', timeout: 120000 })
+export const importNetcollectProperties = (form) => http.post('/collector/netproperty/import', form, { baseURL: '', timeout: 120000 })
+export const exportNetcollectProperties = (data) => http.post('/collector/netproperty/export', data, { baseURL: '', responseType: 'blob', timeout: 120000 })
+// K8s Pod/Container 与全文检索 API 均为后端真实注册路由;页面根据运行时探测决定可用/阻塞态
+export const searchKubePods = (data) => http.post('/findmany/kube/pod', data)
+export const searchKubeContainers = (data) => http.post('/findmany/kube/container', data)
+export const getKubePodPath = (data) => http.post('/find/kube/pod_path', data)
+export const searchFullText = (data) => http.post('/find/full_text', data)
 export const getServiceTemplateDiff = (data) =>
   http.post('/find/proc/service_template/general_difference', data)
 // 业务同步差异(老版契约;注意独立后端仅注册 general_difference/difference 三件套,
@@ -747,7 +764,22 @@ export const getProcessTemplateById = (id) =>
   http.post(`/find/proc/proc_template/id/${id}`, {})
 export const syncServiceInstances = (data) =>
   http.put('/update/proc/service_instance/sync', data)
-// ---------- 动态分组(契约对齐老版 dynamicGroup store) ----------
+// 服务实例高级流程(老版 service-instance.js 契约)
+export const searchServiceInstancesWithHost = (data) =>
+  http.post('/findmany/proc/service_instance/with_host', data)
+export const previewCreateServiceInstances = (data) =>
+  http.post('/create/proc/service_instance/preview', data)
+export const previewDeleteServiceInstances = (data) =>
+  http.post('/deletemany/proc/service_instance/preview', data)
+export const unbindServiceTemplateFromModule = (data) =>
+  http.delete('/delete/proc/template_binding_on_module', { data })
+export const searchProcessNameIds = (data) =>
+  http.post('/findmany/proc/process_instance/name_ids', data)
+export const searchProcessDetailsByIds = (data) =>
+  http.post('/findmany/proc/process_instance/detail/by_ids', data)
+export const batchUpdateServiceInstances = (data) =>
+  http.put('/updatemany/proc/service_instance/biz', data)
+
 export const createDynamicGroup = (bizId, name, objId, condition) =>
   http.post('/dynamicgroup', { bk_biz_id: bizId, bk_obj_id: objId, name, info: { condition } })
 export const updateDynamicGroup = (bizId, id, name, objId, condition) =>

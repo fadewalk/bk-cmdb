@@ -29,6 +29,10 @@ const META = {
   cloud: {
     title: '云资源同步',
     desc: '实际云资源同步需要配置真实云厂商凭据与网络连通;账户/任务管理能力不受影响。'
+  },
+  network: {
+    title: '网络采集',
+    desc: '网络采集依赖 collector 采集器注册和设备数据链路;当前部署未接入采集器,已保留老版 API 契约。'
   }
 }
 const key = computed(() => (route.meta.blockedKind in META ? route.meta.blockedKind : 'pod'))

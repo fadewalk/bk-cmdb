@@ -11,6 +11,7 @@ import './styles/bk-legacy.css'
 import App from './App.vue'
 import router from './router'
 import { useSessionStore } from './stores/session'
+import { usePermissionStore } from './stores/permission'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -20,7 +21,14 @@ app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 
 const sessionStore = useSessionStore(pinia)
+const permissionStore = usePermissionStore(pinia)
 const publicPaths = ['/login', '/404']
+
+window.addEventListener('cmdb-permission-denied', (event) => {
+  const route = router.currentRoute.value
+  route.meta.view = 'permission'
+  route.meta.extra = { ...(route.meta.extra || {}), permission: event.detail }
+})
 
 router.beforeEach(async (to) => {
   if (publicPaths.includes(to.path)) return true

@@ -274,3 +274,57 @@ node run-all.cjs
 2. 升级 `audit-parity.cjs`，让每条调用保留 method、transport、源码位置、后端匹配 provenance，并区分 exact/wildcard/generic-proxy/unmatched；
 3. 让 E2E 记录 machine-readable request trace、首跑失败、重试、skip reason、read-back 结果；
 4. 用 manifest + trace 计算真正的“已覆盖/仅封装/仅静态/已验证/依赖阻塞”进度，而不是用路径数量除法。
+
+
+## 10. 核心 API 继续迁移记录（2026-09-13）
+
+本轮针对六个高价值领域继续迁移：
+
+### IAM/权限
+
+- 修正 v3 路由权限校验契约：`POST /auth/verify` 使用 `{resources:[...]}`，响应按 `[{is_pass}]` 处理；
+- 为资源主机、云区域、模型详情、模型实例、平台配置加入首批 `meta.auth`；
+- 新增 `verifyResource()` 与 `applyPermission()`，权限页可消费 `permission` payload，调用 `POST /auth/skip_url` 打开申请页；
+- `run-iam.cjs` mock deny matrix 通过：校验请求体、权限状态页、申请 URL payload 和打开动作均验证。
+
+### K8s/Pod
+
+- 新增 `searchKubePods`、`searchKubeContainers`、`getKubePodPath` wrapper；
+- 新增 `KubePods.vue`，使用老版 `/findmany/kube/pod` 列表/详情契约；
+- 恢复老版 `/business/:bizId/index/pod/:podId` 和 container 深链；
+- 当前环境无 K8s 数据链路，页面显示明确阻塞态；若 Pod API 可用则自动进入真实列表。
+
+### Elasticsearch 全文检索
+
+- 新增 `searchFullText` wrapper；
+- 新增 `FullTextSearch.vue`，使用老版 `/find/full_text` 请求体和 `hits/aggregations` 响应；
+- 当前 standalone `fullTextSearch=off`，页面显示 ES 阻塞态；开启且连通后自动显示搜索结果。
+
+### 网络采集
+
+- 新增老版设备/属性 CRUD、导入、导出 wrapper：`collector/netcollect/*`、`collector/netdevice/*`、`collector/netproperty/*`；
+- 老版源码只有 Vuex API 模块，没有实际网络采集页面和 caller，因此新增 `NetworkCollectBlocked.vue`，明确依赖 collector 数据链路；
+- 不把“有 wrapper”计为已完成页面能力。
+
+### 服务实例高级流程
+
+- 新增/接入 `with_host`、创建预览、删除预览、模板解绑、进程名称/详情查询、批量服务实例更新等老版 API；
+- 现有服务实例页面的克隆和批量删除在执行前增加真实 preview；模板实例增加解绑入口；
+- 页面保留老版确认/失败语义，写回后刷新列表。
+
+### 模板生命周期
+
+- 字段模板绑定已使用 attribute/unique difference、停用模型过滤、冲突阻断和 `tasks_status` 轮询；
+- 集群模板现有页面已覆盖列表/详情/同步/历史主流程；未使用的全量 CRUD wrapper 仍登记为“已封装未使用”，不虚报为完成。
+
+### 本轮状态
+
+| 领域 | API wrapper | 页面 caller | 真实/阻塞证据 | 当前状态 |
+|---|---:|---:|---|---|
+| IAM | 已补/修正 | 权限 store、router、PermissionStatus | `run-iam.cjs` 通过 | 核心流程 |
+| K8s | 已补 | KubePods | `run-core-domains.cjs` 可用/阻塞双态 | 依赖阻塞 |
+| ES | 已补 | FullTextSearch | `run-core-domains.cjs` 可用/阻塞双态 | 依赖阻塞 |
+| 网络采集 | 已补 | 阻塞页，无老版实际 caller | `run-core-domains.cjs` | 依赖阻塞 |
+| 服务实例高级 | 已补/已接线 | ServiceInstance | 构建通过，需高级数据 fixture 才能完整读回 | 核心流程 |
+| 模板生命周期 | 已接差异/同步状态 | FieldTemplate/SetTemplate | 既有 B41/B45 + 构建 | 核心流程/部分迁移 |
+
