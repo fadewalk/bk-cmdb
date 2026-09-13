@@ -12,7 +12,10 @@ const scripts = [
   // B27 运营图表弹窗契约/模型导入导出向导;B28 资源池目录数量与搜索契约;B31 主机表格列配置/排序契约;
   // B32 业务/项目/业务集列表表格契约
   'run-b24.cjs', 'run-b25.cjs', 'run-b26.cjs', 'run-b27.cjs', 'run-b28.cjs', 'run-b29.cjs',
-  'run-b30.cjs', 'run-b31.cjs', 'run-b32.cjs', 'run-b33.cjs', 'run-b34.cjs', 'run-b35.cjs', 'run-field-template.cjs'
+  'run-b30.cjs', 'run-b31.cjs', 'run-b32.cjs', 'run-b33.cjs', 'run-b34.cjs', 'run-b35.cjs', 'run-field-template.cjs',
+  // B38 API 契约清理;B39 路由/权限/错误状态;B40 拓扑/服务实例深链;B41 实例关联/模型深度;
+  // 内置账号登录契约;B45 关联拓扑全屏/导入已存在/导出密码强度
+  'run-b38.cjs', 'run-b39.cjs', 'run-b40.cjs', 'run-b41.cjs', 'run-login.cjs', 'run-b45.cjs'
 ]
 
 // cmdb-mongodb 被外部周期性重启(约 1 次/分钟),写接口在重启窗口会失败。

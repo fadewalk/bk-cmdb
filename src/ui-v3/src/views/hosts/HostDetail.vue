@@ -67,28 +67,52 @@
         <el-empty v-if="!svcLoading && svcInstances.length === 0" description="该主机未关联服务实例" :image-size="80" />
       </template>
 
-      <!-- 3. 关联实例(按模型分组) -->
+      <!-- 3. 关联实例(按模型分组;老版列表/拓扑双视图 + 组件内全屏) -->
       <template v-if="tab === 'association'">
-        <div class="toolbar">
-          <el-tooltip content="当前模型暂未定义可用关联" :disabled="hasHostAssociation" placement="top">
-            <span>
-              <el-button type="primary" size="small" :disabled="!hasHostAssociation" @click="newAssocVisible = true">新增关联</el-button>
-            </span>
-          </el-tooltip>
-        </div>
-        <el-card v-for="g in assocGroups" :key="g.objId" shadow="never" style="margin-bottom: 12px">
-          <template #header>
-            <div class="card-head">
-              <span>{{ g.objName }} ({{ g.items.length }})</span>
-              <span class="hint">{{ g.objId }}</span>
+        <div :class="['assoc-wrap', { 'is-fullscreen': assocFullscreen }]">
+          <div class="toolbar">
+            <el-tooltip content="当前模型暂未定义可用关联" :disabled="hasHostAssociation" placement="top">
+              <span>
+                <el-button type="primary" size="small" :disabled="!hasHostAssociation" @click="newAssocVisible = true">新增关联</el-button>
+              </span>
+            </el-tooltip>
+            <el-radio-group v-model="assocView" size="small" style="margin-left: 12px">
+              <el-radio-button value="list">列表</el-radio-button>
+              <el-radio-button value="topo">拓扑</el-radio-button>
+            </el-radio-group>
+            <div class="spacer" />
+            <el-button size="small" @click="assocFullscreen = !assocFullscreen">{{ assocFullscreen ? '退出全屏' : '全屏' }}</el-button>
+            <el-button v-if="assocFullscreen" size="small" type="primary" @click="assocFullscreen = false">关闭</el-button>
+          </div>
+          <template v-if="assocView === 'list'">
+            <el-card v-for="g in assocGroups" :key="g.objId" shadow="never" style="margin-bottom: 12px">
+              <template #header>
+                <div class="card-head">
+                  <span>{{ g.objName }} ({{ g.items.length }})</span>
+                  <span class="hint">{{ g.objId }}</span>
+                </div>
+              </template>
+              <el-table :data="g.items" v-loading="assocLoading" size="small" stripe>
+                <el-table-column v-for="col in g.cols" :key="col" :prop="col" :label="col" min-width="160" show-overflow-tooltip />
+              </el-table>
+              <el-empty v-if="!assocLoading && g.items.length === 0" :description="`无 ${g.objName} 关联`" :image-size="60" />
+            </el-card>
+            <el-empty v-if="!assocLoading && assocGroups.length === 0" description="无关联实例" :image-size="80" />
+          </template>
+          <template v-else>
+            <div v-loading="assocLoading" class="assoc-topo-view">
+              <div v-for="g in assocGroups" :key="g.objId" class="assoc-topo-group">
+                <div class="assoc-topo-title">{{ g.objName }}（{{ g.items.length }}）</div>
+                <div class="assoc-topo-nodes">
+                  <span v-for="(it, idx) in g.items" :key="idx" class="assoc-topo-node">
+                    {{ it.__peer || it.bk_inst_id || it.id }}
+                  </span>
+                </div>
+              </div>
+              <el-empty v-if="!assocLoading && assocGroups.length === 0" description="暂无关联拓扑" :image-size="80" />
             </div>
           </template>
-          <el-table :data="g.items" v-loading="assocLoading" size="small" stripe>
-            <el-table-column v-for="col in g.cols" :key="col" :prop="col" :label="col" min-width="160" show-overflow-tooltip />
-          </el-table>
-          <el-empty v-if="!assocLoading && g.items.length === 0" :description="`无 ${g.objName} 关联`" :image-size="60" />
-        </el-card>
-        <el-empty v-if="!assocLoading && assocGroups.length === 0" description="无关联实例" :image-size="80" />
+        </div>
       </template>
 
       <template v-if="tab === 'history'">
@@ -495,6 +519,9 @@ async function loadSvcInstances() {
   }
 }
 
+const assocView = ref('list')
+const assocFullscreen = ref(false)
+
 async function loadAssoc() {
   if (!bizId) {
     assocGroups.value = []
@@ -722,4 +749,20 @@ onMounted(async () => {
 .edit-form { padding: 8px 0; }
 .card-head { display: flex; align-items: center; gap: 10px; }
 .hint { color: #979ba5; font-size: 12px; margin-left: 10px; }
+
+/* 关联 tab 拓扑视图与全屏 */
+.toolbar { display: flex; align-items: center; }
+.toolbar .spacer { flex: 1; }
+.assoc-wrap.is-fullscreen {
+  position: fixed; inset: 0; z-index: 3000;
+  background: #fff; padding: 20px; overflow: auto;
+}
+.assoc-topo-view { min-height: 120px; }
+.assoc-topo-group { margin-bottom: 14px; }
+.assoc-topo-title { font-size: 12px; color: #979BA5; margin-bottom: 6px; }
+.assoc-topo-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
+.assoc-topo-node {
+  display: inline-block; padding: 2px 10px; font-size: 12px; color: #63656E;
+  background: #F0F1F5; border: 1px solid #DCDEE5; border-radius: 2px;
+}
 </style>

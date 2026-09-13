@@ -246,11 +246,17 @@
         <el-table :data="parsedObjects" size="small" border max-height="300">
           <el-table-column width="60">
             <template #default="{ row }">
-              <el-checkbox v-model="row.__selected" />
+              <el-checkbox v-model="row.__selected" :disabled="row.__exists" />
             </template>
           </el-table-column>
           <el-table-column prop="bk_obj_id" label="模型标识" min-width="140" />
           <el-table-column prop="bk_obj_name" label="模型名称" min-width="140" />
+          <el-table-column label="状态" width="150">
+            <template #default="{ row }">
+              <el-tag v-if="row.__exists" size="small" type="info">已存在,不可导入</el-tag>
+              <el-tag v-else size="small" type="success">新模型</el-tag>
+            </template>
+          </el-table-column>
         </el-table>
         <div v-if="parsedAssts.length" class="asst-conflicts" style="margin-top: 10px">
           <p class="section-hint">关联关系(已存在的关联类型选择处理方式,默认跳过):</p>
@@ -313,7 +319,11 @@
           </div>
           <div class="legacy-form-row">
             <span class="label-title">文件密码</span>
-            <el-input v-model="exportForm.password" class="legacy-input row-input" placeholder="可选,用于加密导出包" />
+            <el-input v-model="exportForm.password" type="password" show-password class="legacy-input row-input" placeholder="可选;6-16 位且包含字母、数字和特殊符号" />
+          </div>
+          <div class="legacy-form-row">
+            <span class="label-title">确认密码</span>
+            <el-input v-model="exportForm.confirmedPassword" type="password" show-password class="legacy-input row-input" placeholder="请输入同样的密码,以确认密码准确" />
           </div>
           <div class="legacy-form-row">
             <span class="label-title">密码有效期</span>
@@ -390,7 +400,7 @@ const parsedAssts = ref([])
 // ---------- 导出(老版向导:选择模式 → 关联关系 → 设置 → 下载) ----------
 const exportDialog = ref(false)
 const exporting = ref(false)
-const exportForm = ref({ fileName: 'models', password: '', expiration: 0 })
+const exportForm = ref({ fileName: 'models', password: '', confirmedPassword: '', expiration: 0 })
 const exportStep = ref(1)
 const exportAsstIds = ref([])
 const associationTypes = ref([])
@@ -576,7 +586,7 @@ function cancelExportSelect() {
 async function openExportWizard() {
   exportStep.value = 1
   exportAsstIds.value = []
-  exportForm.value = { fileName: 'models', password: '', expiration: 0 }
+  exportForm.value = { fileName: 'models', password: '', confirmedPassword: '', expiration: 0 }
   try {
     const res = await searchAssociationTypes({})
     associationTypes.value = res?.info || []
@@ -596,7 +606,13 @@ async function analyzeImport() {
       throw new Error(res.bk_error_msg || '解析失败')
     }
     const data = res || {}
-    parsedObjects.value = (data.import_object || []).map((o) => ({ ...o, __selected: true }))
+    // 老版契约:模型包中与当前系统同标识(bk_obj_id)的模型标记"已存在",不可勾选导入
+    const known = new Set(rawGroups.value.flatMap((cls) => (cls.bk_objects || []).map((m) => m.bk_obj_id)))
+    parsedObjects.value = (data.import_object || []).map((o) => ({
+      ...o,
+      __exists: known.has(o.bk_obj_id),
+      __selected: !known.has(o.bk_obj_id)
+    }))
     parsedAssts.value = (data.import_asst || []).map((a) => ({ ...a, __conflictAction: 'skip' }))
     if (!parsedObjects.value.length) {
       ElMessage.warning('解析结果为空,请确认文件格式')
@@ -610,7 +626,7 @@ async function analyzeImport() {
 
 // 提交导入(老版 /object/importmany {import_object, import_asst})
 async function doImport() {
-  const selected = parsedObjects.value.filter((o) => o.__selected)
+  const selected = parsedObjects.value.filter((o) => o.__selected && !o.__exists)
   if (!selected.length) return
   importing.value = true
   try {
@@ -643,9 +659,20 @@ async function doExport() {
     .filter(Boolean)
   if (!selectedIds.length) { ElMessage.warning('未选中任何模型'); return }
   const fileName = (exportForm.value.fileName || 'models').trim()
-  if (!/^[a-zA-Z0-9_-]+$/.test(fileName)) {
+  if (!/^[a-zA-Z0-9-_]+$/.test(fileName)) {
     ElMessage.error('文件名仅支持英文、数字、下划线、中划线')
     return
+  }
+  // 老版 export-setting 契约:6-16 位且必须包含字母、数字、特殊符号;确认密码需一致
+  if (exportForm.value.password) {
+    if (!/^(?=.*[0-9])(?=.*[a-zA-Z])(?=.*[^(0-9a-zA-Z)]).{6,16}$/.test(exportForm.value.password)) {
+      ElMessage.error('密码需 6-16 位,且必须包含英文字母、数字和特殊符号')
+      return
+    }
+    if (exportForm.value.password !== exportForm.value.confirmedPassword) {
+      ElMessage.error('两次输入的密码不一致')
+      return
+    }
   }
   exporting.value = true
   try {

@@ -194,17 +194,11 @@ function assert(condition, message) {
     const editorText = await impDlg.innerText()
     assert(editorText.includes('请确认需要导入的模型'), '未进入导入编辑器步骤')
     assert(editorText.includes('b27'), '编辑器未展示解析出的模型')
-    // 确认导入 → 断言 importmany payload
-    await page.route('**/object/importmany', (route) => {
-      try { importPayload = route.request().postDataJSON() } catch {}
-      route.continue()
-    })
-    await impDlg.locator('button:has-text("确认导入")').click()
-    await page.waitForTimeout(2000)
-    assert(importPayload, '未发出 object/importmany 请求')
-    assert(Array.isArray(importPayload.import_object) && importPayload.import_object.length > 0, 'import_object 应为非空数组')
-    assert(importPayload.import_object[0].bk_obj_id === `b27obj${TAG}`, 'import_object 模型标识不符')
-    console.log('✓ 导入向导全流程(须知/上传解析/编辑器/提交 payload)')
+    // B45 契约:与系统同标识的模型标记"已存在,不可导入"且勾选框禁用(老版 import editor 语义)
+    assert(editorText.includes('已存在,不可导入'), '已存在模型未标记不可导入')
+    const existsRow = impDlg.locator('.el-table__row', { hasText: `b27obj${TAG}` })
+    assert(await existsRow.locator('input[type="checkbox"]:disabled').count() > 0, '已存在模型勾选框未禁用')
+    console.log('✓ 导入向导全流程(须知/上传解析/编辑器/已存在标记不可导入)')
 
     console.log('B27 全部通过')
   } catch (e) {
