@@ -52,6 +52,8 @@ app.config.errorHandler = (err, _instance, info) => {
 window.addEventListener('error', (event) => {
   // 资源加载失败(脚本/样式)不弹 toast,只记录
   if (event.target && event.target !== window && (event.target.src || event.target.href)) return
+  // ResizeObserver loop 是布局时序的良性浏览器噪音(Element Plus 表格常态触发),忽略
+  if (event.message && /ResizeObserver loop/i.test(event.message)) return
   reportGlobalError(event.message || '页面运行异常')
 })
 window.addEventListener('unhandledrejection', (event) => {
