@@ -51,12 +51,15 @@ CMDB API → ui-v3 read path for the isolated fixture.
    Cluster deletion remains guarded by CMDB association checks and is not forced.
    Residual P48/old test records require manual audited cleanup before a clean
    production database claim.
-4. P49 rejects malformed host maps, zero workers and missing Host mappings at
-   startup; refuses fake container IDs; requires scheduled Pods, Ready Nodes and
-   runtime container IDs; and emits Prometheus-format readiness, queue depth and
-   retry-exhausted metrics. Namespace/Node/Workload/Pod update convergence is not
-   yet complete: existing records are still create-or-find for most fields and
-   must not be called production-ready.
+4. P49.1 lifecycle hardening now includes:
+   - value/pointer tombstone classification with explicit `delete:` queue keys;
+   - Pod tombstone UID protection (`delete:pod:namespace/name@uid`), so delayed deletion cannot remove a same-name replacement;
+   - correct Pod DELETE contract with outer `data` array;
+   - Namespace/Pods-Workload/Node PUT contracts for safe mutable fields;
+   - strict host-map/worker/API-key startup validation;
+   - no fabricated container IDs, Ready-node and scheduled-Pod gates;
+   - Prometheus numeric readiness/queue/retry metrics.
+   Full update convergence for Pod fields is still blocked because the public CMDB API exposes no Pod update endpoint; Namespace/Node/Workload update fields are now contract-tested.
 
 ## Delivered implementation
 

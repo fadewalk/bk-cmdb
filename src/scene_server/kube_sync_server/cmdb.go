@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -176,6 +177,11 @@ func (c *cmdbClient) namespace(ctx context.Context, cfg Config, clusterID int64,
 		return 0, err
 	}
 	if item, ok := first(data.Info); ok {
+		if labels != nil && !reflect.DeepEqual(item.Labels, labels) {
+			if err := c.request(ctx, http.MethodPut, "updatemany/kube/namespace", map[string]interface{}{"bk_biz_id": cfg.BizID, "ids": []int64{item.ID}, "data": map[string]interface{}{"labels": labels}}, nil); err != nil {
+				return 0, err
+			}
+		}
 		return item.ID, nil
 	}
 	var created idsData
@@ -190,10 +196,15 @@ func (c *cmdbClient) namespace(ctx context.Context, cfg Config, clusterID int64,
 func (c *cmdbClient) workload(ctx context.Context, cfg Config, clusterID, namespaceID int64, name string, labels map[string]string) (int64, error) {
 	var data listData[cmdbWorkload]
 	filter := queryFilter{Condition: "AND", Rules: []queryRule{{Field: "bk_namespace_id", Operator: "equal", Value: namespaceID}, {Field: "name", Operator: "equal", Value: name}}}
-	if err := c.find(ctx, "findmany/kube/workload/pods", cfg.BizID, filter, []string{"id", "name", "bk_namespace_id"}, &data); err != nil {
+	if err := c.find(ctx, "findmany/kube/workload/pods", cfg.BizID, filter, []string{"id", "name", "bk_namespace_id", "labels"}, &data); err != nil {
 		return 0, err
 	}
 	if item, ok := first(data.Info); ok {
+		if labels != nil && !reflect.DeepEqual(item.Labels, labels) {
+			if err := c.request(ctx, http.MethodPut, "updatemany/kube/workload/pods", map[string]interface{}{"bk_biz_id": cfg.BizID, "kind": "pods", "ids": []int64{item.ID}, "data": map[string]interface{}{"labels": labels}}, nil); err != nil {
+				return 0, err
+			}
+		}
 		return item.ID, nil
 	}
 	var created idsData
@@ -208,10 +219,25 @@ func (c *cmdbClient) workload(ctx context.Context, cfg Config, clusterID, namesp
 func (c *cmdbClient) node(ctx context.Context, cfg Config, clusterID, hostID int64, name, hostname string, internalIPs []string, labels map[string]string) (int64, error) {
 	var data listData[cmdbNode]
 	filter := queryFilter{Condition: "AND", Rules: []queryRule{{Field: "bk_cluster_id", Operator: "equal", Value: clusterID}, {Field: "name", Operator: "equal", Value: name}}}
-	if err := c.find(ctx, "findmany/kube/node", cfg.BizID, filter, []string{"id", "name", "bk_host_id", "bk_cluster_id"}, &data); err != nil {
+	if err := c.find(ctx, "findmany/kube/node", cfg.BizID, filter, []string{"id", "name", "bk_host_id", "bk_cluster_id", "hostname", "labels", "internal_ip"}, &data); err != nil {
 		return 0, err
 	}
 	if item, ok := first(data.Info); ok {
+		update := map[string]interface{}{}
+		if hostname != "" && hostname != item.Hostname {
+			update["hostname"] = hostname
+		}
+		if labels != nil && !reflect.DeepEqual(labels, item.Labels) {
+			update["labels"] = labels
+		}
+		if len(internalIPs) > 0 && !reflect.DeepEqual(internalIPs, item.InternalIP) {
+			update["internal_ip"] = internalIPs
+		}
+		if len(update) > 0 {
+			if err := c.request(ctx, http.MethodPut, "updatemany/kube/node", map[string]interface{}{"bk_biz_id": cfg.BizID, "ids": []int64{item.ID}, "data": update}, nil); err != nil {
+				return 0, err
+			}
+		}
 		return item.ID, nil
 	}
 	var created idsData
