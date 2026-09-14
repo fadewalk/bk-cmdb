@@ -116,6 +116,16 @@ node scripts/ui-v3/test-legacy-g1-manifest.cjs
 5. `docs/apidoc/**` 已列为事实源范围，但本脚本不把文档文本当作已验证运行时契约。
 6. 外部依赖分类是文件名/endpoint 的保守启发式，必须在真实环境验收时替换为凭据、网络、服务和读回证据。
 
+## G1-B Host runner
+
+Host 批量编辑、转移 preview/execute、删除保护的真实 contract runner 和证据边界见：
+
+- `src/ui-v3/e2e/run-g1-host-contract.cjs`
+- `src/ui-v3/e2e/test-g1-host-contract.cjs`
+- `docs/architecture/legacy-backend-g1-host-contract-20260915.md`
+
+该 runner 使用真实浏览器 session，逐请求记录 method、URL、payload、响应和 finally 清理；它不新增 ui-v3 页面，也不把既有 mock 或历史回归自动提升为 G1 通过。
+
 ## 下一批真实 contract tests
 
 按 G1 handoff 的顺序，下一批不新增 ui-v3 功能，优先补：
