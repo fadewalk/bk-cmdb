@@ -333,9 +333,9 @@
 
       <template v-else>
         <div class="parse-summary">
-          <el-tag v-if="importParseSuccess" type="success" size="small">成功 {{ importParseSuccess.length }} 条</el-tag>
-          <el-tag v-if="importParseError" type="danger" size="small">失败 {{ importParseError.length }} 条</el-tag>
-          <el-tag v-if="!importParseSuccess && !importParseError" size="small">未解析到数据</el-tag>
+          <el-tag v-if="importParseSuccess.length" type="success" size="small">成功 {{ importParseSuccess.length }} 条</el-tag>
+          <el-tag v-if="importParseError.length" type="danger" size="small">失败 {{ importParseError.length }} 条</el-tag>
+          <el-tag v-if="!importParseSuccess.length && !importParseError.length" size="small">未解析到可导入数据</el-tag>
         </div>
         <div class="relation-section">
           <div class="relation-title">选择关联模型</div>
@@ -1209,9 +1209,11 @@ async function goImportStep2() {
     const params = { op: 1 }
     if (currentDirId.value && currentDirId.value !== 'default') params.bk_module_id = Number(currentDirId.value)
     const resp = await importHosts(importSourceFile.value, params)
-    const info = resp?.data?.info || {}
-    importParseSuccess.value = info.success || []
-    importParseError.value = info.error || []
+    const result = resp?.success || resp?.data?.success || []
+    const errors = resp?.error || resp?.data?.error || []
+    importParseSuccess.value = result
+    importParseError.value = errors
+    if (!result.length && !errors.length) ElMessage.info('未解析到可导入的主机记录，请检查文件内容')
     importStep.value = 1
   } catch (e) {
     ElMessage.error('文件解析失败: ' + (e?.message || '后端异常'))
