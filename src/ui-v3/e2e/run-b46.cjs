@@ -79,7 +79,7 @@ function assert(condition, message) {
 
     await page.locator('.association-drawer:visible .el-drawer__close-btn').click()
     await page.waitForTimeout(300)
-    assert(!(await page.locator('.association-drawer:visible').count()), '详情抽屉未关闭')
+    assert(!(await page.locator('.association-drawer.open').count()), '详情抽屉未关闭')
 
     failDetailRead = true
     detailPayload = null
@@ -88,7 +88,7 @@ function assert(condition, message) {
     await page.waitForTimeout(700)
     assert(detailPayload?.condition?.id === source.id, '错误场景未发出同一详情请求')
     assert(detailResponse?.result === false && detailResponse?.bk_error_msg === 'detail probe failed', '错误场景响应未按预期返回')
-    assert(!(await page.locator('.association-drawer:visible').count()), '详情读取失败时不应打开抽屉')
+    assert(!(await page.locator('.association-drawer.open').count()), '详情读取失败时不应打开抽屉')
     const toast = await page.locator('.el-message').last().textContent().catch(() => '')
     assert(/detail probe failed|关联类型加载失败/.test(toast || ''), `详情错误未反馈到 UI: ${toast}`)
     console.log(`✓ getAssociationType error surfaced without opening drawer: ${toast}`)
