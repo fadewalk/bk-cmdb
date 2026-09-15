@@ -261,6 +261,8 @@
       <li class="ctx-item" v-if="ctxMenu.node && canCreate(ctxMenu.node)" @click="ctxCreateSet">新建集群</li>
       <li class="ctx-item" v-if="ctxMenu.node && ctxMenu.node.type === 'set' && !ctxMenu.node.isIdle"
         @click="ctxCreateModule">新建模块</li>
+      <li class="ctx-item" v-if="ctxMenu.node && ['set', 'module'].includes(ctxMenu.node.type) && !ctxMenu.node.isIdle"
+        @click="ctxEditNode">编辑名称</li>
       <li class="ctx-item ctx-danger" v-if="ctxMenu.node && ctxMenu.node.type === 'set' && !ctxMenu.node.isIdle"
         @click="ctxDeleteSet">删除集群</li>
       <li class="ctx-item ctx-danger" v-if="ctxMenu.node && ctxMenu.node.type === 'module'"
@@ -270,12 +272,12 @@
     </ul>
 
     <!-- 新建集群 / 模块 -->
-    <el-dialog v-model="nodeDialog" :title="nodeDialogType === 'set' ? '新建集群' : '新建模块'" width="420px">
+    <el-dialog v-model="nodeDialog" :title="nodeDialogMode === 'edit' ? '编辑名称' : (nodeDialogType === 'set' ? '新建集群' : '新建模块')" width="420px">
       <el-form label-width="90px" @submit.prevent>
         <el-form-item :label="nodeDialogType === 'set' ? '集群名称' : '模块名称'" required>
           <el-input v-model="nodeName" placeholder="输入名称" />
         </el-form-item>
-        <el-form-item v-if="nodeDialogType === 'module'" label="所属集群">
+        <el-form-item v-if="nodeDialogMode !== 'edit' && nodeDialogType === 'module'" label="所属集群">
           <span>{{ nodeParent?.label }}</span>
         </el-form-item>
       </el-form>
@@ -537,7 +539,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
-  createSet, deleteSet, createModule, deleteModule,
+  createSet, deleteSet, updateSet, createModule, deleteModule, updateModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
@@ -637,6 +639,7 @@ function bizFieldValue(p) {
 const currentKey = ref('')
 
 const nodeDialog = ref(false)
+const nodeDialogMode = ref('create')
 const nodeDialogType = ref('set')
 const nodeName = ref('')
 const nodeParent = ref(null)
@@ -1209,6 +1212,7 @@ function openCreateSet() {
 }
 function openCreateFromNode(data) {
   if (data.type === 'biz' || data.type === 'set') {
+    nodeDialogMode.value = 'create'
     nodeDialogType.value = data.type === 'biz' ? 'set' : 'module'
     nodeParent.value = data.type === 'set' ? data : null
     nodeName.value = ''
@@ -1216,10 +1220,21 @@ function openCreateFromNode(data) {
   }
   ctxMenu.value.visible = false
 }
+function ctxEditNode() {
+  const n = ctxMenu.value.node
+  ctxMenu.value.visible = false
+  if (!n || n.isIdle || !['set', 'module'].includes(n.type)) return
+  nodeDialogMode.value = 'edit'
+  nodeDialogType.value = n.type
+  nodeParent.value = n.type === 'module' ? n : null
+  nodeName.value = n.label || ''
+  nodeDialog.value = true
+}
 function ctxCreateSet() {
   const n = ctxMenu.value.node
   ctxMenu.value.visible = false
   if (!n) return
+  nodeDialogMode.value = 'create'
   nodeDialogType.value = 'set'
   nodeParent.value = null
   nodeName.value = ''
@@ -1229,6 +1244,7 @@ function ctxCreateModule() {
   const n = ctxMenu.value.node
   ctxMenu.value.visible = false
   if (!n) return
+  nodeDialogMode.value = 'create'
   nodeDialogType.value = 'module'
   nodeParent.value = n
   nodeName.value = ''
@@ -1254,17 +1270,29 @@ async function ctxDeleteModule() {
 }
 
 async function saveNode() {
-  if (!nodeName.value) { ElMessage.warning('请输入名称'); return }
+  const name = String(nodeName.value || '').trim()
+  if (!name) { ElMessage.warning('请输入名称'); return }
   saving.value = true
   try {
-    if (nodeDialogType.value === 'set') {
-      await createSet(bizId.value, nodeName.value)
+    if (nodeDialogMode.value === 'edit') {
+      const node = nodeParent.value
+      if (nodeDialogType.value === 'set') {
+        await updateSet(bizId.value, node.setId, { bk_set_name: name })
+      } else {
+        await updateModule(bizId.value, node.setId, node.moduleId, { bk_module_name: name })
+      }
+      ElMessage.success('名称已更新')
+    } else if (nodeDialogType.value === 'set') {
+      await createSet(bizId.value, name)
+      ElMessage.success('创建成功')
     } else {
-      await createModule(bizId.value, nodeParent.value.setId, nodeName.value)
+      await createModule(bizId.value, nodeParent.value.setId, name)
+      ElMessage.success('创建成功')
     }
-    ElMessage.success('创建成功')
     nodeDialog.value = false
-    load()
+    await load()
+  } catch (error) {
+    ElMessage.error(`${nodeDialogMode.value === 'edit' ? '更新' : '创建'}失败: ${error?.message || '后端异常'}`)
   } finally {
     saving.value = false
   }
