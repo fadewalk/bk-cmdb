@@ -464,7 +464,13 @@
             :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
             placeholder="选择集群 / 模块"
             style="width: 100%"
+            @change="loadCloneHosts"
           />
+        </el-form-item>
+        <el-form-item label="目标主机" required>
+          <el-select v-model="cloneHostId" filterable style="width: 100%" placeholder="选择目标主机">
+            <el-option v-for="h in cloneHosts" :key="h.bk_host_id" :label="h.bk_host_innerip || `主机 ${h.bk_host_id}`" :value="h.bk_host_id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="进程配置">
           <span>将复制源实例的全部 {{ cloneProcesses.length }} 个进程</span>
@@ -472,9 +478,10 @@
       </el-form>
       <template #footer>
         <el-button @click="cloneVisible = false">取消</el-button>
-        <el-button type="primary" :loading="cloneSubmitting" @click="submitClone">克隆</el-button>
+        <el-button type="primary" :loading="cloneSubmitting" :disabled="!cloneModulePath || !cloneHostId" @click="submitClone">克隆</el-button>
       </template>
     </el-dialog>
+
 
     <!-- 批量编辑标签 -->
     <el-dialog v-model="labelVisible" :title="`编辑标签(${selectedInstances.length} 个实例)`" width="520px">
@@ -549,6 +556,7 @@ import {
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
 import { pushNavHistory } from '../utils/nav-history'
+import { normalizeProcessInfo, buildRawCloneInstance } from '../utils/service-instance-payload'
 import { searchProcTemplates } from '../api/cmdb'
 import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 
@@ -917,7 +925,7 @@ function onHostPageSizeChange(sz) {
 async function loadInstances() {
   instLoading.value = true
   try {
-    const data = await searchServiceInstances(bizId.value, { start: 0, limit: 200 })
+    const data = await searchServiceInstances(bizId.value, { start: 0, limit: 200 }, currentModuleId.value)
     let rows = data?.info || []
     if (ipKeyword.value) {
       const kw = ipKeyword.value.toLowerCase()
@@ -1351,15 +1359,14 @@ async function loadCandidateHosts() {
   if (!currentModuleId.value) return
   candLoading.value = true
   try {
-    const data = await listHostsWithNoSvcInst(bizId.value, currentModuleId.value)
-    const ids = data?.bk_host_ids || []
-    if (ids.length === 0) {
-      candidateHosts.value = []
-      return
-    }
-    const hostData = await listBizHosts(bizId.value, { start: 0, limit: 500 })
-    const all = (hostData?.info || []).map((h) => h.host || h)
-    candidateHosts.value = all.filter((h) => ids.includes(h.bk_host_id))
+    const moduleUsesTemplate = Boolean(currentNode.value?.serviceTemplateId)
+    const hostData = moduleUsesTemplate
+      ? await listHostsWithNoSvcInst(bizId.value, currentModuleId.value)
+      : await listBizHosts(bizId.value, { start: 0, limit: 500, filter: { condition: 'AND', rules: [{ field: 'bk_module_id', operator: 'equal', value: currentModuleId.value }] } })
+    const ids = hostData?.bk_host_ids || []
+    if (moduleUsesTemplate && !ids.length) { candidateHosts.value = []; return }
+    const all = (moduleUsesTemplate ? (await listBizHosts(bizId.value, { start: 0, limit: 500 }))?.info || [] : hostData?.info || []).map((h) => h.host || h)
+    candidateHosts.value = moduleUsesTemplate ? all.filter((h) => ids.includes(h.bk_host_id)) : all
   } finally {
     candLoading.value = false
   }
@@ -1384,7 +1391,7 @@ function goWizardStep(step) {
 async function prefillTemplateProcesses() {
   try {
     const data = await searchProcTemplates(bizId.value, {
-      service_template_ids: [currentNode.value.serviceTemplateId],
+      service_template_id: currentNode.value.serviceTemplateId,
       page: { start: 0, limit: 100 }
     })
     const templates = data?.info || []
@@ -1393,17 +1400,17 @@ async function prefillTemplateProcesses() {
       row.processes = templates.map((t) => {
         const prop = t.property || {}
         return {
-          process_info: {
-            bk_process_name: prop.bk_process_name || t.bk_process_name || '',
-            bk_func_name: prop.bk_func_name || '',
-            bk_bind_ip: prop.bk_bind_ip?.[0] || '127.0.0.1',
-            port: prop.port ?? '',
-            user: prop.user || 'root',
-            work_path: prop.work_path || '/tmp',
-            start_cmd: prop.start_cmd || '',
-            stop_cmd: prop.stop_cmd || '',
-            description: prop.description || ''
-          }
+          process_template_id: t.id,
+          process_info: normalizeProcessInfo({
+            bk_process_name: prop.bk_process_name?.value || prop.bk_process_name || t.bk_process_name || '',
+            bk_func_name: prop.bk_func_name?.value || prop.bk_func_name || '',
+            bind_info: prop.bind_info?.value || prop.bind_info,
+            user: prop.user?.value || prop.user || 'root',
+            work_path: prop.work_path?.value || prop.work_path || '/tmp',
+            start_cmd: prop.start_cmd?.value || prop.start_cmd || '',
+            stop_cmd: prop.stop_cmd?.value || prop.stop_cmd || '',
+            description: prop.description?.value || prop.description || ''
+          })
         }
       })
     })
@@ -1538,33 +1545,49 @@ async function removeProcess(row) {
 const cloneVisible = ref(false)
 const cloneSource = ref(null)
 const cloneModulePath = ref(null)
+const cloneHostId = ref(null)
+const cloneHosts = ref([])
 const cloneProcesses = ref([])
 const cloneSubmitting = ref(false)
 
 async function openClone(row) {
+  if (row.service_template_id) {
+    ElMessage.info('服务模板实例请通过模板同步流程处理，不能按裸实例克隆')
+    return
+  }
   cloneSource.value = row
-  cloneModulePath.value = null
+  cloneModulePath.value = row.bk_module_id ?? null
+  cloneHostId.value = null
+  cloneHosts.value = []
   cloneVisible.value = true
   try {
     const data = await searchProcessInstances(bizId.value, row.id, { start: 0, limit: 100 })
     cloneProcesses.value = data?.info || []
-  } catch { cloneProcesses.value = [] }
+    await loadCloneHosts()
+  } catch { cloneProcesses.value = []; cloneHosts.value = [] }
+}
+
+async function loadCloneHosts() {
+  cloneHostId.value = null
+  cloneHosts.value = []
+  if (!cloneModulePath.value) return
+  const data = await listHostsWithNoSvcInst(bizId.value, cloneModulePath.value)
+  const ids = data?.bk_host_ids || []
+  if (!ids.length) return
+  const hostData = await listBizHosts(bizId.value, { start: 0, limit: 500 })
+  const all = (hostData?.info || []).map((h) => h.host || h)
+  cloneHosts.value = all.filter((host) => ids.includes(host.bk_host_id) && host.bk_host_id !== cloneSource.value?.bk_host_id)
 }
 
 async function submitClone() {
-  if (!cloneModulePath.value) { ElMessage.warning('请选择目标模块'); return }
+  if (!cloneModulePath.value || !cloneHostId.value) { ElMessage.warning('请选择目标模块和目标主机'); return }
   cloneSubmitting.value = true
   try {
-    // 老版克隆语义: 新实例名 = 源名-copy,进程配置照搬源实例
-    const instances = [{
-      bk_host_id: cloneSource.value.bk_host_id,
-      service_instance_name: `${cloneSource.value.name || '实例'}-copy`,
-      processes: cloneProcesses.value.map((proc) => ({ process_info: proc.property || {} }))
-    }]
-    await createServiceInstance(bizId.value, cloneModulePath.value, instances)
+    const instance = buildRawCloneInstance({ ...cloneSource.value, processes: cloneProcesses.value }, cloneHostId.value)
+    await createServiceInstance(bizId.value, cloneModulePath.value, [instance])
     ElMessage.success('克隆成功')
     cloneVisible.value = false
-    loadInstances()
+    await loadInstances()
   } catch (e) {
     ElMessage.error('克隆失败: ' + (e?.message || '后端异常'))
   } finally { cloneSubmitting.value = false }

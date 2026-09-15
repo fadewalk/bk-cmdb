@@ -51,8 +51,8 @@ export const updateModule = (bizId, setId, moduleId, data) =>
   http.put(`/module/${bizId}/${setId}/${moduleId}`, data)
 
 // ---------- 服务实例与进程 ----------
-export const searchServiceInstances = (bizId, page) =>
-  http.post('/findmany/proc/service_instance', { bk_biz_id: bizId, page, with_name: true })
+export const searchServiceInstances = (bizId, page, moduleId = null) =>
+  http.post('/findmany/proc/service_instance', { bk_biz_id: bizId, ...(moduleId ? { bk_module_id: moduleId } : {}), page, with_name: true })
 export const deleteServiceInstances = (bizId, ids) =>
   http.delete('/deletemany/proc/service_instance', {
     data: { bk_biz_id: bizId, service_instance_ids: ids }
