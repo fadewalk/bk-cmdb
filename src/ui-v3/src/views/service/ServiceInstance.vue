@@ -97,6 +97,10 @@
     <el-drawer v-model="procDrawer" :title="`「${procInstName}」进程实例`" size="55%">
       <el-tabs v-model="procTab">
         <el-tab-pane label="进程列表" name="proc">
+          <el-alert v-if="procLoadError" class="proc-load-error" type="error" :closable="false" show-icon>
+            {{ procLoadError }}
+            <el-button link type="primary" @click="loadProcesses(procInstId)">重试</el-button>
+          </el-alert>
           <div class="table-toolbar">
             <div class="spacer" />
             <el-button :icon="'Plus'" type="primary" size="small" @click="openAddProcess">新增进程</el-button>
@@ -214,14 +218,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
-  searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances,
+  searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances, searchProcessDetailsByIds,
   listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, updateInstanceLabels, deleteInstanceLabels,
   syncServiceInstances, getBizTopoTree, getBizInternalTopo, listInstanceLabels, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 import { labelsToRows, validateLabelPair } from '../../utils/service-instance-labels'
 import { buildRawCloneInstance } from '../../utils/service-instance-payload'
-import { normalizeLabelAggregation, buildServiceInstanceSearchOptions } from '../../utils/service-instance-search'
+import { normalizeLabelAggregation, buildServiceInstanceSearchOptions, buildProcessDetailsByIdsRequest, extractProcessIds, normalizeProcessDetailsByIdsResponse, processDetailsErrorMessage } from '../../utils/service-instance-search'
 
 const route = useRoute()
 const router = useRouter()
@@ -248,6 +252,7 @@ const procTab = ref('proc')
 const procInstName = ref('')
 const procInstId = ref(null)
 const procLoading = ref(false)
+const procLoadError = ref('')
 const processes = ref([])
 const expandedRows = ref(new Set())
 const allExpanded = ref(false)
@@ -269,15 +274,26 @@ const moduleFilterId = ref(null)
 
 async function loadProcesses(id) {
   procLoading.value = true
+  procLoadError.value = ''
   try {
     const data = await searchProcessInstances(bizId.value, id, { start: 0, limit: 100 })
-    const list = data?.info || data || []
-    processes.value = list
+    const processIds = extractProcessIds(data)
+    if (!processIds.length) {
+      processes.value = []
+    } else {
+      const details = await searchProcessDetailsByIds(buildProcessDetailsByIdsRequest(bizId.value, processIds))
+      processes.value = normalizeProcessDetailsByIdsResponse(details).info
+    }
+    const list = processes.value
     if (id === procInstId.value) {
       const target = rows.value.find((row) => row.id === id)
       if (target) target.__processes = list
     }
     return list
+  } catch (error) {
+    processes.value = []
+    procLoadError.value = processDetailsErrorMessage(error)
+    return []
   } finally { procLoading.value = false }
 }
 
@@ -514,7 +530,7 @@ async function showProcesses(row) {
   procDrawer.value = true
   processes.value = []
   labels.value = labelsToRows(row.labels)
-  loadProcesses(row.id)
+  await loadProcesses(row.id)
 }
 
 function onExpandChange(row, rowsExpanded) {

@@ -52,3 +52,38 @@ export function buildServiceInstanceSearchOptions({ searchKey = '', labelKey = '
     selectors: key ? [{ key, operator: values.length ? 'in' : 'exists', values }] : []
   }
 }
+
+/** Legacy process/expand-list request: the server accepts its no-limit sentinel. */
+export function buildProcessDetailsByIdsRequest(bizId, processIds = []) {
+  const ids = [...new Set((Array.isArray(processIds) ? processIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isSafeInteger(id) && id > 0))]
+  return {
+    bk_biz_id: bizId,
+    process_ids: ids,
+    page: { limit: 999999999 }
+  }
+}
+
+/** Extract the process ids already returned by the ordinary service-instance query. */
+export function extractProcessIds(data) {
+  const rows = Array.isArray(data?.info) ? data.info : (Array.isArray(data) ? data : [])
+  return [...new Set(rows
+    .map((row) => row?.property?.bk_process_id ?? row?.process_id)
+    .map((id) => Number(id))
+    .filter((id) => Number.isSafeInteger(id) && id > 0))]
+}
+
+/** The by_ids endpoint returns the shared count/info envelope after http unwrapping. */
+export function normalizeProcessDetailsByIdsResponse(data) {
+  if (!data || !Array.isArray(data.info)) throw new Error('进程详情响应缺少 info')
+  const parsedCount = Number(data.count)
+  return {
+    count: Number.isFinite(parsedCount) ? parsedCount : data.info.length,
+    info: data.info.filter(Boolean)
+  }
+}
+
+export function processDetailsErrorMessage(error) {
+  return error?.message || '进程详情查询失败'
+}

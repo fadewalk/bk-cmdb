@@ -789,12 +789,19 @@ export const previewDeleteServiceInstances = (data) =>
   http.post('/deletemany/proc/service_instance/preview', data)
 export const unbindServiceTemplateFromModule = (data) =>
   http.delete('/delete/proc/template_binding_on_module', { data })
+// 进程别名聚合(老版 process/options + process/list 契约)
+// 请求: { bk_biz_id, bk_module_id, process_name, page:{ start, limit, sort? } }
+// 响应 data: { count, info:[{ bk_process_name, process_ids }] }
 export const searchProcessNameIds = (data) =>
   http.post('/findmany/proc/process_instance/name_ids', data)
+// 进程详情展开(老版 process/expand-list 契约)
+// 请求: { bk_biz_id, process_ids, page:{ limit:999999999 } }
+// 响应 data: { count, info:[{ process_id, service_instance_name, property, relation }] }
 export const searchProcessDetailsByIds = (data) =>
   http.post('/findmany/proc/process_instance/detail/by_ids', data)
-export const batchUpdateServiceInstances = (data) =>
-  http.put('/updatemany/proc/service_instance/biz', data)
+// 服务实例批量改名(旧版只允许 data[].update.name)
+export const batchUpdateServiceInstances = (bizId, data) =>
+  http.put(`/updatemany/proc/service_instance/biz/${bizId}`, data)
 
 export const createDynamicGroup = (bizId, name, objId, condition) =>
   http.post('/dynamicgroup', { bk_biz_id: bizId, bk_obj_id: objId, name, info: { condition } })
