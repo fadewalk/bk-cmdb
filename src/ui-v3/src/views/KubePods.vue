@@ -13,7 +13,10 @@
           <el-table-column prop="status" label="状态" min-width="100" />
           <el-table-column label="操作" width="90"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row)">详情</el-button></template></el-table-column>
         </el-table>
-        <el-empty v-if="!loading && !pods.length" description="暂无 Pod" />
+        <el-alert v-if="loadError" type="error" :closable="false" show-icon style="margin: 12px 0">
+          {{ loadError }} <el-button link type="primary" @click="loadPods">重试</el-button>
+        </el-alert>
+        <el-empty v-if="!loading && !loadError && !pods.length" description="暂无 Pod" />
       </template>
       <DependencyBlocked v-else kind="pod" :reason="capabilities.k8s.reason" />
     </el-card>
@@ -28,15 +31,16 @@ import { useCapabilityStore } from '../stores/capabilities'
 import DependencyBlocked from './status/DependencyBlocked.vue'
 
 const route = useRoute(); const router = useRouter(); const capabilities = useCapabilityStore()
-const pods = ref([]); const loading = ref(false); const keyword = ref(''); const podId = Number(route.params.podId || 0) || null
+const pods = ref([]); const loading = ref(false); const loadError = ref(''); const keyword = ref(''); const podId = Number(route.params.podId || 0) || null
 const bizId = Number(route.params.bizId || route.query.biz || localStorage.getItem('selectedBusiness')) || 0
 async function loadPods() {
   loading.value = true
+  loadError.value = ''
   try {
     const rules = keyword.value ? [{ field: 'name', operator: 'equal', value: keyword.value }] : (podId ? [{ field: 'id', operator: 'equal', value: podId }] : [])
     const data = await searchKubePods({ bk_biz_id: bizId, filter: { condition: 'AND', rules }, fields: ['id', 'name', 'namespace', 'labels', 'ip', 'ips', 'status'], page: { start: 0, limit: 100, sort: 'name', enable_count: false } })
     pods.value = data?.info || []
-  } catch { pods.value = [] } finally { loading.value = false }
+  } catch (error) { loadError.value = error?.message || 'K8s 查询失败'; pods.value = [] } finally { loading.value = false }
 }
 function openDetail(row) { router.push(`/business/${bizId}/index/pod/${row.id}`) }
 onMounted(async () => { await capabilities.ensureLoaded(); if (capabilities.k8s.healthy) loadPods() })

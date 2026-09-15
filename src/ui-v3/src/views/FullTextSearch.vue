@@ -4,7 +4,10 @@
       <template #header>全文检索 <el-tag v-if="capabilities.es.healthy" type="success" size="small">ES 可用</el-tag></template>
       <template v-if="capabilities.es.healthy">
         <div class="search-row"><el-input v-model="keyword" clearable placeholder="请输入搜索内容(最多50个字符)" @keyup.enter="search" /><el-button type="primary" :loading="loading" @click="search">搜索</el-button></div>
-        <el-empty v-if="searched && !hits.length && !loading" description="未搜索到结果" />
+        <el-alert v-if="searchError" type="error" :closable="false" show-icon style="margin-bottom:12px">
+          {{ searchError }} <el-button link type="primary" @click="search">重试</el-button>
+        </el-alert>
+        <el-empty v-if="searched && !searchError && !hits.length && !loading" description="未搜索到结果" />
         <div v-for="hit in hits" :key="`${hit.kind}-${hit.key}`" class="result-item"><div class="result-head"><el-tag size="small">{{ hit.kind }}</el-tag><strong>{{ hit.key }}</strong></div><pre>{{ JSON.stringify(hit.source || {}, null, 2) }}</pre></div>
       </template>
       <DependencyBlocked v-else kind="es" :reason="capabilities.es.reason" />
@@ -18,20 +21,20 @@ import { searchFullText } from '../api/cmdb'
 import { useCapabilityStore } from '../stores/capabilities'
 import { useResourceStore } from '../stores/resource'
 import DependencyBlocked from './status/DependencyBlocked.vue'
-const capabilities = useCapabilityStore(); const resourceStore = useResourceStore(); const keyword = ref(''); const loading = ref(false); const searched = ref(false); const hits = ref([])
+const capabilities = useCapabilityStore(); const resourceStore = useResourceStore(); const keyword = ref(''); const loading = ref(false); const searched = ref(false); const hits = ref([]); const searchError = ref('')
 async function search() {
   if (!keyword.value.trim()) return
-  loading.value = true; searched.value = true
+  loading.value = true; searched.value = true; searchError.value = ''
   try {
     await resourceStore.ensureLoaded()
     const modelIds = [...new Set(resourceStore.models
       .filter((model) => model.bk_ishidden !== true && model.bk_ispaused !== true)
       .map((model) => model.bk_obj_id)
       .filter(Boolean))]
-    if (!modelIds.length) { hits.value = []; return }
+    if (!modelIds.length) { hits.value = []; searchError.value = '当前没有可搜索的模型'; return }
     const data = await searchFullText({ bk_biz_id: Number(localStorage.getItem('selectedBusiness')) || 0, filter: { models: modelIds, instances: modelIds }, query_string: keyword.value.trim().slice(0, 50), page: { start: 0, limit: 20 } })
     hits.value = data?.hits || []
-  } catch { hits.value = [] } finally { loading.value = false }
+  } catch (error) { searchError.value = error?.message || '全文检索服务不可用'; hits.value = [] } finally { loading.value = false }
 }
 onMounted(() => capabilities.ensureLoaded())
 </script>

@@ -1,7 +1,10 @@
 <template>
   <div class="res-page">
     <div class="page-body">
-      <el-alert type="info" :closable="true" style="margin-bottom: 14px">
+      <el-alert v-if="loadError" type="error" :closable="false" show-icon style="margin-bottom: 14px">
+        {{ loadError }} <el-button link type="primary" @click="load">重试</el-button>
+      </el-alert>
+      <el-alert v-else type="info" :closable="true" style="margin-bottom: 14px">
         <template #title>
           录入云账户信息后，可同步<span class="link" @click="$router.push('/resource/cloud-discover')">云资源</span>到蓝鲸配置平台
         </template>
@@ -175,7 +178,7 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const limit = ref(20)
-const loading = ref(false)
+const loadError = ref('')
 const saving = ref(false)
 const sort = ref('bk_account_id')
 const formVisible = ref(false)
@@ -209,6 +212,7 @@ function onCellClick(row, column) {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const kw = keyword.value.trim()
     const data = await searchCloudAccounts({
@@ -220,7 +224,8 @@ async function load() {
     rows.value = (data?.info || []).map((r) => ({ ...r, status: 'pending', error_message: '' }))
     total.value = data?.count ?? rows.value.length
     loadStatus()
-  } catch {
+  } catch (error) {
+    loadError.value = error?.message || '云账户服务不可用'
     rows.value = []
     total.value = 0
   } finally { loading.value = false }

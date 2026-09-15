@@ -1,7 +1,10 @@
 <template>
   <div class="res-page">
     <div class="page-body">
-      <el-alert type="info" :closable="true" style="margin-bottom: 14px" title="配置云主机任务，自动发现并同步新增或属性有更改的主机到主机池" />
+      <el-alert v-if="loadError" type="error" :closable="false" show-icon style="margin-bottom: 14px">
+        {{ loadError }} <el-button link type="primary" @click="load">重试</el-button>
+      </el-alert>
+      <el-alert v-else type="info" :closable="true" style="margin-bottom: 14px" title="配置云主机任务，自动发现并同步新增或属性有更改的主机到主机池" />
 
       <div class="table-toolbar">
         <el-button type="primary" :icon="'Plus'" @click="openCreate">新建</el-button>
@@ -247,6 +250,7 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
+const loadError = ref('')
 const sort = ref('bk_task_id')
 const accounts = ref([])
 
@@ -313,6 +317,7 @@ function onCellClick(row, column) {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const kw = keyword.value.trim()
     const body = {
@@ -323,7 +328,8 @@ async function load() {
     const data = await listCloudSyncTask(body)
     rows.value = data?.info || []
     total.value = data?.count ?? rows.value.length
-  } catch {
+  } catch (error) {
+    loadError.value = error?.message || '云资源任务服务不可用'
     rows.value = []
     total.value = 0
   } finally {
