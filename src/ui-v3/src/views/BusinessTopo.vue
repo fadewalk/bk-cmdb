@@ -206,13 +206,19 @@
             <el-table-column label="主机" width="140">
               <template #default="{ row }">{{ row.bk_host_innerip || row.host?.bk_host_innerip || '-' }}</template>
             </el-table-column>
+            <el-table-column label="标签" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-tag v-for="(value, key) in (row.labels || {})" :key="key" size="small" style="margin-right:4px">{{ key }}={{ value }}</el-tag>
+                <span v-if="!Object.keys(row.labels || {}).length">--</span>
+              </template>
+            </el-table-column>
             <el-table-column label="进程数" width="90">
               <template #default="{ row }">{{ row.process_count ?? '-' }}</template>
             </el-table-column>
             <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" @click="openInstanceDrawer(row)">查看/编辑进程</el-button>
-                <el-button link type="primary" @click="openClone(row)">克隆</el-button>
+                <el-button v-if="!row.service_template_id" link type="primary" @click="openClone(row)">克隆</el-button>
                 <el-button link type="danger" @click="removeInstance(row)">删除</el-button>
               </template>
             </el-table-column>
