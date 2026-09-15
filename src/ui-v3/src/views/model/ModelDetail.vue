@@ -1,5 +1,5 @@
 <template>
-  <div class="model-detail" v-loading="loading">
+  <div class="model-detail" v-loading="loading || groupMoveSaving">
     <div class="crumb-row">
       <span class="back-btn" @click="goBack">‹ 模型管理</span>
       <span class="crumb-title">模型详情【{{ model?.bk_obj_name || objId }}】</span>
@@ -51,8 +51,8 @@
           <div class="spacer" />
           <el-input v-model="fieldKeyword" placeholder="请输入关键字" size="small" clearable style="width: 260px" :prefix-icon="'Search'" />
         </div>
-        <div v-for="g in filteredFieldGroups" :key="g.id || g.name" class="field-group">
-          <div class="group-title" @click="g.collapsed = !g.collapsed">
+          <div class="field-group" :class="{ 'drop-target': dropTargetGroup === groupKey(g) }" v-for="g in filteredFieldGroups" :key="g.id || g.name" @dragover.prevent="handleGroupDragOver(g)" @drop.prevent="dropField(g)">
+            <div class="group-title" @click="g.collapsed = !g.collapsed">
             <el-icon class="fold" :class="{ folded: g.collapsed }"><CaretBottom /></el-icon>
             <span class="g-name">{{ g.name }} ( {{ g.items.length }} )</span>
             <el-dropdown trigger="click" @command="(c) => onGroupCmd(c, g)" @click.stop>
@@ -66,7 +66,7 @@
             </el-dropdown>
           </div>
           <div class="field-grid" v-show="!g.collapsed">
-            <div v-for="f in g.items" :key="f.id" class="field-card">
+            <div v-for="f in g.items" :key="f.id" class="field-card" draggable="true" @dragstart="startFieldDrag(f, g)" @dragend="clearFieldDrag">
               <span class="type-icon" :class="typeClass(f.bk_property_type)">{{ typeChar(f.bk_property_type) }}</span>
               <div class="f-info">
                 <div class="f-name">{{ f.bk_property_name }}</div>
@@ -260,7 +260,7 @@ import { Edit, Close, CaretBottom, MoreFilled, Search } from '@element-plus/icon
 import {
   searchModels, searchModelAttributes,
   createModelAttribute, updateModelAttribute, deleteModelAttribute,
-  searchFieldGroups, createFieldGroup, updateFieldGroup, deleteFieldGroup,
+  searchFieldGroups, createFieldGroup, updateFieldGroup, deleteFieldGroup, moveAttributeToGroup, deleteAttributeGroupAssoc,
   searchUniques, createUnique, updateUnique, deleteUnique,
   getModelStatistics,
   searchObjectAssociations, updateObjectAssociation, deleteObjectAssociation
@@ -287,6 +287,9 @@ const fieldForm = ref({
 
 const groupFormVisible = ref(false)
 const groupForm = ref({ id: null, name: '' })
+const draggedField = ref(null)
+const dropTargetGroup = ref('')
+const groupMoveSaving = ref(false)
 
 const assocs = ref([])
 const assocLoading = ref(false)
@@ -338,6 +341,56 @@ const filteredFieldGroups = computed(() => {
     })
   })).filter((g) => g.items.length > 0 || !kw)
 })
+
+function groupKey(group) {
+  return String(group?._raw?.bk_group_id || group?.name || group?.id || '')
+}
+
+function startFieldDrag(field, group) {
+  draggedField.value = { field, group }
+}
+
+function clearFieldDrag() {
+  draggedField.value = null
+  dropTargetGroup.value = ''
+}
+
+function handleGroupDragOver(group) {
+  if (draggedField.value && groupKey(draggedField.value.group) !== groupKey(group)) {
+    dropTargetGroup.value = groupKey(group)
+  }
+}
+
+async function dropField(targetGroup) {
+  const pending = draggedField.value
+  clearFieldDrag()
+  if (!pending || groupKey(pending.group) === groupKey(targetGroup) || (targetGroup?._virtual && targetGroup.name !== 'default')) return
+  const field = pending.field
+  const groupId = targetGroup._raw?.bk_group_id || targetGroup.name || 'default'
+  const currentGroup = field?.bk_property_group || 'default'
+  const propertyId = field?.bk_property_id
+  if (!propertyId || !groupId || currentGroup === groupId) return
+  groupMoveSaving.value = true
+  try {
+    const ownerId = model.value?.bk_supplier_account || '0'
+    if (groupId === 'default') {
+      await deleteAttributeGroupAssoc(ownerId, objId, propertyId, currentGroup)
+    } else {
+      await moveAttributeToGroup(ownerId, objId, [{
+        propertyId,
+        groupId,
+        propertyIndex: field.bk_property_index ?? 0
+      }])
+    }
+    ElMessage.success('字段分组已更新')
+    await loadFieldGroups()
+    await loadAttrs()
+  } catch (e) {
+    ElMessage.error('字段分组更新失败: ' + (e?.message || '后端异常'))
+  } finally {
+    groupMoveSaving.value = false
+  }
+}
 
 async function loadModel() {
   const [all, stats] = await Promise.all([
@@ -658,7 +711,9 @@ onMounted(load)
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
 .toolbar .spacer { flex: 1; }
 
-.field-group { margin-bottom: 22px; }
+  .field-group {
+    margin-bottom: 22px;
+  }
 .group-title {
   display: flex; align-items: center; gap: 6px;
   font-size: 14px; color: #313238; cursor: pointer; margin-bottom: 12px;

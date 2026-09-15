@@ -113,13 +113,23 @@
           <span class="refresh-time">{{ refreshText }}</span>
           <el-input
             v-model="ipKeyword"
-            :placeholder="rightTab === 'host' ? '请输入IP或固资编号' : '请输入实例名称'"
+            :placeholder="rightTab === 'host' ? '请输入IP或固资编号' : '请输入实例名称或选择标签'"
             size="small"
             clearable
             style="width: 220px; margin-left: 8px"
             @keyup.enter="rightTab === 'host' ? loadHosts() : loadInstances()"
-            @clear="rightTab === 'host' ? loadHosts() : loadInstances()"
+            @clear="rightTab === 'host' ? loadHosts() : clearInstanceSearch()"
           />
+          <template v-if="rightTab === 'instance'">
+            <el-select v-if="rightTab === 'instance' && instanceLabelAggregationError" v-model="instanceLabelKey" disabled size="small" placeholder="标签筛选不可用" style="width: 150px" />
+            <el-select v-if="rightTab === 'instance' && !instanceLabelAggregationError" v-model="instanceLabelKey" clearable filterable size="small" placeholder="标签键" style="width: 150px" @change="onInstanceLabelKeyChange">
+              <el-option v-for="item in instanceLabelFilterOptions" :key="item.key" :label="item.key" :value="item.key" />
+            </el-select>
+            <el-select v-model="instanceLabelValues" multiple clearable filterable collapse-tags size="small" placeholder="标签值" style="width: 190px" :disabled="!instanceLabelKey || !!instanceLabelAggregationError" @change="loadInstances">
+              <el-option v-for="value in instanceLabelValueOptions" :key="value" :label="value" :value="value" />
+            </el-select>
+            <span v-if="instanceLabelAggregationError" class="instance-filter-error">标签筛选项加载失败</span>
+          </template>
         </div>
 
         <!-- 主机列表 -->
@@ -494,7 +504,8 @@
       <div v-for="(row, idx) in labelRows" :key="idx" class="label-row">
         <el-input v-model="row.key" placeholder="标签键" style="width: 200px" />
         <span class="label-eq">=</span>
-        <el-input v-model="row.value" placeholder="标签值" style="width: 200px" />
+        <el-input v-model="row.value" placeholder="标签值" style="width: 200px" :disabled="row.remove" />
+        <el-checkbox v-model="row.remove">删除</el-checkbox>
         <el-button link type="danger" :icon="'Delete'" @click="labelRows.splice(idx, 1)" />
       </div>
       <el-button text type="primary" :icon="'Plus'" @click="labelRows.push({ key: '', value: '' })">添加标签</el-button>
@@ -555,6 +566,7 @@ import {
   createSet, deleteSet, updateSet, createModule, deleteModule, updateModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
+  listInstanceLabels, deleteInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   searchModelAttributes, exportHosts,
   searchBusinessById, searchFieldGroups,
@@ -563,6 +575,7 @@ import {
 import { useBizStore } from '../stores/biz'
 import { pushNavHistory } from '../utils/nav-history'
 import { normalizeProcessInfo, buildRawCloneInstance } from '../utils/service-instance-payload'
+import { normalizeLabelAggregation, buildServiceInstanceSearchOptions } from '../utils/service-instance-search'
 import { searchProcTemplates } from '../api/cmdb'
 import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 
@@ -584,6 +597,13 @@ const rightTab = ref(LEGACY_TAB_MAP[route.query.tab] || (route.query.tab === 'in
 const svcInstances = ref([])
 const selectedInstances = ref([])
 const instLoading = ref(false)
+const instanceLoadError = ref('')
+const instanceLabelAggregation = ref({})
+const instanceLabelAggregationError = ref('')
+const instanceLabelKey = ref('')
+const instanceLabelValues = ref([])
+const instanceLabelFilterOptions = computed(() => Object.keys(instanceLabelAggregation.value).map((key) => ({ key, values: instanceLabelAggregation.value[key] })))
+const instanceLabelValueOptions = computed(() => instanceLabelKey.value ? (instanceLabelAggregation.value[instanceLabelKey.value] || []) : [])
 const refreshText = ref('')
 const currentNode = ref(null)
 
@@ -930,24 +950,61 @@ function onHostPageSizeChange(sz) {
 
 async function loadInstances() {
   instLoading.value = true
+  instanceLoadError.value = ''
   try {
-    const data = await searchServiceInstances(bizId.value, { start: 0, limit: 200 }, currentModuleId.value)
-    let rows = data?.info || []
-    if (ipKeyword.value) {
-      const kw = ipKeyword.value.toLowerCase()
-      rows = rows.filter((r) => (r.name || '').toLowerCase().includes(kw) || (r.bk_host_innerip || '').toLowerCase().includes(kw))
-    }
+    const data = await searchServiceInstances(bizId.value, { start: 0, limit: 200 }, currentModuleId.value, buildServiceInstanceSearchOptions({
+      searchKey: ipKeyword.value,
+      labelKey: instanceLabelKey.value,
+      labelValues: instanceLabelValues.value
+    }))
+    const rows = data?.info || []
     svcInstances.value = rows
+  } catch (error) {
+    svcInstances.value = []
+    instanceLoadError.value = error?.message || '服务实例加载失败'
   } finally {
     instLoading.value = false
   }
+}
+
+async function loadInstanceLabelAggregation() {
+  if (!bizId.value) return
+  instanceLabelAggregationError.value = ''
+  try {
+    instanceLabelAggregation.value = normalizeLabelAggregation(await listInstanceLabels({ bk_biz_id: bizId.value, ...(currentModuleId.value ? { bk_module_id: currentModuleId.value } : {}) }))
+    if (instanceLabelKey.value && !instanceLabelAggregation.value[instanceLabelKey.value]) {
+      instanceLabelKey.value = ''
+      instanceLabelValues.value = []
+    }
+  } catch (error) {
+    instanceLabelAggregation.value = {}
+    instanceLabelKey.value = ''
+    instanceLabelValues.value = []
+    instanceLabelAggregationError.value = error?.message || '后端异常'
+  }
+}
+
+function onInstanceLabelKeyChange() {
+  instanceLabelValues.value = []
+  loadInstances()
+}
+
+function clearInstanceSearch() {
+  ipKeyword.value = ''
+  instanceLabelKey.value = ''
+  instanceLabelValues.value = []
+  loadInstances()
 }
 
 function onNodeClick(node) {
   currentNode.value = node
   currentKey.value = node.id
   if (rightTab.value === 'host') loadHosts()
-  else if (rightTab.value === 'instance') loadInstances()
+  else if (rightTab.value === 'instance') {
+    instanceLabelKey.value = ''
+    instanceLabelValues.value = []
+    Promise.all([loadInstances(), loadInstanceLabelAggregation()])
+  }
   syncTopoQuery()
 }
 
@@ -959,7 +1016,10 @@ function syncTopoQuery() {
     query: { ...route.query, tab: legacyTab, ...(currentNode.value ? { node: currentNode.value.id } : {}) }
   }).catch(() => {})
 }
-watch(rightTab, () => syncTopoQuery())
+watch(rightTab, () => {
+  syncTopoQuery()
+  if (rightTab.value === 'instance') Promise.all([loadInstances(), loadInstanceLabelAggregation()])
+})
 
 function onHostSelect(rows) {
   selectedHosts.value = rows
@@ -1208,7 +1268,9 @@ async function submitAcrossTransfer() {
 async function onInstMore(cmd) {
   if (cmd === 'editLabels') {
     if (!selectedInstances.value.length) return
-    labelRows.value = [{ key: '', value: '' }]
+    labelRows.value = selectedInstances.value.flatMap((instance) => Object.entries(instance.labels || {}).map(([key, value]) => ({ key, value, remove: false })))
+      .filter((row, index, list) => list.findIndex((item) => item.key === row.key) === index)
+    if (!labelRows.value.length) labelRows.value = [{ key: '', value: '' }]
     labelVisible.value = true
     return
   }
@@ -1217,7 +1279,7 @@ async function onInstMore(cmd) {
   await ElMessageBox.confirm(`确定删除选中的 ${selectedInstances.value.length} 个服务实例?`, '删除确认', { type: 'warning' })
   await deleteServiceInstances(bizId.value, selectedInstances.value.map((r) => r.id))
   ElMessage.success('已删除')
-  loadInstances()
+  await loadInstances()
 }
 
 // ---- 新建集群 / 模块(工具栏 + 右键) ----
@@ -1605,21 +1667,29 @@ const labelRows = ref([{ key: '', value: '' }])
 const labelSaving = ref(false)
 
 async function submitLabels() {
-  const labelSet = {}
-  for (const r of labelRows.value) {
-    if (r.key.trim()) labelSet[r.key.trim()] = r.value.trim()
+  const entries = labelRows.value.map((row) => ({
+    key: String(row?.key || '').trim(),
+    value: String(row?.value || '').trim(),
+    remove: row?.remove === true
+  }))
+  const active = entries.filter((row) => row.key && !row.remove)
+  const removed = entries.filter((row) => row.key && row.remove).map((row) => row.key)
+  if (!active.length && !removed.length) { ElMessage.warning('请至少填写或删除一个标签'); return }
+  const seen = new Set()
+  for (const row of active) {
+    if (seen.has(row.key)) { ElMessage.warning('标签键不能重复'); return }
+    seen.add(row.key)
+    const validationError = validateLabelPair(row.key, row.value)
+    if (validationError) { ElMessage.warning(validationError); return }
   }
-  if (!Object.keys(labelSet).length) { ElMessage.warning('请至少填写一个标签'); return }
   labelSaving.value = true
   try {
-    await createInstanceLabels({
-      bk_biz_id: bizId.value,
-      instance_ids: selectedInstances.value.map((i) => i.id),
-      labels: labelSet
-    })
+    const ids = selectedInstances.value.map((i) => i.id)
+    if (removed.length) await deleteInstanceLabels({ bk_biz_id: bizId.value, instance_ids: ids, keys: removed })
+    if (active.length) await createInstanceLabels({ bk_biz_id: bizId.value, instance_ids: ids, labels: Object.fromEntries(active.map((row) => [row.key, row.value])) })
     ElMessage.success('标签已应用')
     labelVisible.value = false
-    loadInstances()
+    await Promise.all([loadInstances(), loadInstanceLabelAggregation()])
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
   } finally { labelSaving.value = false }
@@ -1629,13 +1699,19 @@ async function removeInstance(row) {
   await ElMessageBox.confirm(`确定删除服务实例「${row.name || row.id}」?`, '删除确认', { type: 'warning' })
   await deleteServiceInstances(bizId.value, [row.id])
   ElMessage.success('已删除')
-  loadInstances()
+  await Promise.all([loadInstances(), loadInstanceLabelAggregation()])
 }
 
 function onGlobalClick() {
   if (ctxMenu.value.visible) ctxMenu.value.visible = false
 }
-watch(bizId, () => { if (bizId.value) { load(); loadModuleOptions() } })
+watch(bizId, () => {
+  if (bizId.value) {
+    load()
+    loadModuleOptions()
+    if (rightTab.value === 'instance') Promise.all([loadInstances(), loadInstanceLabelAggregation()])
+  }
+})
 watch([rightTab, currentNode], () => {
   if (rightTab.value === 'node' && currentNode.value?.type === 'biz' && bizInfoLoadedFor !== bizId.value) {
     bizInfoLoadedFor = bizId.value
@@ -1652,6 +1728,7 @@ onMounted(async () => {
     if (fromQuery && bizStore.bizList.some((b) => b.bk_biz_id === fromQuery)) bizStore.select(fromQuery)
     load()
     loadModuleOptions()
+    if (rightTab.value === 'instance') Promise.all([loadInstances(), loadInstanceLabelAggregation()])
   }
 })
 

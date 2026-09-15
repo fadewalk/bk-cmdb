@@ -1,7 +1,7 @@
 <template>
   <div class="page-card">
     <div class="table-toolbar">
-      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 260px" :disabled="!bizStore.bizId" @change="load">
+      <el-select v-model="bizId" placeholder="选择业务" filterable style="width: 260px" :disabled="!bizStore.bizId" @change="onBusinessChange">
         <el-option v-for="b in bizStore.bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
       </el-select>
       <div class="spacer" />
@@ -9,7 +9,24 @@
       <el-button type="primary" :icon="'Plus'" :disabled="!bizId" @click="goCreate">新建服务实例</el-button>
     </div>
 
+    <el-alert v-if="loadError" type="error" :closable="false" show-icon class="state-alert">
+      {{ loadError }} <el-button link type="primary" @click="load">重试</el-button>
+    </el-alert>
+
     <template v-if="bizId">
+      <div class="table-toolbar service-instance-filters">
+        <el-input v-model="searchKey" clearable placeholder="请输入实例名称或选择标签" style="width: 240px" @keyup.enter="load" @clear="load" />
+        <el-cascader v-model="moduleFilterId" :options="moduleOptions" :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }" clearable filterable placeholder="模块" style="width: 220px" @change="onModuleFilterChange" />
+        <el-select v-model="selectedLabelKey" clearable filterable placeholder="标签键" style="width: 180px" @change="onLabelKeyChange">
+          <el-option v-for="item in labelFilterOptions" :key="item.key" :label="item.key" :value="item.key" />
+        </el-select>
+        <el-select v-model="selectedLabelValues" multiple clearable filterable collapse-tags placeholder="标签值" style="width: 240px" :disabled="!selectedLabelKey" @change="load">
+          <el-option v-for="value in selectedLabelValueOptions" :key="value" :label="value" :value="value" />
+        </el-select>
+        <el-button @click="clearFilters">清空</el-button>
+      </div>
+      <div v-if="labelAggregationError" class="filter-error">标签筛选项加载失败：{{ labelAggregationError }}</div>
+      <div v-if="loadError" class="filter-error">服务实例查询失败：{{ loadError }}</div>
       <div class="table-toolbar">
         <el-button :disabled="!selectedRows.length" @click="copySelectedIPs">复制 IP</el-button>
         <el-button :disabled="!selectedRows.length" @click="batchDelete">批量删除</el-button>
@@ -192,18 +209,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, updateInstanceLabels, deleteInstanceLabels,
-  syncServiceInstances, getBizTopoTree, getBizInternalTopo, http
+  syncServiceInstances, getBizTopoTree, getBizInternalTopo, listInstanceLabels, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 import { labelsToRows, validateLabelPair } from '../../utils/service-instance-labels'
 import { buildRawCloneInstance } from '../../utils/service-instance-payload'
+import { normalizeLabelAggregation, buildServiceInstanceSearchOptions } from '../../utils/service-instance-search'
 
 const route = useRoute()
 const router = useRouter()
@@ -216,6 +234,14 @@ const page = ref(1)
 const pageSize = 20
 const total = ref(0)
 const loading = ref(false)
+const loadError = ref('')
+const searchKey = ref('')
+const labelAggregation = ref({})
+const labelAggregationError = ref('')
+const selectedLabelKey = ref('')
+const selectedLabelValues = ref([])
+const labelFilterOptions = computed(() => Object.keys(labelAggregation.value).map((key) => ({ key, values: labelAggregation.value[key] })))
+const selectedLabelValueOptions = computed(() => selectedLabelKey.value ? (labelAggregation.value[selectedLabelKey.value] || []) : [])
 
 const procDrawer = ref(false)
 const procTab = ref('proc')
@@ -239,6 +265,7 @@ const labelEditingKey = ref('')
 
 // ---------- 创建服务实例(已移至业务拓扑向导) ----------
 const moduleOptions = ref([])
+const moduleFilterId = ref(null)
 
 async function loadProcesses(id) {
   procLoading.value = true
@@ -257,29 +284,33 @@ async function loadProcesses(id) {
 async function loadModuleOptions() {
   const id = bizStore.bizId || bizId.value
   if (!id) { moduleOptions.value = []; return }
-  const [mainTree, idleTopo] = await Promise.allSettled([getBizTopoTree(id), getBizInternalTopo(id)])
-  const mapSet = (node) => ({
-    value: node.bk_inst_id,
-    label: node.bk_inst_name,
-    children: (node.child || [])
-      .filter((c) => c.bk_obj_id === 'module' || c.child)
-      .map((c) => (c.bk_obj_id === 'module'
-        ? { value: c.bk_inst_id, label: c.bk_inst_name }
-        : mapSet(c)))
-  })
-  const options = []
-  if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
-    for (const bizNode of mainTree.value) options.push(...(bizNode.child || []).map(mapSet))
-  }
-  if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
-    const s = idleTopo.value
-    options.push({
-      value: s.bk_set_id,
-      label: s.bk_set_name,
-      children: (s.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name }))
+  try {
+    const [mainTree, idleTopo] = await Promise.allSettled([getBizTopoTree(id), getBizInternalTopo(id)])
+    const mapSet = (node) => ({
+      value: node.bk_inst_id,
+      label: node.bk_inst_name,
+      children: (node.child || [])
+        .filter((c) => c.bk_obj_id === 'module' || c.child)
+        .map((c) => (c.bk_obj_id === 'module'
+          ? { value: c.bk_inst_id, label: c.bk_inst_name }
+          : mapSet(c)))
     })
+    const options = []
+    if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
+      for (const bizNode of mainTree.value) options.push(...(bizNode.child || []).map(mapSet))
+    }
+    if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
+      const s = idleTopo.value
+      options.push({
+        value: s.bk_set_id,
+        label: s.bk_set_name,
+        children: (s.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name }))
+      })
+    }
+    moduleOptions.value = options
+  } catch (error) {
+    moduleOptions.value = []
   }
-  moduleOptions.value = options
 }
 
 function goCreate() {
@@ -406,21 +437,74 @@ async function submitClone() {
   }
 }
 
+function onBusinessChange() {
+  page.value = 1
+  moduleFilterId.value = null
+  selectedLabelKey.value = ''
+  selectedLabelValues.value = []
+  Promise.all([load(), loadLabelAggregation(), loadModuleOptions()])
+}
+
 async function load() {
   if (!bizId.value) return
   loading.value = true
+  loadError.value = ''
   try {
     const data = await searchServiceInstances(bizId.value, {
       start: (page.value - 1) * pageSize, limit: pageSize
-    })
+    }, moduleFilterId.value, buildServiceInstanceSearchOptions({
+      searchKey: searchKey.value,
+      labelKey: selectedLabelKey.value,
+      labelValues: selectedLabelValues.value
+    }))
     rows.value = (data?.info || []).map((row) => ({ ...row, __processes: null }))
     total.value = data?.count || 0
     selectedRows.value = []
     expandedRows.value = new Set()
     allExpanded.value = false
+  } catch (error) {
+    rows.value = []
+    total.value = 0
+    loadError.value = error?.message || '服务实例加载失败'
   } finally {
     loading.value = false
   }
+}
+
+async function loadLabelAggregation() {
+  if (!bizId.value) return
+  labelAggregationError.value = ''
+  try {
+    const data = await listInstanceLabels({ bk_biz_id: bizId.value, ...(moduleFilterId.value ? { bk_module_id: moduleFilterId.value } : {}) })
+    labelAggregation.value = normalizeLabelAggregation(data)
+    if (selectedLabelKey.value && !labelAggregation.value[selectedLabelKey.value]) {
+      selectedLabelKey.value = ''
+      selectedLabelValues.value = []
+    }
+  } catch (error) {
+    labelAggregation.value = {}
+    selectedLabelKey.value = ''
+    selectedLabelValues.value = []
+    labelAggregationError.value = error?.message || '后端异常'
+  }
+}
+
+function onModuleFilterChange() {
+  page.value = 1
+  Promise.all([load(), loadLabelAggregation()])
+}
+
+function onLabelKeyChange() {
+  selectedLabelValues.value = []
+  load()
+}
+
+function clearFilters() {
+  searchKey.value = ''
+  selectedLabelKey.value = ''
+  selectedLabelValues.value = []
+  page.value = 1
+  load()
 }
 
 async function showProcesses(row) {
@@ -497,7 +581,7 @@ async function submitBatchLabels() {
     if (active.length) await createInstanceLabels({ bk_biz_id: bizId.value, instance_ids: ids, labels: Object.fromEntries(active.map((row) => [row.key, row.value])) })
     ElMessage.success('标签已应用')
     batchLabelVisible.value = false
-    await load()
+    await Promise.all([load(), loadLabelAggregation()])
   } catch (e) {
     ElMessage.error('批量标签保存失败: ' + (e?.message || '后端异常'))
   } finally {
@@ -609,7 +693,7 @@ async function submitLabel() {
     }
     ElMessage.success(labelEditingKey.value ? '标签已更新' : '已新增')
     labelFormVisible.value = false
-    await load()
+    await Promise.all([load(), loadLabelAggregation()])
     await refreshCurrentLabels()
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
@@ -627,7 +711,7 @@ async function removeLabel(row) {
       keys: [row.key]
     })
     ElMessage.success('已删除')
-    labels.value = labels.value.filter((item) => item.key !== row.key)
+    await Promise.all([load(), loadLabelAggregation()])
   } catch (e) { ElMessage.error('删除失败: ' + (e?.message || '后端异常')) }
 }
 
@@ -647,13 +731,13 @@ onMounted(async () => {
     ? queryBiz
     : bizList.value[0]?.bk_biz_id
   if (bizId.value) {
-    await load()
+    await Promise.all([loadModuleOptions(), load(), loadLabelAggregation()])
     // 老版克隆深链:按 instanceId 定位源实例并直接打开克隆对话框
     const cloneId = Number(route.query.cloneInstance)
     if (cloneId) {
       let row = rows.value.find((r) => r.id === cloneId)
       if (!row) {
-        const all = await searchServiceInstances(bizId.value, { start: 0, limit: 500 })
+        const all = await searchServiceInstances(bizId.value, { start: 0, limit: 500 }, moduleFilterId.value, { search_key: '', selectors: [] })
         row = (all?.info || []).map((item) => ({ ...item, __processes: null })).find((r) => r.id === cloneId)
       }
       if (row) openClone(row)

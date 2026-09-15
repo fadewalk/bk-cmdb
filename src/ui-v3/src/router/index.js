@@ -51,8 +51,8 @@ const router = createRouter({
         // 旧版深链(与老前端 URL 同构)
         { path: 'business/:bizId/host/:id', name: 'BusinessHostDetail', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'business/:bizId/pod/:podId', name: 'KubePodDetail', component: () => import('../views/KubePods.vue'), meta: { title: 'Pod 详情', blockedKind: 'pod' } },
-        { path: 'business/:bizId/index/pod/:podId', name: 'KubePodLegacy', redirect: (to) => `/business/${to.params.bizId}/pod/${to.params.podId}`, meta: { title: 'Pod 详情' } },
-        { path: 'business/:bizId/index/pod/:podId/container/:containerId', name: 'KubeContainerLegacy', redirect: (to) => `/business/${to.params.bizId}/pod/${to.params.podId}?containerId=${to.params.containerId}`, meta: { title: '容器详情' } },
+        { path: 'business/:bizId/index/pod/:podId', name: 'KubePodLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/pod/${to.params.podId}`, query: to.query }), meta: { title: 'Pod 详情' } },
+        { path: 'business/:bizId/index/pod/:podId/container/:containerId', name: 'KubeContainerLegacy', redirect: (to) => ({ path: `/business/${to.params.bizId}/pod/${to.params.podId}`, query: { ...to.query, containerId: to.params.containerId, tab: 'containers' } }), meta: { title: '容器详情' } },
         { path: 'biz-set/topo', name: 'BizSetTopo', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
         { path: 'business-set/:bizSetId/index', name: 'BizSetTopoLegacy', component: () => import('../views/biz-set/BizSetTopo.vue'), meta: { title: '业务集拓扑' } },
         { path: 'business-set/:bizSetId/host/:id', name: 'BizSetHostDetailLegacy', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },

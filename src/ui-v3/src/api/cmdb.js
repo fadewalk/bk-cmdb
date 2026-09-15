@@ -51,8 +51,17 @@ export const updateModule = (bizId, setId, moduleId, data) =>
   http.put(`/module/${bizId}/${setId}/${moduleId}`, data)
 
 // ---------- 服务实例与进程 ----------
-export const searchServiceInstances = (bizId, page, moduleId = null) =>
-  http.post('/findmany/proc/service_instance', { bk_biz_id: bizId, ...(moduleId ? { bk_module_id: moduleId } : {}), page, with_name: true })
+// Legacy service-instance list contract: module scoping, free-text name search,
+// and label selectors all live in the same request body.
+export const searchServiceInstances = (bizId, page, moduleId = null, options = {}) =>
+  http.post('/findmany/proc/service_instance', {
+    bk_biz_id: bizId,
+    ...(moduleId ? { bk_module_id: moduleId } : {}),
+    page,
+    search_key: options.search_key || '',
+    selectors: Array.isArray(options.selectors) ? options.selectors : [],
+    with_name: true
+  })
 export const deleteServiceInstances = (bizId, ids) =>
   http.delete('/deletemany/proc/service_instance', {
     data: { bk_biz_id: bizId, service_instance_ids: ids }
@@ -752,6 +761,9 @@ export const exportNetcollectProperties = (data) => http.post('/collector/netpro
 export const searchKubePods = (data) => http.post('/findmany/kube/pod', data)
 export const searchKubeContainers = (data) => http.post('/findmany/kube/container', data)
 export const getKubePodPath = (data) => http.post('/find/kube/pod_path', data)
+// K8s attribute metadata is a real GET route in topo_server; bk_biz_id is retained in the query contract.
+export const searchKubeAttributes = (object, bizId) =>
+  http.get(`/find/kube/${object}/attributes`, { params: { bk_biz_id: bizId } })
 export const searchFullText = (data) => http.post('/find/full_text', data)
 export const getServiceTemplateDiff = (data) =>
   http.post('/find/proc/service_template/general_difference', data)
