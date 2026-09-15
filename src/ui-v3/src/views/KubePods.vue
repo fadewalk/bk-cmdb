@@ -133,6 +133,7 @@ const topologyItems = computed(() => {
 })
 
 function unwrapInfo(data) {
+  if (Array.isArray(data)) return data
   return Array.isArray(data?.info) ? data.info : []
 }
 
