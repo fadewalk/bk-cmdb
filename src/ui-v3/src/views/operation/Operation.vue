@@ -52,11 +52,41 @@
           </div>
         </template>
         <el-row :gutter="16">
-          <el-col :span="Number(chart.width) === 100 ? 24 : 12" v-for="chart in charts" :key="chart.config_id">
+          <el-col
+            :span="Number(chart.width) === 100 ? 24 : 12"
+            v-for="(chart, index) in charts"
+            :key="chart.config_id"
+            :data-chart-category="category"
+            :data-chart-id="String(chart.config_id)"
+          >
             <div class="chart-box">
               <div class="chart-title">
                 <span class="ct-name">{{ chart.name || chart.report_type }}</span>
                 <div class="ct-ops">
+                  <template v-if="isPositionedCategory(category)">
+                    <el-button
+                      class="position-button"
+                      link
+                      type="primary"
+                      size="small"
+                      :icon="'ArrowUp'"
+                      :aria-label="'上移' + (chart.name || chart.report_type)"
+                      title="上移"
+                      :disabled="positionSaving || index === 0"
+                      @click="moveChart(category, index, -1)"
+                    />
+                    <el-button
+                      class="position-button"
+                      link
+                      type="primary"
+                      size="small"
+                      :icon="'ArrowDown'"
+                      :aria-label="'下移' + (chart.name || chart.report_type)"
+                      title="下移"
+                      :disabled="positionSaving || index === charts.length - 1"
+                      @click="moveChart(category, index, 1)"
+                    />
+                  </template>
                   <el-button link type="primary" size="small" @click="openChartDialog(chart)">编辑</el-button>
                   <el-button link type="danger" size="small" @click="removeChart(chart)">删除</el-button>
                 </div>
@@ -156,7 +186,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import {
   getModelStatistics, searchModelAttributes, searchModels,
   getOperationCharts, getOperationChartData,
-  createOperationChart, updateOperationChart, deleteOperationChart
+  createOperationChart, updateOperationChart, deleteOperationChart,
+  updateOperationChartPosition
 } from '../../api/cmdb'
 
 echarts.use([PieChart, BarChart, LineChart, TooltipComponent, GridComponent, TitleComponent, LegendComponent, CanvasRenderer])
@@ -193,6 +224,7 @@ const hostKind = ref('host') // 老版 hostType: host=主机统计 inst=实例�
 const staticModels = ref([])
 const dimensionList = ref([])
 const saving = ref(false)
+const positionSaving = ref(false)
 
 // 老版 seList 内置图表清单
 const BUILTIN_HOST = [
@@ -246,13 +278,14 @@ async function loadStaticModels() {
 
 const categoryNames = { host: '主机统计', model: '模型统计', resource: '资源统计' }
 const categoryName = (c) => categoryNames[c] || c
+const isPositionedCategory = (category) => category === 'host' || category === 'model'
 
 const flatCharts = computed(() => chartList.value)
 const groupedCharts = computed(() => {
   const out = {}
   for (const chart of chartList.value) {
     const rt = (chart.report_type || '').toLowerCase()
-    const key = classify(rt)
+    const key = chart.__category || classify(rt)
     chart.__category = key
     ;(out[key] = out[key] || []).push(chart)
   }
@@ -264,6 +297,10 @@ function classify(rt) {
   if (rt.includes('model') || rt.includes('object')) return 'model'
   if (rt.includes('resource')) return 'resource'
   return 'nav'
+}
+
+function chartCategory(chart) {
+  return chart.__category || classify((chart.report_type || '').toLowerCase())
 }
 
 function setChartEl(id, el) {
@@ -371,7 +408,7 @@ async function load() {
   try {
     const res = await getOperationCharts()
     const info = res?.info || {}
-    chartList.value = [...(info.host || []), ...(info.model || []), ...(info.resource || []), ...(info.nav || [])]
+    chartList.value = [...(info.host || []), ...(info.inst || info.model || []), ...(info.resource || []), ...(info.nav || [])]
     await nextTick()
     await Promise.allSettled(chartList.value.map(async (chart) => {
       try {
@@ -457,6 +494,42 @@ async function openChartDialog(row, kind = 'host') {
     }
   }
   chartFormVisible.value = true
+}
+
+function moveChart(category, index, direction) {
+  if (!isPositionedCategory(category) || positionSaving.value) return
+  const list = chartList.value.filter((chart) => chartCategory(chart) === category)
+  const current = list[index]
+  const target = list[index + direction]
+  if (!current || !target) return
+  const currentIndex = chartList.value.indexOf(current)
+  const targetIndex = chartList.value.indexOf(target)
+  if (currentIndex < 0 || targetIndex < 0) return
+  chartList.value.splice(currentIndex, 1, target)
+  chartList.value.splice(targetIndex, 1, current)
+  void saveChartPosition()
+}
+
+async function saveChartPosition() {
+  const position = {
+    host: chartList.value
+      .filter((chart) => chartCategory(chart) === 'host')
+      .map((chart) => chart.config_id),
+    inst: chartList.value
+      .filter((chart) => chartCategory(chart) === 'model')
+      .map((chart) => chart.config_id)
+  }
+  positionSaving.value = true
+  try {
+    // 老版 updatePosition 契约: POST body 为 { position: { host: [], inst: [] } }。
+    await updateOperationChartPosition({ position })
+    ElMessage.success('图表位置已保存')
+  } catch (e) {
+    ElMessage.error('图表位置保存失败: ' + (e?.message || '后端异常'))
+    await load()
+  } finally {
+    positionSaving.value = false
+  }
 }
 
 async function submitChart() {
