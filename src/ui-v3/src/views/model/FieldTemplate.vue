@@ -174,6 +174,10 @@ import {
   syncFieldTemplateToModels, searchModels,
   compareFieldTemplateAttributes, compareFieldTemplateUniques, getFieldTemplateTaskStatus
 } from '../../api/cmdb'
+import {
+  extractTaskIds, extractTaskRows, isFailureTaskStatus, isTerminalTaskStatus,
+  modelObjectIdOf, normalizeTemplateDiff, responseList
+} from '../../utils/field-template'
 
 const route = useRoute()
 const router = useRouter()
@@ -219,16 +223,15 @@ async function loadBindDiff(modelId) {
     const tplId = bindTarget.value.id
     const [attrs, uniques] = await Promise.all([searchFieldTemplateAttributes(tplId), searchFieldTemplateUniques(tplId)])
     const [attrDiff, uniqueDiff] = await Promise.all([
-      compareFieldTemplateAttributes({ bk_template_id: tplId, object_id: modelId, attributes: attrs?.info || attrs || [] }),
-      compareFieldTemplateUniques({ bk_template_id: tplId, object_id: modelId, uniques: uniques?.info || uniques || [] })
+      compareFieldTemplateAttributes({ bk_template_id: tplId, object_id: modelId, attributes: responseList(attrs) }),
+      compareFieldTemplateUniques({ bk_template_id: tplId, object_id: modelId, uniques: responseList(uniques) })
     ])
     const summarize = (res) => {
-      const d = res?.data || res || {}
-      const count = (v) => Array.isArray(v) ? v.length : (typeof v === 'number' ? v : 0)
+      const diff = normalizeTemplateDiff(res)
       return {
-        created: count(d.created ?? d.create ?? d.createds),
-        updated: count(d.updated ?? d.update ?? d.changed),
-        conflicts: count(d.conflict ?? d.conflicts ?? d.conflicted)
+        created: diff.counts.create,
+        updated: diff.counts.update,
+        conflicts: diff.counts.conflict
       }
     }
     bindDiff.value = { attr: summarize(attrDiff), unique: summarize(uniqueDiff) }
@@ -241,11 +244,8 @@ async function pollSyncTasks(taskIds) {
     await new Promise((resolve) => setTimeout(resolve, 2000))
     try {
       const res = await getFieldTemplateTaskStatus({ task_ids: taskIds })
-      const rows = res?.data?.info || res?.data || res?.info || []
-      const list = Array.isArray(rows) ? rows : []
-      if (list.length && list.every((t) => t.status === 'finished' || t.status === 'success' || t.status === 'failed')) {
-        return list
-      }
+      const list = extractTaskRows(res)
+      if (list.length && list.every(isTerminalTaskStatus)) return list
     } catch { return null }
   }
   return null
@@ -346,17 +346,18 @@ async function doBind() {
   const newModelId = newBindModelId.value
   saving.value = true
   try {
-    await bindFieldTemplateModels(bindTarget.value.id, [...boundModels.value.map((m) => m.bk_obj_id || m.id), newBindModelId.value])
+    await bindFieldTemplateModels(bindTarget.value.id, [modelObjectIdOf({ id: newBindModelId.value })])
     ElMessage.success('绑定成功')
     newBindModelId.value = null
     try {
       await ElMessageBox.confirm('绑定成功,是否立即同步模板字段到该模型?', '同步确认', { type: 'info', confirmButtonText: '立即同步', cancelButtonText: '稍后' })
       syncing.value = true
       const res = await syncFieldTemplateToModels({ bk_template_id: bindTarget.value.id, object_ids: [String(newModelId)] })
-      const taskIds = res?.task_ids || res?.data?.task_ids || []
+      const taskIds = extractTaskIds(res)
+
       const finished = taskIds.length ? await pollSyncTasks(taskIds) : null
       if (finished) {
-        const failed = finished.filter((t) => t.status === 'failed')
+        const failed = finished.filter(isFailureTaskStatus)
         if (failed.length) ElMessage.error(`同步完成,${failed.length} 个任务失败`)
         else ElMessage.success('同步完成')
       } else {
@@ -383,12 +384,12 @@ async function syncModels() {
   syncing.value = true
   try {
     const res = await syncFieldTemplateToModels({ bk_template_id: detail.value.id, object_ids: detailModels.value.map((m) => m.bk_obj_id || m.id) })
-    const taskIds = res?.task_ids || res?.data?.task_ids || []
+    const taskIds = extractTaskIds(res)
     if (!taskIds.length) { ElMessage.success('同步任务已提交'); return }
     ElMessage.info('同步任务已提交,正在查询结果...')
     const finished = await pollSyncTasks(taskIds)
     if (finished) {
-      const failed = finished.filter((t) => t.status === 'failed')
+      const failed = finished.filter(isFailureTaskStatus)
       if (failed.length) ElMessage.error(`同步完成,${failed.length} 个任务失败`)
       else ElMessage.success('同步完成')
     } else {

@@ -130,8 +130,9 @@ const router = createRouter({
         { path: 'model/field-template/edit/:id/basic', name: 'FieldTemplateEditBasic', component: () => import('../views/model/FieldTemplateBasic.vue'), meta: { title: '编辑字段组合模板' } },
         { path: 'model/field-template/edit/:id/field-settings', name: 'FieldTemplateEditFieldSettings', component: () => import('../views/model/FieldTemplateFieldSettings.vue'), meta: { title: '编辑字段组合模板' } },
         { path: 'model/field-template/edit/:id', name: 'FieldTemplateEditLegacy', redirect: (to) => `/model/field-template/edit/${to.params.id}/basic`, meta: { title: '编辑字段组合模板' } },
-        { path: 'model/field-template/bind/:id', name: 'FieldTemplateBindLegacy', redirect: (to) => ({ path: '/model/field-template', query: { bindId: to.params.id } }), meta: { title: '字段组合模板' } },
-        { path: 'model/field-template/sync/:id/model/:modelId', name: 'FieldTemplateSyncLegacy', redirect: { path: '/model/field-template' }, meta: { title: '字段组合模板' } },
+        { path: 'model/field-template/edit/:id/binding', name: 'FieldTemplateEditBinding', component: () => import('../views/model/FieldTemplateBind.vue'), meta: { title: '编辑字段组合模板' } },
+        { path: 'model/field-template/bind/:id', name: 'FieldTemplateBindLegacy', component: () => import('../views/model/FieldTemplateBind.vue'), meta: { title: '绑定模型' } },
+        { path: 'model/field-template/sync/:id/model/:modelId', name: 'FieldTemplateSyncLegacy', component: () => import('../views/model/FieldTemplateSync.vue'), meta: { title: '同步模型' } },
         { path: 'business/service-instance', name: 'ServiceInstance', component: () => import('../views/service/ServiceInstance.vue'), meta: { title: '服务实例' } },
 
         // 运营分析

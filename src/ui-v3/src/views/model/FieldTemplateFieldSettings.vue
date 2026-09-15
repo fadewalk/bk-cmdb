@@ -199,6 +199,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import TopSteps from './field-template/TopSteps.vue'
 import { useFieldTemplateDraft } from '../../stores/fieldTemplateDraft'
+import { normalizeTemplateAttribute, persistedFieldId } from '../../utils/field-template'
 import {
   getFieldTemplate, searchFieldTemplateAttributes, searchFieldTemplateUniques,
   createFieldTemplate, updateFieldTemplate, searchModels, searchModelAttributes
@@ -307,7 +308,7 @@ onMounted(async () => {
 })
 function normalizeIn(f) {
   return {
-    id: f.bk_property_id || f.id,
+    id: f.id || f.bk_property_id,
     bk_property_id: f.bk_property_id,
     bk_property_name: f.bk_property_name,
     bk_property_type: f.bk_property_type,
@@ -445,14 +446,18 @@ async function handleSubmit() {
   if (submitDisabled.value || submitting.value) return
   submitting.value = true
   try {
-    const attributes = draft.fieldList.map((item) => normalizeOut(item.field))
+    const attributes = draft.fieldList.map((item) => normalizeTemplateAttribute(item.field))
     const uniques = draft.uniqueList
       .filter((u) => u.keys.length)
-      .map((u) => ({
-        keys: [...new Set(u.keys)]
-          .map((key) => draft.fieldList.find((item) => item.field.id === key)?.field.bk_property_id)
-          .filter(Boolean)
-      }))
+      .map((u) => {
+        const id = persistedFieldId(u.id)
+        return {
+          ...(id !== undefined ? { id } : {}),
+          keys: [...new Set(u.keys)]
+            .map((key) => draft.fieldList.find((item) => item.field.id === key)?.field.bk_property_id)
+            .filter(Boolean)
+        }
+      })
     if (draft.templateId) {
       await updateFieldTemplate({ id: draft.templateId, name: draft.basic.name, description: draft.basic.description, attributes, uniques })
     } else {
