@@ -114,10 +114,9 @@
           <el-table :data="labels" v-loading="labelLoading" size="default">
             <el-table-column prop="key" label="键" min-width="160" />
             <el-table-column prop="value" label="值" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="creator" label="创建人" width="140" />
-            <el-table-column prop="create_time" label="创建时间" min-width="160" />
-            <el-table-column label="操作" width="120" fixed="right">
+            <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="openEditLabel(row)">编辑</el-button>
                 <el-button link type="danger" size="small" @click="removeLabel(row)">删除</el-button>
               </template>
             </el-table-column>
@@ -138,15 +137,15 @@
       @save="saveProcess"
     />
 
-    <!-- 新增标签 -->
-    <el-dialog v-model="labelFormVisible" title="新增标签" width="420px">
+    <!-- 新增/编辑标签 -->
+    <el-dialog v-model="labelFormVisible" :title="labelEditingKey ? '编辑标签' : '新增标签'" width="420px">
       <el-form label-width="80px">
         <el-form-item label="键" required><el-input v-model="labelForm.key" placeholder="如 env" /></el-form-item>
         <el-form-item label="值" required><el-input v-model="labelForm.value" placeholder="如 prod" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="labelFormVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="submitLabel">保存</el-button>
+        <el-button type="primary" :loading="labelLoading" @click="submitLabel">保存</el-button>
       </template>
     </el-dialog>
 
@@ -155,7 +154,8 @@
       <div v-for="(row, index) in batchLabelRows" :key="index" class="label-edit-row">
         <el-input v-model="row.key" placeholder="标签键" />
         <el-input v-model="row.value" placeholder="标签值" />
-        <el-button link type="danger" @click="removeBatchLabelRow(index)">删除</el-button>
+        <el-checkbox v-model="row.remove">删除</el-checkbox>
+        <el-button link type="danger" @click="removeBatchLabelRow(index)">移除行</el-button>
       </div>
       <el-button link type="primary" @click="addBatchLabelRow">+ 添加标签</el-button>
       <template #footer>
@@ -198,10 +198,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
   searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewCreateServiceInstances, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances,
-  listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, deleteInstanceLabels,
+  listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, updateInstanceLabels, deleteInstanceLabels,
   syncServiceInstances, getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
+import { labelsToRows, validateLabelPair } from '../../utils/service-instance-labels'
 
 const route = useRoute()
 const router = useRouter()
@@ -226,13 +227,14 @@ const allExpanded = ref(false)
 const selectedRows = ref([])
 const batchLabelVisible = ref(false)
 const batchLabelSaving = ref(false)
-const batchLabelRows = ref([{ key: '', value: '' }])
+const batchLabelRows = ref([{ key: '', value: '', remove: false }])
 
 // 实例标签
 const labels = ref([])
 const labelLoading = ref(false)
 const labelFormVisible = ref(false)
 const labelForm = ref({ key: '', value: '' })
+const labelEditingKey = ref('')
 
 // ---------- 创建服务实例(已移至业务拓扑向导) ----------
 const moduleOptions = ref([])
@@ -447,12 +449,7 @@ async function showProcesses(row) {
   procInstId.value = row.id
   procDrawer.value = true
   processes.value = []
-  labels.value = Object.entries(row.labels || {}).map(([key, value]) => ({
-    key,
-    value,
-    creator: row.creator || '',
-    create_time: row.create_time || ''
-  }))
+  labels.value = labelsToRows(row.labels)
   loadProcesses(row.id)
 }
 
@@ -486,31 +483,38 @@ async function syncSelected() {
 }
 
 function addBatchLabelRow() {
-  batchLabelRows.value.push({ key: '', value: '' })
+  batchLabelRows.value.push({ key: '', value: '', remove: false })
 }
 function removeBatchLabelRow(index) {
   if (batchLabelRows.value.length > 1) batchLabelRows.value.splice(index, 1)
 }
 function openBatchLabels() {
-  batchLabelRows.value = [{ key: '', value: '' }]
+  const current = selectedRows.value.flatMap((row) => Object.entries(row.labels || {}).map(([key, value]) => ({ key, value, remove: false })))
+  const unique = []
+  const seen = new Set()
+  for (const item of current) {
+    if (!seen.has(item.key)) { seen.add(item.key); unique.push(item) }
+  }
+  batchLabelRows.value = unique.length ? unique : [{ key: '', value: '', remove: false }]
   batchLabelVisible.value = true
 }
 async function submitBatchLabels() {
-  const labelsToApply = {}
-  for (const row of batchLabelRows.value) {
-    if (row.key.trim()) labelsToApply[row.key.trim()] = row.value.trim()
-  }
-  if (!Object.keys(labelsToApply).length) {
-    ElMessage.warning('请至少填写一个标签')
-    return
+  const entries = batchLabelRows.value.map((row) => ({ key: String(row.key || '').trim(), value: String(row.value || '').trim(), remove: row.remove }))
+  const active = entries.filter((row) => row.key && !row.remove)
+  const removed = entries.filter((row) => row.key && row.remove).map((row) => row.key)
+  if (!active.length && !removed.length) { ElMessage.warning('请至少填写或删除一个标签'); return }
+  const seen = new Set()
+  for (const row of active) {
+    if (seen.has(row.key)) { ElMessage.warning('标签键不能重复'); return }
+    seen.add(row.key)
+    const validationError = validateLabelPair(row.key, row.value)
+    if (validationError) { ElMessage.warning(validationError); return }
   }
   batchLabelSaving.value = true
   try {
-    await createInstanceLabels({
-      bk_biz_id: bizId.value,
-      instance_ids: selectedRows.value.map((row) => row.id),
-      labels: labelsToApply
-    })
+    const ids = selectedRows.value.map((row) => row.id)
+    if (removed.length) await deleteInstanceLabels({ bk_biz_id: bizId.value, instance_ids: ids, keys: removed })
+    if (active.length) await createInstanceLabels({ bk_biz_id: bizId.value, instance_ids: ids, labels: Object.fromEntries(active.map((row) => [row.key, row.value])) })
     ElMessage.success('标签已应用')
     batchLabelVisible.value = false
     await load()
@@ -591,32 +595,46 @@ async function toggleAllExpanded() {
 
 
 function openAddLabel() {
+  labelEditingKey.value = ''
   labelForm.value = { key: '', value: '' }
   labelFormVisible.value = true
 }
 
+function openEditLabel(row) {
+  labelEditingKey.value = row.key
+  labelForm.value = { key: row.key, value: row.value }
+  labelFormVisible.value = true
+}
+
+async function refreshCurrentLabels() {
+  const row = rows.value.find((item) => item.id === procInstId.value)
+  labels.value = labelsToRows(row?.labels)
+}
+
 async function submitLabel() {
-  if (!labelForm.value.key || !labelForm.value.value) {
-    ElMessage.warning('请输入键和值')
-    return
-  }
+  const key = String(labelForm.value.key || '').trim()
+  const value = String(labelForm.value.value || '').trim()
+  if (!key || !value) { ElMessage.warning('请输入键和值'); return }
+  const existing = labels.value.map((item) => item.key).filter((item) => item !== labelEditingKey.value)
+  const validationError = validateLabelPair(key, value, existing)
+  if (validationError) { ElMessage.warning(validationError); return }
+  labelLoading.value = true
   try {
-    await createInstanceLabels({
-      bk_biz_id: bizId.value,
-      instance_ids: [procInstId.value],
-      labels: { [labelForm.value.key]: labelForm.value.value }
-    })
-    ElMessage.success('已新增')
+    const next = Object.fromEntries(labels.value.filter((item) => item.key !== labelEditingKey.value).map((item) => [item.key, item.value]))
+    next[key] = value
+    if (labelEditingKey.value) {
+      await updateInstanceLabels({ bk_biz_id: bizId.value, instance_ids: [procInstId.value], labels: next })
+    } else {
+      await createInstanceLabels({ bk_biz_id: bizId.value, instance_ids: [procInstId.value], labels: { [key]: value } })
+    }
+    ElMessage.success(labelEditingKey.value ? '标签已更新' : '已新增')
     labelFormVisible.value = false
-    const nextLabels = labels.value.filter((item) => item.key !== labelForm.value.key)
-    labels.value = [...nextLabels, {
-      key: labelForm.value.key,
-      value: labelForm.value.value,
-      creator: 'admin',
-      create_time: new Date().toISOString()
-    }]
+    await load()
+    await refreshCurrentLabels()
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || '后端异常'))
+  } finally {
+    labelLoading.value = false
   }
 }
 
