@@ -449,6 +449,7 @@ async function removeForever(row) {
 }
 
 onMounted(async () => {
+  scope.value = route.meta.businessScope === 'archived' || route.query.scope === 'archived' ? 'archived' : 'normal'
   // 先取属性与用户习惯算出表头,再发首个列表请求
   bizAttrs.value = ((await fetchHostFilterProperties()) || []).filter((p) => p.bk_obj_id === 'biz')
   ucCache = await searchUserCustom().catch(() => ({}))

@@ -39,7 +39,7 @@ const router = createRouter({
         { path: 'business/:bizId/custom-fields', name: 'CustomFields', component: () => import('../views/custom-fields/CustomFields.vue'), meta: { title: '自定义字段' } },
 
         // 平铺旧路径(ui-v3 过渡产物):守卫补齐业务 ID 后重定向到规范路由
-        { path: 'business', name: 'LegacyBusinessRoot', redirect: '/business/topo', meta: { title: '业务' } },
+        { path: 'business/history', name: 'BusinessHistoryLegacy', redirect: (to) => ({ path: '/resource/business/history', query: to.query }), meta: { title: '归档业务' } },
         { path: 'business/topo', name: 'LegacyTopoFlat', component: () => import('../views/BusinessTopo.vue'), meta: { title: '业务拓扑', legacyFlat: '/business/:bizId/index' } },
         { path: 'business/service-template', name: 'LegacySvcTplFlat', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板', legacyFlat: '/business/:bizId/service/template' } },
         { path: 'business/set-template', name: 'LegacySetTplFlat', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '集群模板', tab: 'settpl', legacyFlat: '/business/:bizId/set/template' } },
@@ -95,7 +95,7 @@ const router = createRouter({
         { path: 'resource/business-set', name: 'BizSetListLegacy', redirect: '/resource/biz-set', meta: { title: '业务集' } },
         { path: 'resource/biz-set/details/:bizSetId', name: 'BizSetDetail', component: () => import('../views/biz-set/BizSetDetail.vue'), meta: { title: '业务集详情' } },
         { path: 'resource/business-set/details/:bizSetId', name: 'BizSetDetailLegacy', redirect: (to) => ({ path: `/resource/biz-set/details/${to.params.bizSetId}` }), meta: { title: '业务集详情' } },
-        { path: 'resource/business', name: 'Business', component: () => import('../views/BusinessList.vue'), meta: { title: '业务' } },
+        { path: 'resource/business/history', name: 'BusinessHistory', component: () => import('../views/BusinessList.vue'), meta: { title: '归档业务', businessScope: 'archived' } },
         { path: 'resource/business/details/:bizId', name: 'BusinessDetail', component: () => import('../views/business/BusinessDetail.vue'), meta: { title: '业务详情' } },
         { path: 'business/details/:bizId', name: 'BusinessDetailLegacy', redirect: (to) => ({ path: `/resource/business/details/${to.params.bizId}` }), meta: { title: '业务详情' } },
         { path: 'resource/catalog/:objId', name: 'ResourceCatalog', component: () => import('../views/resource/ResourceCatalog.vue'), meta: { title: '资源分类' } },
