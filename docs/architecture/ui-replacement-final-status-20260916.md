@@ -17,6 +17,7 @@ P2 field-template bind/sync deep links
 P2 K8s Pod/Container detail + topology path
 P2 service-instance module filter + label aggregation
 P2 model association detail caller / field group move
+P2 operation chart position persistence
 P3 dependency boundary audit
 P3 dependency/API failures no longer render as empty in core pages
 ```
@@ -50,10 +51,10 @@ v3 route inventory: 488
 route: direct=14, redirect=57, dependency-blocked=7, missing=0(static heuristic)
 menu text coverage: 25/28
 v3 wrappers: 252
-v3 wrappers with caller: 215
-v3 wrappers without caller: 37
+v3 wrappers with caller: 217
+v3 wrappers without caller: 35
 v3 route gaps: 0(static)
-generic proxy-only: 20
+generic proxy-only: 19
 ```
 
 `replacementReady=false`，因为工作树 dirty、仍有 redirect/依赖边界/未使用 wrapper，且机器报告明确声明静态匹配不等于完整替换。
@@ -65,7 +66,7 @@ generic proxy-only: 20
 - HostApply 多阶段的逐主机冲突/失败详情；
 - 字段模板编辑三步完整 legacy 语义（`edit/:id/binding` 当前为上下文承接）；
 - BusinessTopo 服务实例标签的单条编辑/聚合筛选仍需继续与独立服务实例页统一；
-- 37 个无 caller wrapper 需要逐条接 UI 或登记兼容残留删除理由；
+- 35 个无 caller wrapper 需要逐条接 UI 或登记兼容残留删除理由；
 - 版本日志真实后端 read-back（mock 和页面已通过）；
 - 视觉 parity 自动化 diff 门禁尚未建立。
 
