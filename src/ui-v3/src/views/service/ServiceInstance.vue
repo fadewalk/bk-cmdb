@@ -58,7 +58,7 @@
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openClone(row)">克隆</el-button>
+            <el-button v-if="!row.service_template_id" link type="primary" @click="openClone(row)">克隆</el-button>
             <el-button v-if="row.service_template_id" link type="warning" @click="unbindTemplate(row)">解绑模板</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </template>
@@ -197,12 +197,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import {
-  searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewCreateServiceInstances, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances,
+  searchBusiness, searchServiceInstances, searchServiceInstancesWithHost, previewDeleteServiceInstances, unbindServiceTemplateFromModule, deleteServiceInstances, searchProcessInstances,
   listHostsWithNoSvcInst, listBizHosts, createServiceInstance, createProcessInstance, updateProcessInstance, createInstanceLabels, updateInstanceLabels, deleteInstanceLabels,
   syncServiceInstances, getBizTopoTree, getBizInternalTopo, http
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
 import { labelsToRows, validateLabelPair } from '../../utils/service-instance-labels'
+import { buildRawCloneInstance } from '../../utils/service-instance-payload'
 
 const route = useRoute()
 const router = useRouter()
@@ -394,33 +395,12 @@ async function submitClone() {
     const clonePayload = {
       bk_biz_id: bizId.value,
       bk_module_id: cloneModulePath.value,
-      instances: [{
-        bk_host_id: cloneHostId.value,
-        service_instance_name: `${cloneSource.value.name || cloneSource.value.id}-clone`,
-        processes: cloneSourceProcesses.value.map((p) => ({
-        process_info: {
-          bk_process_name: p.bk_process_name || p.bk_func_name || '',
-          bk_func_name: p.bk_func_name || '',
-          bk_bind_ip: p.bk_bind_ip || '127.0.0.1',
-          port: p.port || '',
-          user: p.user || 'root',
-          work_path: p.work_path || '/tmp',
-          start_cmd: p.start_cmd || '',
-          stop_cmd: p.stop_cmd || '',
-          description: p.description || ''
-        }
-      }))
-      }]
-    }
-    const preview = await previewCreateServiceInstances(clonePayload)
-    const previewRows = preview?.info || preview?.plans || preview?.data?.info || []
-    if (previewRows.length) {
-      await ElMessageBox.confirm(`预览将创建 ${previewRows.length} 个服务实例,确认继续?`, '克隆预览', { type: 'info' })
+      instances: [buildRawCloneInstance({ ...cloneSource.value, processes: cloneSourceProcesses.value }, cloneHostId.value)]
     }
     await createServiceInstance(bizId.value, cloneModulePath.value, clonePayload.instances)
     ElMessage.success('克隆成功')
     cloneDialog.value = false
-    load()
+    await load()
   } finally {
     cloning.value = false
   }
