@@ -113,6 +113,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchAssociationTypes,
   countAssociationTypes,
+  getAssociationType,
   createAssociationType,
   updateAssociationType,
   deleteAssociationType
@@ -225,16 +226,29 @@ function openCreate() {
   resetForm()
   drawerVisible.value = true
 }
-function openEdit(row) {
+async function openEdit(row) {
   drawerMode.value = 'edit'
-  resetForm(row)
+  try {
+    const data = await getAssociationType(row.id)
+    const detail = data?.info?.[0] || data?.data?.info?.[0] || data?.[0]
+    resetForm(detail || row)
+  } catch (e) {
+    ElMessage.error('关联类型加载失败: ' + (e?.message || '后端异常'))
+    return
+  }
   drawerVisible.value = true
 }
-function handleRowClick(row, column) {
+async function handleRowClick(row, column) {
   if (column?.property === 'operation') return
   drawerMode.value = 'view'
-  resetForm(row)
-  drawerVisible.value = true
+  try {
+    const data = await getAssociationType(row.id)
+    const detail = data?.info?.[0] || data?.data?.info?.[0] || data?.[0]
+    resetForm(detail || row)
+    drawerVisible.value = true
+  } catch (e) {
+    ElMessage.error('关联类型加载失败: ' + (e?.message || '后端异常'))
+  }
 }
 function hasChanges() {
   return originalForm.value !== JSON.stringify({ ...form })
