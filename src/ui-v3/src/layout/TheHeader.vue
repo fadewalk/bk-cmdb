@@ -27,6 +27,15 @@
     <div class="header-info">
       <el-tag size="small" effect="dark" type="info" style="border-color: rgba(255,255,255,.2)">独立模式</el-tag>
 
+      <el-dropdown trigger="click" class="info-item" @command="onHelpCmd">
+        <span class="info-help">帮助 <span class="help-caret">▾</span></span>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="version-log">版本日志</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
       <el-dropdown trigger="click" class="info-item" @command="onUserCmd">
         <span class="info-user">
           <span class="user-name">{{ sessionStore.displayName }}</span>
@@ -74,6 +83,10 @@ onMounted(() => {
   permissionStore.ensureLoaded()
   sessionStore.ensureLoaded()
 })
+
+async function onHelpCmd(cmd) {
+  if (cmd === 'version-log') await router.push('/platform/version-log')
+}
 
 async function onUserCmd(cmd) {
   if (cmd === 'logout') {
@@ -125,6 +138,9 @@ async function onUserCmd(cmd) {
   flex: 0 0 auto; display: flex; align-items: center; gap: 14px; margin-right: 24px;
 }
 .info-item { cursor: pointer; }
+.info-help { display: inline-flex; align-items: center; height: 58px; padding: 0 8px; color: #96A2B9; font-size: 14px; }
+.info-help:hover { color: #fff; background-color: rgba(49, 64, 94, 0.5); }
+.help-caret { margin-left: 4px; font-size: 12px; }
 .info-user {
   display: inline-flex; align-items: center; gap: 4px;
   color: #96A2B9; font-size: 14px; height: 58px; padding: 0 8px;

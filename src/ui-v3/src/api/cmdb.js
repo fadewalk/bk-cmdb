@@ -679,6 +679,10 @@ export const deleteDynamicGroup = (bizId, id) =>
 export const executeDynamicGroup = (bizId, id, page) =>
   http.post(`/dynamicgroup/data/${bizId}/${id}`, { page })
 
+// ---------- 版本日志 ----------
+export const getChangelogList = (params = {}) => http.post('/findmany/changelog', params)
+export const getChangelogDetail = (version) => http.post('/find/changelog/detail', { version })
+
 // ---------- 操作审计 ----------
 export const getAuditDict = () => http.get('/find/audit_dict')
 export const searchAuditList = (condition, page) =>
