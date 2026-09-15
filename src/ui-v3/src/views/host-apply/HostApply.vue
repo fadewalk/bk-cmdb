@@ -901,8 +901,25 @@ onMounted(async () => {
     } else {
       ElMessage.info('请先在左侧选择要应用的模块或模板')
     }
-  } else if (['run', 'conflict', 'failed'].includes(stage)) {
-    ElMessage.info('暂无执行中的任务,请先在配置页发起应用')
+  } else if (stage === 'conflict') {
+    if (currentNode.value) {
+      await onShowUnapplied()
+      if (unappliedPlans.value.length || !unappliedLoading.value) unappliedVisible.value = true
+    } else {
+      ElMessage.info('请先在左侧选择要查看冲突的模块或模板')
+    }
+  } else if (['run', 'failed'].includes(stage)) {
+    const taskId = route.query.task_id || route.query.taskId || route.query.task_ids
+    if (taskId) {
+      wizardContext.value = { bizId: bizStore.bizId, mode: mode.value, targets: currentNode.value ? [{ ...currentNode.value }] : [], rulesByTarget: {} }
+      runResult.value = { taskId: String(Array.isArray(taskId) ? taskId[0] : taskId) }
+      runStatus.value = stage === 'failed' ? 'failure' : 'executing'
+      wizardStep.value = 2
+      wizardVisible.value = true
+      if (stage !== 'failed') await pollStatus(runResult.value.taskId, wizardContext.value)
+    } else {
+      ElMessage.info('暂无可追踪的应用任务,请先在配置页发起应用')
+    }
   }
 })
 </script>
