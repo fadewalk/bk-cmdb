@@ -14,6 +14,14 @@
           </div>
 
           <div class="searchbar">
+            <el-select v-model="relatedFieldId" size="default" clearable filterable placeholder="字段" style="width: 120px">
+              <el-option
+                v-for="attr in attrList"
+                :key="attr.id"
+                :label="attr.bk_property_name"
+                :value="String(attr.id)"
+              />
+            </el-select>
             <el-input
               v-model="searchKw"
               placeholder="输入关键字搜索"
@@ -21,7 +29,14 @@
               size="default"
               class="search-input"
               :prefix-icon="'Search'"
+              @keyup.enter="searchRelatedNodes"
             />
+            <el-button
+              size="default"
+              :loading="relatedSearchLoading"
+              :disabled="!relatedFieldId || !searchKw.trim()"
+              @click="searchRelatedNodes"
+            >关联搜索</el-button>
             <el-dropdown
               size="default"
               trigger="click"
@@ -41,6 +56,7 @@
               </template>
             </el-dropdown>
           </div>
+          <el-alert v-if="relatedSearchError" type="error" :closable="false" :title="relatedSearchError" />
 
           <el-tree
             ref="treeRef"
@@ -136,6 +152,9 @@
           <template #default="{ row }">
             <el-tag v-for="f in (row.update_fields || [])" :key="f.bk_attribute_id" size="small" style="margin-right: 4px">
               {{ propName(f.bk_attribute_id) }} → {{ f.bk_property_value }}
+            </el-tag>
+            <el-tag v-for="r in (row.related_rules || [])" :key="`related-${r.id}`" type="info" size="small" style="margin-right: 4px">
+              规则 {{ r.id }}
             </el-tag>
           </template>
         </el-table-column>
@@ -237,7 +256,9 @@ import { Search, Loading } from '@element-plus/icons-vue'
 import { useBizStore } from '../../stores/biz'
 import {
   getBizTopoTree, getBizInternalTopo,
-  searchHostApplyRules, previewHostApplyModule,
+  searchHostApplyRules, searchHostRelatedRules,
+  searchHostApplyRelatedTopo, searchHostApplyRelatedTemplate,
+  getModuleFinalRules, previewHostApplyModule,
   runHostApplyModule, getHostApplyModuleStatus, setHostApplyModuleEnabled,
   deleteHostApplyModuleRules,
   searchHostApplyTemplateRules, previewHostApplyTemplate, runHostApplyTemplate,
@@ -252,6 +273,10 @@ const route = useRoute()
 const mode = ref('module')
 const sidebarCollapsed = ref(false)
 const searchKw = ref('')
+const relatedFieldId = ref('')
+const relatedSearchLoading = ref(false)
+const relatedSearchError = ref('')
+const relatedNodeIds = ref(null)
 const treeRef = ref()
 const propTableRef = ref()
 const propKeyword = ref('')
@@ -294,9 +319,34 @@ const filteredAttrs = computed(() => {
 
 function filterNode(value, data) {
   if (!value) return true
-  return (data.label || '').toLowerCase().includes(value.toLowerCase())
+  const textMatch = (data.label || '').toLowerCase().includes(value.toLowerCase())
+  if (!relatedNodeIds.value) return textMatch
+  const id = String(data.moduleId || data.templateId || '')
+  return relatedNodeIds.value.has(id) || textMatch
 }
 watch(searchKw, (v) => treeRef.value?.filter(v))
+
+async function searchRelatedNodes() {
+  const value = searchKw.value.trim()
+  if (!relatedFieldId.value || !value || !bizStore.bizId) return
+  relatedSearchLoading.value = true
+  relatedSearchError.value = ''
+  try {
+    const query_filter = { condition: 'AND', rules: [{ field: String(relatedFieldId.value), operator: 'contains', value }] }
+    const result = isModule.value
+      ? await searchHostApplyRelatedTopo(bizStore.bizId, { query_filter })
+      : await searchHostApplyRelatedTemplate({ bk_biz_id: bizStore.bizId, query_filter })
+    const list = Array.isArray(result) ? result : (result?.info || [])
+    relatedNodeIds.value = new Set(list.map((item) => String(item.bk_inst_id ?? item.bk_module_id ?? item.id ?? item.service_template_id)))
+    treeRef.value?.filter(value)
+  } catch (e) {
+    relatedNodeIds.value = null
+    relatedSearchError.value = e?.message || '关联规则搜索失败'
+    ElMessage.error(relatedSearchError.value)
+  } finally {
+    relatedSearchLoading.value = false
+  }
+}
 
 // 与原版 topology-tree 内部节点图标一致:空闲机池/故障机/待回收
 const INTERNAL_NODE_CLASSES = {
@@ -516,6 +566,15 @@ async function loadRules() {
     } catch (e) {
       if (currentNode.value === node) conflictCount.value = 0
     }
+    if (modeAtStart && node.serviceTemplateId) {
+      try {
+        const finalRules = await getModuleFinalRules({ bk_biz_id: bizId, bk_module_ids: [node.moduleId] })
+        const finalList = normalizeRuleList(Array.isArray(finalRules) ? { info: finalRules } : finalRules)
+        if (currentNode.value === node && finalList.length) rules.value = finalList
+      } catch (e) {
+        relatedSearchError.value = e?.message || '模块最终规则加载失败'
+      }
+    }
   } catch (e) {
     if (currentNode.value === node) {
       rules.value = []
@@ -674,18 +733,24 @@ async function pollStatus(taskId, context) {
     if (token !== pollToken.value || !wizardVisible.value) return
     try {
       const response = await fn({ bk_biz_id: bizId, task_ids: [taskId] })
-      const tasks = response?.task_info || response?.info || []
-      const stat = tasks.find((task) => String(task.task_id) === String(taskId)) || tasks[0] || response
-      const status = stat?.status || 'executing'
-      runStatus.value = status
-      if (status === 'finished' || status === 'failure') {
-        if (status === 'finished' && token === pollToken.value) {
-          await loadRules()
-        }
+      const data = response?.data && !Array.isArray(response.data) ? response.data : response
+      const tasks = data?.task_info || data?.info || []
+      const stat = tasks.find((task) => String(task.task_id) === String(taskId)) || tasks[0]
+      if (!stat) {
+        runStatus.value = 'failure'
+        runResult.value = { ...runResult.value, error: `未找到任务 ${taskId} 状态` }
+        return
+      }
+      const status = String(stat.status || 'executing').toLowerCase()
+      runStatus.value = status === 'success' ? 'finished' : (status === 'failed' ? 'failure' : status)
+      if (runStatus.value === 'finished' || runStatus.value === 'failure') {
+        if (runStatus.value === 'finished' && token === pollToken.value) await loadRules()
         return
       }
     } catch (e) {
-      runStatus.value = '查询状态失败'
+      runStatus.value = 'failure'
+      runResult.value = { ...runResult.value, error: e?.message || '任务状态查询失败' }
+      return
     }
   }
   if (token === pollToken.value) runStatus.value = 'timeout'
@@ -751,7 +816,13 @@ async function onShowUnapplied() {
       : { bk_biz_id: bizStore.bizId, service_template_ids: [currentNode.value.templateId] }
     await loadAttrList()
     const data = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
-    unappliedPlans.value = (data?.plans || []).filter(planHasChanges)
+    const plans = data?.plans || data?.data?.plans || []
+    const hostIds = plans.map((plan) => plan.bk_host_id).filter(Boolean)
+    let related = {}
+    if (isModule.value && hostIds.length) related = (await searchHostRelatedRules(bizStore.bizId, { bk_host_ids: [...new Set(hostIds)] })) || {}
+    unappliedPlans.value = plans
+      .map((plan) => ({ ...plan, related_rules: related[String(plan.bk_host_id)] || related[plan.bk_host_id] || [] }))
+      .filter((plan) => planHasChanges(plan) || planHasConflict(plan))
   } catch (e) {
     ElMessage.error('未应用主机查询失败: ' + (e?.message || '后端异常'))
   } finally { unappliedLoading.value = false }
