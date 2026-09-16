@@ -144,25 +144,52 @@
     <el-dialog v-model="unappliedVisible" title="未应用主机" width="820px">
       <el-alert type="warning" :closable="false" style="margin-bottom: 10px"
         :title="`共 ${unappliedPlans.length} 台主机需要应用`" />
+      <el-alert
+        v-if="unappliedError"
+        type="error"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px"
+        :title="unappliedError"
+      />
       <el-table :data="unappliedPlans" v-loading="unappliedLoading" max-height="420" size="small" border>
+        <el-table-column type="expand" width="42">
+          <template #default="{ row }">
+            <div class="plan-details">
+              <div v-if="row.error_message" class="plan-error">
+                <strong>失败原因:</strong> {{ row.error_message }}<span v-if="row.error_code"> ({{ row.error_code }})</span>
+              </div>
+              <div v-if="row.conflicts?.length" class="plan-detail-line">
+                <strong>冲突详情:</strong>
+                <el-tag v-for="(conflict, index) in row.conflicts" :key="`${conflict.bk_attribute_id}-${index}`" type="warning" size="small">
+                  {{ propName(conflict.bk_attribute_id) }}: {{ conflict.bk_property_value }}{{ conflict.unresolved_conflict_exist ? ' (未解决)' : '' }}
+                </el-tag>
+              </div>
+              <div v-if="row.related_rules?.length" class="plan-detail-line">
+                <strong>关联规则:</strong>
+                <el-tag v-for="rule in row.related_rules" :key="rule.id" type="info" size="small">
+                  {{ propName(rule.bk_attribute_id) }} → {{ formatValue(rule) }}
+                </el-tag>
+              </div>
+              <span v-if="!row.error_message && !row.conflicts?.length && !row.related_rules?.length" class="plan-detail-empty">暂无详情</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="主机" min-width="180">
-          <template #default="{ row }">{{ row.bk_host_innerip || row.host?.bk_host_innerip || row.bk_host_id || '--' }}</template>
+          <template #default="{ row }">{{ planHostValue(row) }}</template>
         </el-table-column>
         <el-table-column label="变更字段" min-width="260">
           <template #default="{ row }">
             <el-tag v-for="f in (row.update_fields || [])" :key="f.bk_attribute_id" size="small" style="margin-right: 4px">
               {{ propName(f.bk_attribute_id) }} → {{ f.bk_property_value }}
             </el-tag>
-            <el-tag v-for="r in (row.related_rules || [])" :key="`related-${r.id}`" type="info" size="small" style="margin-right: 4px">
-              规则 {{ r.id }}
-            </el-tag>
           </template>
         </el-table-column>
-            <el-table-column label="冲突" width="100">
-              <template #default="{ row }">{{ planHasConflict(row) ? '有冲突' : '无' }}</template>
-            </el-table-column>
+        <el-table-column label="冲突" width="100">
+          <template #default="{ row }">{{ planHasConflict(row) ? '有冲突' : '无' }}</template>
+        </el-table-column>
       </el-table>
-      <el-empty v-if="!unappliedLoading && !unappliedPlans.length" description="暂无未应用主机" :image-size="60" />
+      <el-empty v-if="!unappliedLoading && !unappliedError && !unappliedPlans.length" description="暂无未应用主机" :image-size="60" />
       <template #footer>
         <el-button @click="unappliedVisible = false">关闭</el-button>
         <el-tooltip :disabled="unappliedPlans.length > 0" content="暂无需要应用的主机">
@@ -210,9 +237,33 @@
       <template v-else-if="wizardStep === 1">
         <el-alert :type="previewData?.unresolved_conflict_count ? 'warning' : 'info'" :closable="false" style="margin-bottom: 8px"
           :title="`共影响 ${previewData?.count || 0} 台主机,其中冲突 ${previewData?.unresolved_conflict_count || 0} 台`" />
+        <el-alert
+          v-if="previewError"
+          type="error"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 8px"
+          :title="previewError"
+        />
         <el-table :data="previewData?.plans || []" max-height="360" size="small" border>
+          <el-table-column type="expand" width="42">
+            <template #default="{ row }">
+              <div class="plan-details">
+                <div v-if="row.error_message" class="plan-error">
+                  <strong>失败原因:</strong> {{ row.error_message }}<span v-if="row.error_code"> ({{ row.error_code }})</span>
+                </div>
+                <div v-if="row.conflicts?.length" class="plan-detail-line">
+                  <strong>冲突详情:</strong>
+                  <el-tag v-for="(conflict, index) in row.conflicts" :key="`${conflict.bk_attribute_id}-${index}`" type="warning" size="small">
+                    {{ propName(conflict.bk_attribute_id) }}: {{ conflict.bk_property_value }}{{ conflict.unresolved_conflict_exist ? ' (未解决)' : '' }}
+                  </el-tag>
+                </div>
+                <span v-if="!row.error_message && !row.conflicts?.length" class="plan-detail-empty">暂无详情</span>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="主机" min-width="180">
-            <template #default="{ row }">{{ row.bk_host_innerip || row.host?.bk_host_innerip || row.bk_host_id || '--' }}</template>
+            <template #default="{ row }">{{ planHostValue(row) }}</template>
           </el-table-column>
           <el-table-column label="变更字段" min-width="200">
             <template #default="{ row }">
@@ -231,6 +282,10 @@
             <el-button v-if="runStatus === 'failure'" type="primary" @click="submitRun">重试</el-button>
           </template>
         </el-result>
+        <div v-else-if="runStatus === 'status-error'" class="run-error">
+          <el-alert type="error" :closable="false" show-icon :title="runError || '任务状态查询失败'" />
+          <el-button type="primary" @click="retryPollStatus">重新查询</el-button>
+        </div>
         <div v-else class="run-loading">
           <el-icon class="rotating"><Loading /></el-icon>
           任务执行中… 当前状态: {{ runStatus || '提交中' }}
@@ -254,9 +309,10 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { useBizStore } from '../../stores/biz'
+import { BUILTIN_UNEDITABLE_FIELDS } from '../../utils/model-constants'
 import {
   getBizTopoTree, getBizInternalTopo,
-  searchHostApplyRules, searchHostRelatedRules,
+  searchHostApplyRules,
   searchHostApplyRelatedTopo, searchHostApplyRelatedTemplate,
   getModuleFinalRules, previewHostApplyModule,
   runHostApplyModule, getHostApplyModuleStatus, setHostApplyModuleEnabled,
@@ -297,13 +353,16 @@ const lastEditTime = ref('')
 const unappliedVisible = ref(false)
 const unappliedLoading = ref(false)
 const unappliedPlans = ref([])
+const unappliedError = ref('')
 const unappliedApplying = ref(false)
 
 const wizardVisible = ref(false)
 const wizardStep = ref(0)
 const previewData = ref(null)
+const previewError = ref('')
 const runResult = ref(null)
 const runStatus = ref('')
+const runError = ref('')
 const pollToken = ref(0)
 const wizardContext = ref(null)
 
@@ -319,16 +378,27 @@ const filteredAttrs = computed(() => {
 
 function filterNode(value, data) {
   if (!value) return true
-  const textMatch = (data.label || '').toLowerCase().includes(value.toLowerCase())
+  const keyword = value.toLowerCase()
+  const textMatch = (data.label || '').toLowerCase().includes(keyword)
   if (!relatedNodeIds.value) return textMatch
   const id = String(data.moduleId || data.templateId || '')
-  return relatedNodeIds.value.has(id) || textMatch
+  return textMatch && relatedNodeIds.value.has(id)
 }
-watch(searchKw, (v) => treeRef.value?.filter(v))
+watch(searchKw, (v) => {
+  if (!v) {
+    relatedNodeIds.value = null
+    relatedSearchError.value = ''
+  }
+  treeRef.value?.filter(v)
+})
 
 async function searchRelatedNodes() {
   const value = searchKw.value.trim()
-  if (!relatedFieldId.value || !value || !bizStore.bizId) return
+  if (!relatedFieldId.value || !value || !bizStore.bizId) {
+    relatedNodeIds.value = null
+    treeRef.value?.filter(value)
+    return
+  }
   relatedSearchLoading.value = true
   relatedSearchError.value = ''
   try {
@@ -336,12 +406,12 @@ async function searchRelatedNodes() {
     const result = isModule.value
       ? await searchHostApplyRelatedTopo(bizStore.bizId, { query_filter })
       : await searchHostApplyRelatedTemplate({ bk_biz_id: bizStore.bizId, query_filter })
-    const list = Array.isArray(result) ? result : (result?.info || [])
-    relatedNodeIds.value = new Set(list.map((item) => String(item.bk_inst_id ?? item.bk_module_id ?? item.id ?? item.service_template_id)))
+    const list = Array.isArray(result) ? result : (result?.info || result?.data || [])
+    relatedNodeIds.value = new Set(list.map((item) => String(item.bk_inst_id ?? item.bk_module_id ?? item.id ?? item.service_template_id)).filter((id) => id !== 'undefined'))
     treeRef.value?.filter(value)
   } catch (e) {
     relatedNodeIds.value = null
-    relatedSearchError.value = e?.message || '关联规则搜索失败'
+    relatedSearchError.value = e?.message || '关联搜索失败'
     ElMessage.error(relatedSearchError.value)
   } finally {
     relatedSearchLoading.value = false
@@ -374,9 +444,42 @@ function propName(attrId) {
   return a ? a.bk_property_name : `#${attrId}`
 }
 function normalizeRuleList(res) {
-  return (res?.info || [])
+  return (res?.info || res?.data || [])
     .flatMap((entry) => Array.isArray(entry?.rules) ? entry.rules : [entry])
     .filter((r) => r && !r.is_deleted)
+}
+function normalizePlans(res) {
+  const data = res?.data && !Array.isArray(res.data) ? res.data : res
+  return {
+    ...(data || {}),
+    plans: Array.isArray(data?.plans) ? data.plans : [],
+    count: Number(data?.count || 0),
+    unresolved_conflict_count: Number(data?.unresolved_conflict_count || 0)
+  }
+}
+// plan 主机契约:expect_host 是真实 host 对象;老 mock 无 expect_host 时退回顶层/嵌套字段
+function planHostValue(plan) {
+  const host = plan?.expect_host || {}
+  const ip = host.bk_host_innerip || plan?.bk_host_innerip || plan?.host?.bk_host_innerip
+  if (ip) return `${host.bk_cloud_name || plan?.cloud_area?.bk_cloud_name || ''}${ip}`
+  return host.bk_host_name || plan?.bk_host_name || host.bk_host_innerip_v6 || plan?.bk_host_id || plan?.bk_host_innerip || '--'
+}
+function targetIdsFor(modeAtStart, targets) {
+  return modeAtStart === 'module'
+    ? [...new Set(targets.map((target) => target.moduleId).filter(Boolean))]
+    : [...new Set(targets.map((target) => target.templateId).filter(Boolean))]
+}
+function normalizeTaskStatus(status) {
+  const value = String(status || '').toLowerCase()
+  if (['success', 'succeeded', 'done', 'finished'].includes(value)) return 'finished'
+  if (['fail', 'failed', 'error', 'failure'].includes(value)) return 'failure'
+  return value || 'executing'
+}
+function extractTaskInfo(response, taskId) {
+  const data = response?.data && !Array.isArray(response.data) ? response.data : response
+  const tasks = data?.task_info || data?.info || []
+  const list = Array.isArray(tasks) ? tasks : []
+  return list.find((task) => String(task.task_id) === String(taskId)) || null
 }
 function validTarget(node) {
   return node && ((isModule.value && node.type === 'module' && node.moduleId) ||
@@ -406,7 +509,7 @@ function onTreeCheck(_, checked) {
   batchTargets.value = selectedTargetNodes()
 }
 function planHasConflict(plan) {
-  return Boolean(plan?.unresolved_conflict_count || plan?.conflicts?.some((f) => f?.unresolved_conflict_exist))
+  return Boolean(plan?.unresolved_conflict_count || plan?.conflicts?.some((f) => f?.unresolved_conflict_exist) || plan?.conflicts?.length)
 }
 function planHasChanges(plan) {
   return Array.isArray(plan?.update_fields) && plan.update_fields.length > 0
@@ -535,6 +638,8 @@ async function onNodeClick(data) {
   if (data.type === 'group') return
   if (data.type !== 'module' && data.type !== 'template') return
   currentNode.value = data
+  // 属性元数据先于规则渲染加载, propName 才能把 bk_attribute_id 解析成名称
+  if (!attrList.value.length) await loadAttrList()
   await loadRules()
 }
 
@@ -555,22 +660,34 @@ async function loadRules() {
     if (currentNode.value !== node || bizStore.bizId !== bizId || isModule.value !== modeAtStart) return
     rules.value = list
     lastEditTime.value = list.map((r) => r.last_time || r.bk_updated_at).filter(Boolean).sort().slice(-1)[0] || ''
-    try {
-      const id = modeAtStart ? node.moduleId : node.templateId
-      const data = modeAtStart
-        ? await getInvalidHostCount(bizId, { id })
-        : await getInvalidTemplateHostCount(bizId, { id })
-      if (currentNode.value === node && bizStore.bizId === bizId && isModule.value === modeAtStart) {
-        conflictCount.value = data?.count || data?.invalid_count || 0
+    // 老版契约:模块属于已启用的服务模板时规则由模板托管,显示页直接置空并跳过模块规则查询
+    const templateOwned = modeAtStart && node.serviceTemplateHostApplyEnabled
+    if (templateOwned) {
+      rules.value = []
+      lastEditTime.value = ''
+    } else if (node.__enabled || node.host_apply_enabled) {
+      // 老版仅在节点启用自动应用时查询未应用数
+      try {
+        const id = modeAtStart ? node.moduleId : node.templateId
+        const data = modeAtStart
+          ? await getInvalidHostCount(bizId, { id })
+          : await getInvalidTemplateHostCount(bizId, { id })
+        if (currentNode.value === node && bizStore.bizId === bizId && isModule.value === modeAtStart) {
+          conflictCount.value = data?.count || data?.invalid_count || 0
+        }
+      } catch (e) {
+        if (currentNode.value === node) conflictCount.value = 0
       }
-    } catch (e) {
-      if (currentNode.value === node) conflictCount.value = 0
+    } else {
+      conflictCount.value = 0
     }
+    // 最终规则语义:模块绑定服务模板时以 get_module_final_rules 为准(即使为空也要覆盖模块原始规则);
+    // 模板已托管时规则列表保持为空,但 final rules 请求仍发出用于一致性确认。
     if (modeAtStart && node.serviceTemplateId) {
       try {
         const finalRules = await getModuleFinalRules({ bk_biz_id: bizId, bk_module_ids: [node.moduleId] })
         const finalList = normalizeRuleList(Array.isArray(finalRules) ? { info: finalRules } : finalRules)
-        if (currentNode.value === node && finalList.length) rules.value = finalList
+        if (currentNode.value === node && !templateOwned) rules.value = finalList
       } catch (e) {
         relatedSearchError.value = e?.message || '模块最终规则加载失败'
       }
@@ -589,8 +706,11 @@ async function loadRules() {
 
 async function loadAttrList() {
   try {
-    const list = await searchModelAttributes('host')
-    attrList.value = (list || []).filter((a) => a.bk_property_id !== 'bk_host_id' && a.id !== undefined)
+    const list = await searchModelAttributes('host', bizStore.bizId)
+    // 老版契约:排除内置不可编辑字段,后续由 check/objectattr/host_apply_enabled 过滤可选字段
+    attrList.value = (list || []).filter((a) =>
+      a.bk_property_id !== 'bk_host_id' && a.id !== undefined &&
+      !BUILTIN_UNEDITABLE_FIELDS.includes(a.bk_property_id))
   } catch (e) {
     attrList.value = []
     ElMessage.error('字段加载失败: ' + (e?.message || '后端异常'))
@@ -685,16 +805,21 @@ function additionalRules() {
 }
 
 async function onPreview() {
-  if (!selectedAttrIds.value.length) { ElMessage.warning('请至少选择一个字段'); return }
   const payload = buildPlanPayload(false)
-  if (!payload || !payload.additional_rules.length) { ElMessage.warning('请至少配置一个字段'); return }
+  // 老版契约:预览/执行要求 additional_rules 或 remove_rule_ids 至少一项(删除-only 合法)
+  if (!payload || (!payload.additional_rules.length && !payload.remove_rule_ids.length)) {
+    ElMessage.warning('请至少选择或删除一个字段'); return
+  }
   loadingPreview.value = true
   try {
     const data = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
-    previewData.value = data
+    previewData.value = normalizePlans(data)
+    previewError.value = ''
     wizardStep.value = 1
   } catch (e) {
-    ElMessage.error('预览失败: ' + (e?.message || '后端异常'))
+    previewData.value = null
+    previewError.value = e?.message || '预览失败'
+    ElMessage.error('预览失败: ' + previewError.value)
   } finally {
     loadingPreview.value = false
   }
@@ -702,22 +827,34 @@ async function onPreview() {
 
 async function submitRun() {
   const payload = buildPlanPayload(true)
-  if (!payload || !payload.additional_rules.length) { ElMessage.warning('请至少配置一个字段'); return }
+  if (!payload || (!payload.additional_rules.length && !payload.remove_rule_ids.length)) {
+    ElMessage.warning('请至少选择或删除一个字段'); return
+  }
   submitting.value = true
   runStatus.value = '提交中'
+  runError.value = ''
   try {
     const context = wizardContext.value
     const resp = context?.mode === 'module' ? await runHostApplyModule(payload) : await runHostApplyTemplate(payload)
-    const taskId = resp?.task_id || resp?.data?.task_id
-    if (!taskId) throw new Error('后端未返回任务 ID')
-    runResult.value = { taskId }
+    const result = resp?.data && !Array.isArray(resp.data) ? resp.data : resp
+    const taskId = result?.task_id
+    if (!taskId) {
+      // 后端允许无新增/删除时仅保存规则且不建任务,视为完成,不伪造任务轮询
+      runResult.value = { completedWithoutTask: true }
+      runStatus.value = 'finished'
+      wizardStep.value = 2
+      await loadRules()
+      return
+    }
+    runResult.value = { taskId: String(taskId) }
     wizardStep.value = 2
-    await pollStatus(taskId, context)
+    await pollStatus(String(taskId), context)
   } catch (e) {
     runStatus.value = 'failure'
-    runResult.value = { error: e?.message || '后端异常' }
+    runError.value = e?.message || '后端异常'
+    runResult.value = { error: runError.value }
     wizardStep.value = 2
-    ElMessage.error('执行失败')
+    ElMessage.error('执行失败: ' + runError.value)
   } finally {
     submitting.value = false
   }
@@ -726,6 +863,7 @@ async function submitRun() {
 async function pollStatus(taskId, context) {
   const token = ++pollToken.value
   runStatus.value = 'executing'
+  runError.value = ''
   const fn = context?.mode === 'module' ? getHostApplyModuleStatus : getHostApplyTemplateStatus
   const bizId = context?.bizId ?? bizStore.bizId
   for (let i = 0; i < 30; i++) {
@@ -733,27 +871,38 @@ async function pollStatus(taskId, context) {
     if (token !== pollToken.value || !wizardVisible.value) return
     try {
       const response = await fn({ bk_biz_id: bizId, task_ids: [taskId] })
-      const data = response?.data && !Array.isArray(response.data) ? response.data : response
-      const tasks = data?.task_info || data?.info || []
-      const stat = tasks.find((task) => String(task.task_id) === String(taskId)) || tasks[0]
+      const stat = extractTaskInfo(response, taskId)
       if (!stat) {
-        runStatus.value = 'failure'
-        runResult.value = { ...runResult.value, error: `未找到任务 ${taskId} 状态` }
+        runStatus.value = 'status-error'
+        runError.value = `未找到任务 ${taskId} 的状态`
         return
       }
-      const status = String(stat.status || 'executing').toLowerCase()
-      runStatus.value = status === 'success' ? 'finished' : (status === 'failed' ? 'failure' : status)
-      if (runStatus.value === 'finished' || runStatus.value === 'failure') {
-        if (runStatus.value === 'finished' && token === pollToken.value) await loadRules()
+      const status = normalizeTaskStatus(stat.status)
+      runStatus.value = status
+      if (status === 'finished' || status === 'failure') {
+        if (status === 'failure') {
+          runError.value = stat.error_message || stat.error_msg || `任务 ${taskId} 执行失败`
+          runResult.value = { ...runResult.value, taskId, error: runError.value }
+        }
+        if (status === 'finished' && token === pollToken.value) await loadRules()
         return
       }
     } catch (e) {
-      runStatus.value = 'failure'
-      runResult.value = { ...runResult.value, error: e?.message || '任务状态查询失败' }
+      runStatus.value = 'status-error'
+      runError.value = e?.message || '任务状态查询失败'
       return
     }
   }
-  if (token === pollToken.value) runStatus.value = 'timeout'
+  if (token === pollToken.value) {
+    runStatus.value = 'timeout'
+    runError.value = '任务状态查询超时，请稍后重新查询'
+  }
+}
+
+async function retryPollStatus() {
+  const taskId = runResult.value?.taskId
+  const context = wizardContext.value
+  if (taskId) await pollStatus(taskId, context)
 }
 
 const runTitle = computed(() => {
@@ -763,14 +912,15 @@ const runTitle = computed(() => {
   return '应用执行中'
 })
 const runSubtitle = computed(() => {
-  if (runStatus.value === 'failure' && runResult.value?.error) return runResult.value.error
+  if (runStatus.value === 'failure' && runError.value) return runError.value
+  if (runResult.value?.completedWithoutTask && runStatus.value === 'finished') return '没有需要异步执行的主机,规则已保存'
   if (runStatus.value === 'failure') {
     const id = runResult.value?.taskId
-    // 后端 status 接口仅返回 {task_id, status},无逐主机失败原因,如实呈现任务 ID 供追踪
-    return `任务 ${id || ''} 执行失败;后端仅返回任务状态,请通过任务 ID 追踪失败详情`
+    return `任务 ${id || ''} 执行失败;${runError.value || '后端仅返回任务状态,请通过任务 ID 追踪失败详情'}`
   }
   if (runStatus.value === 'finished') return '可关闭本对话框,规则已生效'
-  if (runStatus.value === 'timeout') return '任务状态查询超时，请稍后刷新确认结果，勿重复提交'
+  if (runStatus.value === 'status-error') return runError.value || '任务状态查询失败'
+  if (runStatus.value === 'timeout') return runError.value || '任务状态查询超时，请稍后刷新确认结果，勿重复提交'
   return '请稍候,正在处理主机…'
 })
 
@@ -810,43 +960,58 @@ async function onShowUnapplied() {
   unappliedVisible.value = true
   unappliedLoading.value = true
   unappliedPlans.value = []
+  unappliedError.value = ''
   try {
     const payload = isModule.value
       ? { bk_biz_id: bizStore.bizId, bk_module_ids: [currentNode.value.moduleId] }
       : { bk_biz_id: bizStore.bizId, service_template_ids: [currentNode.value.templateId] }
     await loadAttrList()
     const data = isModule.value ? await previewHostApplyModule(payload) : await previewHostApplyTemplate(payload)
-    const plans = data?.plans || data?.data?.plans || []
-    const hostIds = plans.map((plan) => plan.bk_host_id).filter(Boolean)
-    let related = {}
-    if (isModule.value && hostIds.length) related = (await searchHostRelatedRules(bizStore.bizId, { bk_host_ids: [...new Set(hostIds)] })) || {}
-    unappliedPlans.value = plans
-      .map((plan) => ({ ...plan, related_rules: related[String(plan.bk_host_id)] || related[plan.bk_host_id] || [] }))
-      .filter((plan) => planHasChanges(plan) || planHasConflict(plan))
+    const normalized = normalizePlans(data)
+    // 后端 preview 只返回有未解决冲突的主机 plan(GenerateApplyPlan 语义),老版冲突页同样直接用 plans
+    unappliedPlans.value = normalized.plans.filter((plan) => planHasChanges(plan) || planHasConflict(plan) || plan.error_message)
+    if (normalized.unresolved_conflict_count && !unappliedPlans.value.length) {
+      unappliedError.value = `后端返回 ${normalized.unresolved_conflict_count} 台未应用主机,但没有返回逐主机详情`
+    }
   } catch (e) {
-    ElMessage.error('未应用主机查询失败: ' + (e?.message || '后端异常'))
+    unappliedError.value = e?.message || '未应用主机查询失败'
+    ElMessage.error('未应用主机查询失败: ' + unappliedError.value)
   } finally { unappliedLoading.value = false }
 }
 
-// 未应用主机列表直接应用:按当前节点现有规则执行,空规则载荷需带 changed 才会建任务(后端契约)
+// 未应用主机直接应用:对齐老版 conflict-list —— 由 plan.update_fields 生成 additional_rules 并带 bk_host_ids,
+// 空规则载荷会被 hostApplyBaseValidate 拒绝,不允许直接发送。
 async function applyUnapplied() {
   if (!currentNode.value || !unappliedPlans.value.length) return
   const node = currentNode.value
   const bizId = bizStore.bizId
   const modeAtStart = isModule.value
+  const plans = unappliedPlans.value
+  // 逐 plan 生成规则:字段取 plan.update_fields(单模块场景每台一致),目标 ID 与老版一致
+  const additionalRules = plans.flatMap((plan) => (plan.update_fields || []).map((field) => ({
+    bk_attribute_id: field.bk_attribute_id,
+    bk_property_value: field.bk_property_value,
+    ...(modeAtStart ? { bk_module_id: node.moduleId } : { service_template_id: node.templateId })
+  })))
+  const hostIds = plans.map((plan) => plan.bk_host_id).filter(Boolean)
+  if (!additionalRules.length || !hostIds.length) {
+    ElMessage.warning('预览结果缺少可应用的字段或主机,无法直接应用')
+    return
+  }
   try {
     await ElMessageBox.confirm(
-      `确定对「${node.label}」执行自动应用?共 ${unappliedPlans.value.length} 台主机将按当前规则更新`,
+      `确定对「${node.label}」执行自动应用?共 ${plans.length} 台主机将按当前规则更新`,
       '应用确认',
       { type: 'warning' }
     )
   } catch { return }
   unappliedApplying.value = true
   runStatus.value = '提交中'
+  runError.value = ''
   try {
     const payload = modeAtStart
-      ? { bk_biz_id: bizId, bk_module_ids: [node.moduleId], additional_rules: [], remove_rule_ids: [], changed: true }
-      : { bk_biz_id: bizId, service_template_ids: [node.templateId], additional_rules: [], remove_rule_ids: [], changed: true }
+      ? { bk_biz_id: bizId, bk_module_ids: [node.moduleId], additional_rules: additionalRules, remove_rule_ids: [], bk_host_ids: hostIds, changed: true }
+      : { bk_biz_id: bizId, service_template_ids: [node.templateId], additional_rules: additionalRules, remove_rule_ids: [], bk_host_ids: hostIds, changed: true }
     wizardContext.value = {
       bizId,
       mode: modeAtStart,
@@ -854,13 +1019,21 @@ async function applyUnapplied() {
       rulesByTarget: { [String(node.id)]: [...rules.value] }
     }
     const resp = modeAtStart ? await runHostApplyModule(payload) : await runHostApplyTemplate(payload)
-    const taskId = resp?.task_id || resp?.data?.task_id
-    if (!taskId) throw new Error('后端未返回任务 ID')
+    const result = resp?.data && !Array.isArray(resp.data) ? resp.data : resp
+    const taskId = result?.task_id
+    if (!taskId) {
+      unappliedVisible.value = false
+      runResult.value = { completedWithoutTask: true }
+      runStatus.value = 'finished'
+      wizardVisible.value = true
+      wizardStep.value = 2
+      return
+    }
     unappliedVisible.value = false
-    runResult.value = { taskId }
+    runResult.value = { taskId: String(taskId) }
     wizardVisible.value = true
     wizardStep.value = 2
-    await pollStatus(taskId, wizardContext.value)
+    await pollStatus(String(taskId), wizardContext.value)
   } catch (e) {
     ElMessage.error('应用失败: ' + (e?.message || '后端异常'))
   } finally {
@@ -920,6 +1093,9 @@ async function onBatch(cmd) {
 function clearSelection() {
   selectedIds.value = []
   batchTargets.value = []
+  relatedNodeIds.value = null
+  relatedFieldId.value = ''
+  relatedSearchError.value = ''
   treeRef.value?.setCheckedKeys([])
   currentNode.value = null
   rules.value = []
@@ -937,8 +1113,10 @@ function resetWizard() {
   wizardVisible.value = false
   wizardStep.value = 0
   previewData.value = null
+  previewError.value = ''
   runResult.value = null
   runStatus.value = ''
+  runError.value = ''
   propKeyword.value = ''
   selectedAttrIds.value = []
   draftMap.value = {}
@@ -1027,6 +1205,13 @@ onMounted(async () => {
 
 .searchbar { display: flex; gap: 8px; margin-bottom: 8px; }
 .searchbar .search-input { flex: 1; }
+.ha-search-error { margin-bottom: 8px; }
+.plan-details { padding: 4px 12px 8px 42px; color: #63656e; font-size: 12px; }
+.plan-detail-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.plan-error { color: #ea3636; }
+.plan-detail-empty { color: #979ba5; }
+.run-error { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 0; }
+
 .batch-trigger {
   border: 1px solid #c4c6cc; border-radius: 2px; background: #fff;
   padding: 0 8px; height: 32px; line-height: 30px; cursor: pointer; font-size: 13px; color: #63656e;
