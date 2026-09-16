@@ -7,7 +7,7 @@
 ```text
 branch: standalone-docker
 remote: fadewalk/standalone-docker
-HEAD: 38cd26bea3 feat(ui-v3): add model deletion protection caller
+HEAD: dc59096c42 feat(ui-v3): complete HostApply related rule callers
 ```
 
 当前工作树有用户已有未提交/未跟踪文件（架构文档、截图、本地规则、老前端已有修改等）。这些文件不属于本批交接，也不应使用 `git add -A`/`git add .`。
@@ -37,9 +37,11 @@ P2  service-instance labels/create/clone payload parity
 P2  field-template bind/sync deep links and task/failure/id preservation
 P2  K8s Pod/Container detail, properties, topology path, legacy deep-link
 P2  service-instance module search, name search, label aggregation/selectors
-P2  model association detail read-back and field-group move caller
+P2  model association detail read-back / field-group move / model delete protection
 P2  operation chart position persistence
 P2  service process detail/by_ids and batch update contract
+P2  set-template create/update/delete CRUD caller
+P2  HostApply related rules/status/final-rules caller
 P3  dependency boundary audit
 P3  dependency/API failure no longer rendered as empty core pages
 ```
@@ -85,13 +87,13 @@ missing: 0 (static heuristic only)
 unknown: 0
 menu text coverage: 25/28
 v3 wrappers: 252
-v3 wrappers with callers: 221
-v3 wrappers without callers: 31
+v3 wrappers with callers: 225
+v3 wrappers without callers: 27
 v3 route gaps: 0 (static)
 generic proxy-only: 19
 ```
 
-31 个未使用 wrapper 不是自动缺口或自动完成，必须逐条接入 v3 UI 或登记兼容残留/删除理由。当前主要剩余类别：
+27 个未使用 wrapper 不是自动缺口或自动完成，必须逐条接入 v3 UI 或登记兼容残留/删除理由。当前主要剩余类别：
 
 ```text
 Host transfer/favorite/host-apply related
@@ -156,7 +158,7 @@ Boundary gate 当前 `blocked`，并已发现过 API/dependency 失败直接被�
 3. ServiceInstance/BusinessTopo 标签 aggregation 和高级查询收尾；
 4. K8s/ES/cloud 页面真实依赖状态和错误重试；
 5. 组织架构/department 字段控件边界确认；
-6. 其余 31 个 wrapper 逐条接入或登记删除/生态边界；
+6. 其余 27 个 wrapper 逐条接入或登记删除/生态边界；
 7. route/deep-link 全矩阵、视觉 state matrix、真实 read-back；
 8. clean release/canary/cutover gate。
 
