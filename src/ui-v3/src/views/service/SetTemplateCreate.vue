@@ -133,7 +133,13 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
-import { searchServiceTemplates, searchModelAttributes, searchSetTemplateStatus, http } from '../../api/cmdb'
+import {
+  searchServiceTemplates,
+  searchModelAttributes,
+  searchSetTemplateStatus,
+  createSetTemplate,
+  http
+} from '../../api/cmdb'
 
 const route = useRoute()
 const router = useRouter()
@@ -177,7 +183,7 @@ onMounted(async () => {
   await bizStore.ensureLoaded()
   try {
     const [tplRes, setProps] = await Promise.all([
-      searchServiceTemplates(bizId.value, { start: 0, limit: 500 }),
+      searchServiceTemplates(bizId.value, { start: 0, limit: 200 }),
       searchModelAttributes('set').catch(() => [])
     ])
     templates.value = tplRes?.info || []
@@ -217,7 +223,8 @@ async function submit() {
   saving.value = true
   try {
     if (isEdit.value) {
-      // 旧版契约:update/topo/set_template/all_info 全量更新
+      // 旧版契约:update/topo/set_template/all_info 全量更新；该组合端点负责属性增删，
+      // 基础 CRUD caller 在详情页名称行内编辑中覆盖可变基础字段。
       await http.put('/update/topo/set_template/all_info', {
         id: templateId.value,
         bk_biz_id: bizId.value,
@@ -230,13 +237,23 @@ async function submit() {
       }).catch(() => []))?.[0]?.need_sync
       successDialog.value = true
     } else {
-      // 旧版契约:create/topo/set_template/all_info 一次创建模板+绑定服务模板+属性
-      await http.post('/create/topo/set_template/all_info', {
-        bk_biz_id: bizId.value,
-        name: form.value.name,
-        service_template_ids: form.value.serviceTemplates.map((t) => t.id),
-        attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
-      })
+      // 旧版 all_info 组合接口一次创建模板、绑定服务模板和属性。
+      // 当没有可选属性时，直接复用同一 UI 提交动作对应的基础 CRUD contract；
+      // 带属性时保留 all_info，避免拆成非事务的两次写入。
+      const serviceTemplateIds = form.value.serviceTemplates.map((t) => t.id)
+      if (propertyRows.value.length === 0) {
+        await createSetTemplate(bizId.value, {
+          name: form.value.name,
+          service_template_ids: serviceTemplateIds
+        })
+      } else {
+        await http.post('/create/topo/set_template/all_info', {
+          bk_biz_id: bizId.value,
+          name: form.value.name,
+          service_template_ids: serviceTemplateIds,
+          attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
+        })
+      }
       ElMessage.success('创建成功')
       backToList()
     }

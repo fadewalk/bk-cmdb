@@ -202,7 +202,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
 import {
   getSetTemplateServices, searchSetTemplateStatus, syncSetTemplateToInstances,
-  searchSetTemplateSets, searchModelAttributes, http
+  searchSetTemplateSets, searchModelAttributes, updateSetTemplate, http
 } from '../../api/cmdb'
 import { formatTime } from '../../utils/format-time'
 
@@ -261,7 +261,7 @@ async function saveName() {
   if (!nameEditing.value) return
   nameEditing.value = false
   if (!nameDraft.value || nameDraft.value === templateName.value) return
-  await http.put(`/update/topo/set_template/${templateId.value}/bk_biz_id/${bizId.value}`, { name: nameDraft.value })
+  await updateSetTemplate(bizId.value, templateId.value, { name: nameDraft.value })
   templateName.value = nameDraft.value
   refreshNeedSync()
 }

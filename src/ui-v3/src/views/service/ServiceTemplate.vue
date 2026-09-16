@@ -260,6 +260,7 @@ import {
   searchBusiness, searchServiceTemplates,
   searchServiceCategories, searchSetTemplates, http,
   searchSetTemplateStatus, searchSetTemplateSets,
+  createSetTemplate, deleteSetTemplates,
   createProcTemplate, updateProcTemplate, deleteProcTemplate,
   listModulesByServiceTemplate, getServiceTemplateSyncStatus,
   searchModelAttributes
@@ -530,11 +531,13 @@ async function loadCategories() {
 
 async function removeSetTpl(row) {
   await ElMessageBox.confirm(`确定删除集群模板「${row.name}」?`, '删除确认', { type: 'warning' })
-  await http.delete(`/deletemany/topo/set_template/bk_biz_id/${bizId.value}/`, {
-    data: { set_template_ids: [row.id] }
-  })
-  ElMessage.success('已删除')
-  loadSetTemplates()
+  try {
+    await deleteSetTemplates(bizId.value, [row.id])
+    ElMessage.success('已删除')
+    loadSetTemplates()
+  } catch (e) {
+    ElMessage.error('删除失败: ' + (e?.message || '后端异常'))
+  }
 }
 
 // ---------- 集群模板 详情 / 编辑 / 同步 / 差异 ----------
