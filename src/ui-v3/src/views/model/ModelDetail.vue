@@ -33,6 +33,16 @@
             <div class="meta-value">{{ model.bk_updated_by || '--' }}</div>
           </div>
         </div>
+        <div v-if="model && !model.ispre" class="head-actions">
+          <el-button
+            data-testid="delete-model-button"
+            type="danger"
+            plain
+            :loading="deleting"
+            :disabled="deleting"
+            @click="deleteCurrentModel"
+          >删除模型</el-button>
+        </div>
       </div>
     </div>
 
@@ -263,7 +273,8 @@ import {
   searchFieldGroups, createFieldGroup, updateFieldGroup, deleteFieldGroup, moveAttributeToGroup, deleteAttributeGroupAssoc,
   searchUniques, createUnique, updateUnique, deleteUnique,
   getModelStatistics,
-  searchObjectAssociations, updateObjectAssociation, deleteObjectAssociation
+  searchObjectAssociations, updateObjectAssociation, deleteObjectAssociation,
+  deleteModel
 } from '../../api/cmdb'
 
 const route = useRoute()
@@ -274,6 +285,7 @@ const model = ref(null)
 const modelList = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
 const tab = ref('fields')
 
 const attrs = ref([])
@@ -404,6 +416,34 @@ async function loadModel() {
     m.instCount = st ? st.instance_count : 0
   }
   model.value = m
+}
+
+async function deleteCurrentModel() {
+  if (!model.value || model.value.ispre || deleting.value) return
+  try {
+    await ElMessageBox.confirm(
+      '删除模型和其下所有实例，此动作不可逆，请谨慎操作',
+      '确认要删除该模型？',
+      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  deleting.value = true
+  try {
+    await deleteModel(model.value.id)
+    const readBack = await searchModels({ bk_obj_id: objId })
+    if ((readBack || []).some((item) => item.bk_obj_id === objId)) {
+      throw new Error('删除后模型仍存在')
+    }
+    ElMessage.success('删除成功')
+    router.push('/model/management')
+  } catch (e) {
+    ElMessage.error('删除失败: ' + (e?.message || '后端异常'))
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function loadFieldGroups() {
@@ -705,6 +745,7 @@ onMounted(load)
 .meta-item { min-width: 120px; }
 .meta-label { font-size: 12px; color: #979BA5; margin-bottom: 4px; }
 .meta-value { font-size: 12px; color: #313238; display: flex; align-items: center; gap: 4px; }
+.head-actions { display: flex; justify-content: flex-end; }
 
 .detail-tabs { padding: 0 32px; }
 .tab-body { padding: 0 32px 24px; flex: 1; }
