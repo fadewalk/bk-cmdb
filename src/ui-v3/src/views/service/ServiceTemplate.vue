@@ -71,7 +71,11 @@
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openEditTpl(row)">编辑</el-button>
             <el-button link type="primary" @click.stop="goCreate(row.id)">克隆</el-button>
-            <el-button link type="danger" @click.stop="removeTpl(row)">删除</el-button>
+            <!-- 旧版契约:已应用到模块(module_count>0)时删除置灰不可点,tooltip 不可删除 -->
+            <el-tooltip v-if="(row.module_count ?? 0) > 0" content="不可删除" placement="top">
+              <el-button link disabled>删除</el-button>
+            </el-tooltip>
+            <el-button v-else link type="danger" @click.stop="removeTpl(row)">删除</el-button>
           </template>
         </el-table-column>
         <template #empty>
@@ -262,7 +266,7 @@ import {
   searchSetTemplateStatus, searchSetTemplateSets,
   createSetTemplate, deleteSetTemplates,
   createProcTemplate, updateProcTemplate, deleteProcTemplate,
-  listModulesByServiceTemplate, getServiceTemplateSyncStatus,
+  listModulesByServiceTemplate, getServiceTemplateSyncStatus, getServiceTemplateInstanceStatus,
   searchModelAttributes
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
@@ -714,9 +718,9 @@ async function loadTplModules() {
       bk_module_name: m.bk_module_name || m.name,
       status: null, last_time: '', fail_tips: ''
     }))
-    // 契约: {bk_module_ids, service_template_id} → [{bk_inst_id,status,last_time,fail_tips}]
+    // 契约(老版 template-instance): {bk_module_ids, service_template_id} → [{bk_inst_id,status,last_time,fail_tips}]
     if (tplModules.value.length) {
-      const resp = await getServiceTemplateSyncStatus(bizId.value, {
+      const resp = await getServiceTemplateInstanceStatus(bizId.value, {
         bk_module_ids: tplModules.value.map((m) => m.bk_module_id),
         service_template_id: tplDetailId.value
       }).catch(() => [])

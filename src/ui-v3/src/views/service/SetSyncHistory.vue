@@ -108,8 +108,9 @@ async function reloadPage() {
       page: { start: pagination.limit * (pagination.current - 1), limit: pagination.limit, sort: 'last_time' }
     }
     if (searchDate.value?.length) {
-      params.start_time = searchDate.value[0] || ''
-      params.end_time = searchDate.value[1] || ''
+      // 旧版契约:日期范围扩展为全天边界(开始日 00:00:00 / 结束日 23:59:59)
+      params.start_time = searchDate.value[0] ? `${searchDate.value[0]} 00:00:00` : ''
+      params.end_time = searchDate.value[1] ? `${searchDate.value[1]} 23:59:59` : ''
     }
     const data = await searchSetTemplateSyncHistory(bizId.value, params)
     pagination.count = data?.count || 0

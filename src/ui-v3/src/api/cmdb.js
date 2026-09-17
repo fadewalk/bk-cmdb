@@ -666,9 +666,13 @@ export const searchServiceTemplates = (bizId, page) =>
 export const getServiceTemplateDetail = (templateId) =>
   http.get(`/find/proc/service_template/${templateId}/detail`)
 
-// 服务模板实例同步状态(契约: {bk_module_ids, service_template_id} → [{bk_inst_id,status,last_time,fail_tips}])
+// 服务模板级待同步红点(老版列表契约: {is_partial, service_template_ids} → {service_templates:[{service_template_id,need_sync}]})
 export const getServiceTemplateSyncStatus = (bizId, data) =>
   http.post(`/findmany/proc/service_template/sync_status/biz/${bizId}`, data)
+
+// 服务模板实例同步状态(老版 template-instance 契约: {bk_module_ids, service_template_id} → [{bk_inst_id,status,last_time,fail_tips}])
+export const getServiceTemplateInstanceStatus = (bizId, data) =>
+  http.post(`/findmany/proc/service_template_sync_status/bk_biz_id/${bizId}`, data)
 
 // 服务分类(含使用统计)
 export const searchServiceCategories = (bizId) =>
