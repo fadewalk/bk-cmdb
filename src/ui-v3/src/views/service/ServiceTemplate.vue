@@ -41,7 +41,7 @@
         :data="filteredTemplates"
         v-loading="tplLoading"
         row-class-name="clickable-row"
-        @row-click="(row) => showTplDetail(row)"
+        @row-click="(row) => goTemplateDetails(row)"
       >
         <el-table-column prop="id" label="ID" width="90" sortable>
           <template #default="{ row }">
@@ -338,6 +338,11 @@ function tplRowToForm(row) {
   form.__bind_protocol = row.bindProtocol || '1'
   form.__bind_row_id = row.bindRowId
   return form
+}
+
+// 详情页:旧版行点击进入独立双 tab 详情,不再在列表页打开抽屉
+function goTemplateDetails(row) {
+  router.push(`/business/${bizId.value}/service/template/details/${row.id}`)
 }
 
 // 编辑服务模板:老版为整页编辑表单(service/template/edit/:templateId),跳转到同构页面

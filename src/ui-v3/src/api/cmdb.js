@@ -321,6 +321,15 @@ export const searchHostApplyRelatedTemplate = (data) =>
 // 拓扑路径(节点名 → 路径)
 export const getTopoPath = (bizId, data) =>
   http.post(`/find/topopath/biz/${bizId}`, data)
+export const getTopoNodeHostServiceInstanceCount = async (bizId, moduleIds) => {
+  const ids = [...new Set(moduleIds || [])]
+  const chunks = []
+  for (let i = 0; i < ids.length; i += 1000) chunks.push(ids.slice(i, i + 1000))
+  const results = await Promise.all(chunks.map((chunk) => http.post(`/find/topoinstnode/host_serviceinst_count/${bizId}`, {
+    condition: chunk.map((id) => ({ bk_obj_id: 'module', bk_inst_id: id }))
+  })))
+  return results.flatMap((result) => Array.isArray(result) ? result : (result?.info || result?.data || []))
+}
 // 模块最终规则(模板+模块合并)
 export const getModuleFinalRules = (data) =>
   http.post('/host/findmany/module/get_module_final_rules', data)
@@ -665,6 +674,16 @@ export const searchServiceTemplates = (bizId, page) =>
   http.post('/findmany/proc/service_template', { bk_biz_id: bizId, page })
 export const getServiceTemplateDetail = (templateId) =>
   http.get(`/find/proc/service_template/${templateId}/detail`)
+export const getServiceTemplateAllInfo = (bizId, templateId) =>
+  http.post('/find/proc/service_template/all_info', { bk_biz_id: bizId, id: templateId })
+export const updateServiceTemplate = (bizId, templateId, data) =>
+  http.put('/update/proc/service_template', { bk_biz_id: bizId, id: templateId, ...data })
+export const updateServiceTemplateProperty = (data) =>
+  http.put('/update/proc/service_template/attribute', data)
+export const deleteServiceTemplateProperty = (data) =>
+  http.delete('/delete/proc/service_template/attribute', { data })
+export const deleteServiceTemplate = (bizId, templateId) =>
+  http.delete('/delete/proc/service_template', { data: { bk_biz_id: bizId, service_template_id: templateId } })
 
 // 服务模板级待同步红点(老版列表契约: {is_partial, service_template_ids} → {service_templates:[{service_template_id,need_sync}]})
 export const getServiceTemplateSyncStatus = (bizId, data) =>

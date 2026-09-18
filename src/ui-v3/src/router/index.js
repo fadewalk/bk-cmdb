@@ -58,7 +58,7 @@ const router = createRouter({
         { path: 'business-set/:bizSetId/host/:id', name: 'BizSetHostDetailLegacy', component: () => import('../views/hosts/HostDetail.vue'), meta: { title: '主机详情', bare: true } },
         { path: 'business/sync', name: 'BusinessSync', component: () => import('../views/business-sync/BusinessSync.vue'), meta: { title: '业务同步' } },
         { path: 'business/:bizId/service/template/create', name: 'SvcTplCreate', component: () => import('../views/service/ServiceTemplateCreate.vue'), meta: { title: '新建服务模板' } },
-        { path: 'business/:bizId/service/template/details/:templateId', name: 'SvcTplDetails', component: () => import('../views/service/ServiceTemplate.vue'), meta: { title: '服务模板' } },
+        { path: 'business/:bizId/service/template/details/:templateId', name: 'SvcTplDetails', component: () => import('../views/service/ServiceTemplateDetails.vue'), meta: { title: '服务模板' } },
         { path: 'business/:bizId/service/template/edit/:templateId', name: 'SvcTplEdit', component: () => import('../views/service/ServiceTemplateCreate.vue'), meta: { title: '编辑服务模板' } },
         { path: 'business/:bizId/service/operational/template/:templateId?', name: 'SvcTplOperational', redirect: (to) => (to.params.templateId
           ? { path: `/business/${to.params.bizId}/service/template/details/${to.params.templateId}` }

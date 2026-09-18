@@ -134,7 +134,7 @@
     </el-form>
     <template #footer>
       <el-button @click="$emit('update:visible', false)">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="$emit('save')">保存</el-button>
+      <el-button type="primary" :loading="saving" @click="$emit('save', form)">保存</el-button>
     </template>
   </el-dialog>
 </template>

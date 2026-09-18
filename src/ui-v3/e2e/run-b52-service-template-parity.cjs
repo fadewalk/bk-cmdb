@@ -105,18 +105,15 @@ async function main() {
     assert(await freeDelete.count() === 1 && !(await freeDelete.isDisabled()), 'module_count=0 的模板删除按钮应可点击')
     ok('服务模板删除保护(module_count>0 禁用 + tooltip)')
 
-    // === 2. 抽屉实例同步状态走老版端点 ===
-    await freeRow.click()
-    await page.waitForTimeout(1500)
+    // === 2. 独立详情实例同步状态走老版端点 ===
+    await page.goto(`${BASE}/#/business/99/service/template/details/72?tab=instance`, { waitUntil: 'load' })
+    await page.waitForTimeout(1800)
     const instanceReq = state.instanceStatusRequests.find((b) => b?.service_template_id === 72)
     assert(instanceReq, `未请求实例同步状态端点: ${JSON.stringify(state.instanceStatusRequests)}`)
     assert(Array.isArray(instanceReq.bk_module_ids) && instanceReq.bk_module_ids.includes(901), `实例状态 payload 缺少 bk_module_ids: ${JSON.stringify(instanceReq)}`)
-    // 切到模块实例 tab,断言待同步状态渲染
-    await page.locator('.el-drawer .el-tabs__item:has-text("模块实例")').click()
-    await page.waitForTimeout(1200)
-    const drawerText = await page.locator('.el-drawer').textContent()
-    assert(drawerText.includes('b52-module'), '抽屉实例 tab 未渲染模块名')
-    assert(drawerText.includes('待同步'), '实例状态 need_sync 未渲染为待同步')
+    const detailText = await page.locator('.service-template-details').textContent()
+    assert(detailText.includes('b52-module'), '实例 tab 未渲染模块名')
+    assert(detailText.includes('待同步'), '实例状态 need_sync 未渲染为待同步')
     ok('实例同步状态端点与 payload 契约(service_template_sync_status)')
 
     // === 3. 同步历史日期全天边界 ===
