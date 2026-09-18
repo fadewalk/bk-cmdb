@@ -676,6 +676,10 @@ export const getServiceTemplateDetail = (templateId) =>
   http.get(`/find/proc/service_template/${templateId}/detail`)
 export const getServiceTemplateAllInfo = (bizId, templateId) =>
   http.post('/find/proc/service_template/all_info', { bk_biz_id: bizId, id: templateId })
+export const createServiceTemplateAllInfo = (data) =>
+  http.post('/create/proc/service_template/all_info', data)
+export const updateServiceTemplateAllInfo = (data) =>
+  http.put('/update/proc/service_template/all_info', data)
 export const updateServiceTemplate = (bizId, templateId, data) =>
   http.put('/update/proc/service_template', { bk_biz_id: bizId, id: templateId, ...data })
 export const updateServiceTemplateProperty = (data) =>

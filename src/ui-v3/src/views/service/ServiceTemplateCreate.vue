@@ -162,7 +162,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import { useBizStore } from '../../stores/biz'
-import { searchServiceCategories, searchModelAttributes, http } from '../../api/cmdb'
+import { searchServiceCategories, searchModelAttributes, getServiceTemplateAllInfo, createServiceTemplateAllInfo, updateServiceTemplateAllInfo } from '../../api/cmdb'
 
 const route = useRoute()
 const router = useRouter()
@@ -211,6 +211,31 @@ const procEditingIndex = ref(null)
 const procForm = ref({})
 const processList = ref([])
 
+function normalizeBindRows(bindInfo) {
+  return (bindInfo?.value || []).map((row) => ({
+    row_id: row.row_id || 1,
+    ip: row.ip?.value ?? row.ip ?? '1',
+    protocol: row.protocol?.value ?? row.protocol ?? '1',
+    port: row.port?.value?.value ?? row.port?.value ?? row.port ?? '',
+    enable: row.enable?.value ?? row.enable ?? true
+  }))
+}
+function flattenProcess(t, preserveId = false) {
+  const flat = preserveId ? { process_id: t.id } : {}
+  for (const [key, value] of Object.entries(t.property || {})) {
+    if (value && typeof value === 'object' && 'value' in value && key !== 'bind_info') {
+      flat[key] = value.value && typeof value.value === 'object' && 'value' in value.value ? value.value.value : value.value
+    } else if (key !== 'bind_info') flat[key] = value
+  }
+  flat.__bind_rows = normalizeBindRows(t.property?.bind_info)
+  flat.__bind_port = flat.__bind_rows[0]?.port || ''
+  flat.__bind_ip = flat.__bind_rows[0]?.ip || '1'
+  flat.__bind_protocol = flat.__bind_rows[0]?.protocol || '1'
+  flat.__bind_row_id = flat.__bind_rows[0]?.row_id
+  flat.port = flat.__bind_rows.map((row) => row.port).filter(Boolean).join(',')
+  return flat
+}
+
 function openProcessForm(row = null, index = null) {
   procEditingIndex.value = index
   procForm.value = row ? { ...row } : {}
@@ -231,7 +256,7 @@ function removeProcess(index) {
 
 // ---------- 数据加载 ----------
 async function loadCategories() {
-  const data = await http.post('/findmany/proc/service_category', { bk_biz_id: bizId.value })
+  const data = await searchServiceCategories(bizId.value)
   allCategories.value = data?.info || []
   // 默认选中一级/二级分类(旧版 auto-select):优先选有子分类的一级分类
   const primary = primaryCategories.value.find((c) => allCategories.value.some((s) => s.bk_parent_id === c.id))
@@ -244,43 +269,27 @@ async function loadCategories() {
 
 async function loadClone() {
   if (!cloneId.value) return
-  const data = await http.post('/findmany/proc/service_template', {
-    bk_biz_id: bizId.value,
-    service_category_id: 0,
-    search: '',
-    page: { start: 0, limit: 500 }
-  }).catch(() => null)
-  const tpl = (data?.info || []).find((t) => t.id === cloneId.value)
-  if (!tpl) return
-  form.value.name = tpl.name
-  form.value.secCategory = tpl.service_category_id
-  const sec = allCategories.value.find((c) => c.id === tpl.service_category_id)
-  if (sec) form.value.primaryCategory = sec.bk_parent_id
-  const procData = await http.post('/findmany/proc/proc_template', {
-    bk_biz_id: bizId.value,
-    service_template_id: cloneId.value,
-    page: { start: 0, limit: 100 }
-  }).catch(() => null)
-  processList.value = (procData?.info || []).map((t) => {
-    const flat = {}
-    for (const [k, v] of Object.entries(t.property || {})) {
-      if (v && typeof v === 'object' && 'value' in v) flat[k] = (v.value && typeof v.value === 'object' && 'value' in v.value) ? v.value.value : v.value
-      else flat[k] = v
-    }
-    const bind = t.property?.bind_info?.value?.[0]
-    if (bind?.port?.value) flat.__bind_port = String(bind.port.value?.value ?? bind.port.value)
-    if (bind?.ip?.value) flat.__bind_ip = String(bind.ip.value?.value ?? bind.ip.value)
-    if (bind?.protocol?.value) flat.__bind_protocol = String(bind.protocol.value?.value ?? bind.protocol.value)
-    return flat
+  const data = await getServiceTemplateAllInfo(bizId.value, cloneId.value).catch(() => null)
+  if (!data) return
+  form.value.name = data.name || ''
+  form.value.secCategory = data.service_category_id || null
+  const sec = allCategories.value.find((c) => c.id === data.service_category_id)
+  if (sec) {
+    form.value.primaryCategory = sec.bk_parent_id
+    onPrimaryChange(sec.bk_parent_id)
+    form.value.secCategory = sec.id
+  }
+  propertyRows.value = (data.attributes || []).map((item) => {
+    const prop = moduleAttrs.value.find((p) => p.id === item.bk_attribute_id) || {}
+    return { id: item.bk_attribute_id, bk_property_name: prop.bk_property_name || item.bk_attribute_id, bk_property_id: prop.bk_property_id || '', value: item.bk_property_value ?? '' }
   })
+  // clone 不携带旧进程 id,后端 create all_info 会创建新的进程模板
+  processList.value = (data.processes || []).map((process) => flattenProcess(process, false))
 }
 
 // 编辑模式:老版 find/proc/service_template/all_info 回填(基础信息/属性设置/服务进程)
 async function loadEdit() {
-  const data = await http.post('/find/proc/service_template/all_info', {
-    bk_biz_id: bizId.value,
-    id: editId.value
-  }).catch(() => null)
+  const data = await getServiceTemplateAllInfo(bizId.value, editId.value).catch(() => null)
   if (!data) return
   form.value.name = data.name
   form.value.secCategory = data.service_category_id
@@ -292,18 +301,7 @@ async function loadEdit() {
     return { id: item.bk_attribute_id, bk_property_name: prop.bk_property_name || item.bk_attribute_id, bk_property_id: prop.bk_property_id || '', value: item.bk_property_value ?? '' }
   })
   // 服务进程:展平为表单行并保留进程 id(提交时随 payload 携带)
-  processList.value = (data.processes || []).map((t) => {
-    const flat = { process_id: t.id }
-    for (const [k, v] of Object.entries(t.property || {})) {
-      if (v && typeof v === 'object' && 'value' in v) flat[k] = (v.value && typeof v.value === 'object' && 'value' in v.value) ? v.value.value : v.value
-      else flat[k] = v
-    }
-    const bind = t.property?.bind_info?.value?.[0]
-    if (bind?.port?.value) flat.__bind_port = String(bind.port.value?.value ?? bind.port.value)
-    if (bind?.ip?.value) flat.__bind_ip = String(bind.ip.value?.value ?? bind.ip.value)
-    if (bind?.protocol?.value) flat.__bind_protocol = String(bind.protocol.value?.value ?? bind.protocol.value)
-    return flat
-  })
+    processList.value = (data.processes || []).map((t) => flattenProcess(t, true))
 }
 
 onMounted(async () => {
@@ -330,27 +328,16 @@ function buildProperty(form) {
     if (f.bk_property_id === 'bind_info') continue
     const v = form[f.bk_property_id]
     const hasValue = v !== '' && v !== null && v !== undefined
-    prop[f.bk_property_id] = {
-      value: hasValue ? v : (f.bk_property_type === 'bool' ? false : null),
-      as_default_value: hasValue
+    prop[f.bk_property_id] = { value: hasValue ? v : (f.bk_property_type === 'bool' ? false : null), as_default_value: hasValue }
+  }
+  if (!processAttrs.value.length) {
+    for (const key of ['bk_func_name', 'bk_process_name', 'user', 'work_path', 'start_cmd', 'stop_cmd', 'description']) {
+      if (form[key] !== undefined) prop[key] = { value: form[key] || null, as_default_value: Boolean(form[key]) }
     }
   }
-  // 旧版表单不重复出现进程别名,提交时跟随进程名称
-  if (!prop.bk_process_name || prop.bk_process_name.value == null) {
-    prop.bk_process_name = { value: form.bk_func_name, as_default_value: true }
-  }
-  if (form.__bind_port) {
-    prop.bind_info = {
-      value: [{
-        row_id: form.__bind_row_id ?? 1,
-        ip: { value: form.__bind_ip || '1', as_default_value: true },
-        port: { value: String(form.__bind_port), as_default_value: true },
-        protocol: { value: form.__bind_protocol || '1', as_default_value: true },
-        enable: { value: true, as_default_value: true }
-      }],
-      as_default_value: true
-    }
-  }
+  if (!prop.bk_process_name || prop.bk_process_name.value == null) prop.bk_process_name = { value: form.bk_func_name, as_default_value: true }
+  const rows = (form.__bind_rows || []).filter((row) => row.port !== '' && row.port !== null && row.port !== undefined)
+  prop.bind_info = { value: rows.map((row, index) => ({ row_id: row.row_id || index + 1, ip: { value: row.ip || '1', as_default_value: true }, port: { value: String(row.port), as_default_value: true }, protocol: { value: row.protocol || '1', as_default_value: true }, enable: { value: row.enable !== false, as_default_value: true } })), as_default_value: true }
   return prop
 }
 
@@ -380,7 +367,7 @@ async function submit() {
   try {
     if (editId.value) {
       // 老版契约:全量更新 PUT update/proc/service_template/all_info,进程携带已有 id
-      await http.put('/update/proc/service_template/all_info', {
+      await updateServiceTemplateAllInfo({
         id: editId.value,
         bk_biz_id: bizId.value,
         name: form.value.name,
@@ -396,7 +383,7 @@ async function submit() {
       router.push(`/business/${bizId.value}/service/template/details/${editId.value}`)
     } else {
       // 旧版 all_info 接口:一次创建模板+进程+属性
-      await http.post('/create/proc/service_template/all_info', {
+      await createServiceTemplateAllInfo({
         bk_biz_id: bizId.value,
         name: form.value.name,
         service_category_id: form.value.secCategory,
