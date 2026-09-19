@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"configcenter/src/apimachinery/discovery"
 	"configcenter/src/apimachinery/rest"
@@ -87,14 +88,11 @@ func (h *health) HealthCheck(moduleName string) (healthy bool, err error) {
 		return false, fmt.Errorf("unsupported health module: %s", moduleName)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	resp := new(metric.HealthResponse)
 	client := rest.NewRESTClient(h.capability, "/")
-	err = client.Get().
-		WithContext(context.Background()).
-		SubResourcef("/healthz").
-		Body(nil).
-		Do().
-		Into(resp)
+	err = client.Get().WithContext(ctx).SubResourcef("/healthz").Body(nil).Do().Into(resp)
 
 	if err != nil {
 		return false, err

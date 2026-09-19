@@ -121,6 +121,17 @@ services:
       CMDB_SESSION_SECRET: ${CMDB_SESSION_SECRET:-}
     ports:
       - "127.0.0.1:8090:8090"
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+      - /run:rw,noexec,nosuid,size=16m
+    volumes:
+      - cmdb-logs:/data/cmdb/logs
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -134,3 +145,4 @@ services:
 volumes:
   mongodb-data:
   mongo-key:
+  cmdb-logs:

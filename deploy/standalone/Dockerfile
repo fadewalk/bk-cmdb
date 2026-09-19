@@ -44,7 +44,7 @@ COPY . .
 # 所有 standalone 服务显式以 open_source 配置运行,不依赖腾讯蓝鲸平台。
 RUN set -eux; \
     mkdir -p /out; \
-    targets="apiserver:cmdb_apiserver web_server:cmdb_webserver scene_server/admin_server:cmdb_adminserver scene_server/topo_server:cmdb_toposerver scene_server/host_server:cmdb_hostserver scene_server/proc_server:cmdb_procserver scene_server/event_server:cmdb_eventserver scene_server/task_server:cmdb_taskserver scene_server/datacollection:cmdb_datacollection scene_server/operation_server:cmdb_operationserver scene_server/cloud_server:cmdb_cloudserver source_controller/coreservice:cmdb_coreservice source_controller/cacheservice:cmdb_cacheservice"; \
+    targets="apiserver:cmdb_apiserver web_server:cmdb_webserver scene_server/admin_server:cmdb_adminserver scene_server/topo_server:cmdb_toposerver scene_server/host_server:cmdb_hostserver scene_server/proc_server:cmdb_procserver scene_server/event_server:cmdb_eventserver scene_server/task_server:cmdb_taskserver scene_server/datacollection:cmdb_datacollection scene_server/operation_server:cmdb_operationserver source_controller/coreservice:cmdb_coreservice source_controller/cacheservice:cmdb_cacheservice"; \
     case "${STANDALONE_PROFILE}" in \
       core) ;; \
       cloud) targets="${targets} scene_server/cloud_server:cmdb_cloudserver" ;; \
@@ -90,9 +90,14 @@ COPY deploy/standalone/configs/extra.yaml     ${CMDB_HOME}/cmdb_adminserver/conf
 COPY deploy/standalone/configs/web.yaml       ${CMDB_HOME}/cmdb_webserver/web.yaml
 
 COPY deploy/standalone/run.sh /run.sh
-RUN chmod +x /run.sh && mkdir -p ${CMDB_HOME}/logs
+RUN chmod 0755 /run.sh \
+    && groupadd --system --gid 10001 cmdb && useradd --system --uid 10001 --gid 10001 --home-dir ${CMDB_HOME} --no-create-home cmdb \
+    && mkdir -p ${CMDB_HOME}/logs ${CMDB_HOME}/cmdb_webserver/web ${CMDB_HOME}/cmdb_adminserver/configures \
+    && chown -R 10001:10001 ${CMDB_HOME}
 
 WORKDIR ${CMDB_HOME}
 EXPOSE 8090
+
+USER 10001:10001
 
 ENTRYPOINT ["/run.sh"]

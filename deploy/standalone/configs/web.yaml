@@ -54,17 +54,6 @@ webServer:
       - profile
       - email
     stateTTL: 600
-  oidc:
-    enabled: false
-    issuerUrl:
-    clientId:
-    clientSecret:
-    redirectUrl: http://localhost:8090/login/oidc/callback
-    scopes:
-      - openid
-      - profile
-      - email
-    stateTTL: 600
   auth:
     enabled: false
     bootstrapUsers:
