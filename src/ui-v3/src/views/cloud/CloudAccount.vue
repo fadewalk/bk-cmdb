@@ -176,6 +176,7 @@ import {
 const keyword = ref('')
 const rows = ref([])
 const total = ref(0)
+const loading = ref(false)
 const page = ref(1)
 const limit = ref(20)
 const loadError = ref('')

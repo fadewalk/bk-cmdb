@@ -10,7 +10,7 @@ const scripts = [
   'run-b15-batch-a.cjs', 'run-b16-batch-b.cjs', 'run-b17-batch-c.cjs', 'run-b18.cjs', 'run-b20.cjs',
   'run-b24.cjs', 'run-b25.cjs', 'run-b26.cjs', 'run-b27.cjs', 'run-b28.cjs', 'run-b29.cjs', 'run-b30.cjs', 'run-b31.cjs', 'run-b32.cjs', 'run-b33.cjs', 'run-b34.cjs', 'run-b35.cjs', 'run-field-template.cjs',
   'run-b38.cjs', 'run-b39.cjs', 'run-b40.cjs', 'run-b41.cjs', 'run-login.cjs', 'run-iam.cjs', 'run-core-domains.cjs', 'run-core-domains-mock.cjs', 'run-core-domains-errors.cjs', 'run-b45.cjs',
-  'run-b49-set-template-crud.cjs', 'run-b51-host-apply-contract.cjs', 'run-b52-service-template-parity.cjs', 'run-b53-service-template-detail.cjs', 'run-b54-service-template-details.cjs', 'run-b55-service-template-clone.cjs', 'run-b56-service-template-error-states.cjs',
+  'run-b49-set-template-crud.cjs', 'run-b51-host-apply-contract.cjs', 'run-b52-service-template-parity.cjs', 'run-b53-service-template-detail.cjs', 'run-b54-service-template-details.cjs', 'run-b55-service-template-clone.cjs', 'run-b56-service-template-error-states.cjs', 'run-b57-error-retry-smoke.cjs',
   'run-b46.cjs', 'run-b47-operation-position.cjs', 'run-b48.cjs'
 ]
 
