@@ -139,6 +139,11 @@ func (s *service) URLFilterChan(req *restful.Request, resp *restful.Response, ch
 		return
 	}
 
+	if len(servers) == 0 {
+		err = fmt.Errorf("no available %s server endpoints", kind)
+		return
+	}
+
 	if strings.HasPrefix(servers[0], "https://") {
 		req.Request.URL.Host = servers[0][8:]
 		req.Request.URL.Scheme = "https"
@@ -220,6 +225,11 @@ func (s *service) urlFilterChan(req *restful.Request, resp *restful.Response, ch
 
 	servers, err := discovery.GetServers()
 	if err != nil {
+		return
+	}
+
+	if len(servers) == 0 {
+		err = fmt.Errorf("no available backend server endpoints")
 		return
 	}
 

@@ -20,8 +20,14 @@ function hash(file) {
 function command(command, args) {
   try { return { ok: true, stdout: execFileSync(command, args, { encoding: 'utf8', timeout: 15000 }).trim() } } catch (error) { return { ok: false, stdout: '', error: error.message } }
 }
-function check(name, passed, detail, evidence = []) {
-  return { name, status: passed === true ? 'passed' : 'blocked', detail, evidence }
+function evidenceClassFor(name) {
+  if (/runtime|port exposure|profile matches|script matches|non-root|rootfs|capabilities/i.test(name)) return 'isolated-runtime'
+  if (/OIDC|skip-login|TLS verification|secret/i.test(name)) return 'source'
+  if (/CSRF|SBOM|backup/i.test(name)) return 'external-infra'
+  return 'source'
+}
+function check(name, passed, detail, evidence = [], evidenceClass = evidenceClassFor(name), requiredForRelease = true) {
+  return { name, status: passed === true ? 'passed' : 'blocked', evidenceClass, requiredForRelease, detail, evidence }
 }
 function has(text, pattern) { return pattern.test(text) }
 function inspectContainers() {
