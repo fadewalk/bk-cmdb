@@ -13,7 +13,10 @@
       </div>
     </div>
 
-    <div class="sync-main">
+      <el-alert v-if="initError" class="init-error" type="error" :closable="false" show-icon>
+        {{ initError }} <el-button link type="primary" @click="initialize">重试</el-button>
+      </el-alert>
+      <div class="sync-main">
       <div v-for="diff in diffList" :key="diff.setId" class="set-container">
         <div class="set-head" @click="toggleSet(diff)">
           <i :class="['bk-cmdb-icon icon-cc-triangle set-arrow', { collapsed: !setGroup[diff.setId]?.expanded }]" />
@@ -88,7 +91,10 @@
               </div>
             </div>
           </div>
-          <div v-if="!setGroup[diff.setId]?.loading && !setGroup[diff.setId]?.propertyDiff?.length && !setGroup[diff.setId]?.moduleDiff?.module_diffs?.length" class="no-diff">
+          <div v-if="setGroup[diff.setId]?.error" class="diff-error">
+            {{ setGroup[diff.setId].error }} <el-button link type="primary" @click.stop="loadDiff(diff.setId)">重试</el-button>
+          </div>
+          <div v-else-if="!setGroup[diff.setId]?.loading && !setGroup[diff.setId]?.propertyDiff?.length && !setGroup[diff.setId]?.moduleDiff?.module_diffs?.length" class="no-diff">
             暂无变更，集群与模板保持一致
           </div>
         </div>
@@ -96,6 +102,7 @@
     </div>
 
     <div class="sync-footer">
+      <el-alert v-if="syncError" class="sync-submit-error" type="error" :closable="false" show-icon>{{ syncError }}</el-alert>
       <el-tooltip :content="denySync ? '请先删除不可同步的实例' : ''" :disabled="!denySync" placement="top">
         <span>
           <el-button type="primary" :loading="syncing" :disabled="denySync || !diffList.length" @click="confirmSync">确认同步</el-button>
@@ -126,6 +133,8 @@ const setIds = computed(() => String(route.query.sets || '').split(',').map(Numb
 
 const pageLoading = ref(false)
 const syncing = ref(false)
+const initError = ref('')
+const syncError = ref('')
 const setProperties = ref([])
 const setGroup = reactive({})
 const diffList = ref([])
@@ -163,87 +172,61 @@ function removeSet(diff) {
 async function loadDiff(setId) {
   const group = setGroup[setId]
   group.loading = true
+  group.error = ''
+  group.loaded = false
   try {
     const data = await diffSetTemplateWithInstances(bizId.value, setTemplateId.value, { bk_set_id: setId })
     group.moduleHostCount = data?.module_host_count || {}
     const { attributes, ...moduleDiff } = data?.difference || {}
-    group.propertyDiff = (attributes || []).map((attr) => ({
-      property: setProperties.value.find((prop) => prop.id === attr.id),
-      ...attr
-    }))
+    group.propertyDiff = (attributes || []).map((attr) => ({ property: setProperties.value.find((prop) => prop.id === attr.id), ...attr }))
     group.moduleDiff = moduleDiff
     group.loaded = true
   } catch (e) {
-    group.loaded = true
-  } finally {
-    group.loading = false
-  }
+    group.error = e?.message || '差异加载失败'
+    group.propertyDiff = []
+    group.moduleDiff = {}
+  } finally { group.loading = false }
 }
 
 async function confirmSync() {
   syncing.value = true
+  syncError.value = ''
   try {
-    await syncSetTemplateToInstances(bizId.value, setTemplateId.value, {
-      bk_set_ids: diffList.value.map((item) => item.setId)
-    })
+    await syncSetTemplateToInstances(bizId.value, setTemplateId.value, { bk_set_ids: diffList.value.map((item) => item.setId) })
     ElMessage.success('提交同步成功')
     router.push(`/business/${bizId.value}/set/template?action=details&templateId=${setTemplateId.value}&tab=instance`)
   } catch (e) {
-    // http 拦截器已提示
-  } finally {
-    syncing.value = false
-  }
+    syncError.value = e?.message || '同步提交失败'
+  } finally { syncing.value = false }
 }
 
 function goBack() {
   router.push(`/business/${bizId.value}/set/template?action=details&templateId=${setTemplateId.value}&tab=instance`)
 }
 
-onMounted(async () => {
-  // 老版深链无 sets 时回到集群模板同步入口
-  if (!setIds.value.length) {
-    router.replace(`/business/${bizId.value}/set/template?action=sync&templateId=${setTemplateId.value}`)
-    return
-  }
+async function initialize() {
+  initError.value = ''
   pageLoading.value = true
   try {
-    const [props, removedStatus, topo] = await Promise.all([
-      searchModelAttributes('set').catch(() => []),
-      getSetTemplateRemovedModuleStatus(bizId.value, setTemplateId.value, { bk_set_ids: setIds.value }).catch(() => []),
-      getTopoPath(bizId.value, {
-        topo_nodes: setIds.value.map((id) => ({ bk_obj_id: 'set', bk_inst_id: id }))
-      }).catch(() => ({ nodes: [] }))
-    ])
+    const props = await searchModelAttributes('set')
+    const removedStatus = await getSetTemplateRemovedModuleStatus(bizId.value, setTemplateId.value, { bk_set_ids: setIds.value })
+    const topo = await getTopoPath(bizId.value, { topo_nodes: setIds.value.map((id) => ({ bk_obj_id: 'set', bk_inst_id: id })) }).catch(() => ({ nodes: [] }))
     setProperties.value = props || []
-    // 被移除模块含主机的集群不可同步,排前并标记(老版契约)
     const removedMap = new Map((Array.isArray(removedStatus) ? removedStatus : removedStatus?.info || []).map((item) => [item.id, item.has_host]))
-    diffList.value = setIds.value
-      .map((setId) => ({ setId, denySync: Boolean(removedMap.get(setId)) }))
-      .sort((a, b) => Number(b.denySync) - Number(a.denySync))
+    diffList.value = setIds.value.map((setId) => ({ setId, denySync: Boolean(removedMap.get(setId)) })).sort((a, b) => Number(b.denySync) - Number(a.denySync))
     const pathMap = {}
-    for (const node of topo?.nodes || []) {
-      pathMap[node.topo_node?.bk_inst_id] = (node.topo_path || []).slice().reverse().map((p) => p.bk_inst_name).join(' / ')
-    }
-    for (const diff of diffList.value) {
-      setGroup[diff.setId] = {
-        topoPath: pathMap[diff.setId] || `Set #${diff.setId}`,
-        propertyDiff: [],
-        moduleDiff: {},
-        moduleHostCount: {},
-        expanded: false,
-        loaded: false,
-        loading: false
-      }
-    }
-    // 默认展开第 1 个(老版契约)
-    if (diffList.value.length) {
-      const first = diffList.value[0]
-      setGroup[first.setId].expanded = true
-      loadDiff(first.setId)
-    }
-  } finally {
-    pageLoading.value = false
-  }
+    for (const node of topo?.nodes || []) pathMap[node.topo_node?.bk_inst_id] = (node.topo_path || []).slice().reverse().map((p) => p.bk_inst_name).join(' / ')
+    for (const diff of diffList.value) setGroup[diff.setId] = { topoPath: pathMap[diff.setId] || `Set #${diff.setId}`, propertyDiff: [], moduleDiff: {}, moduleHostCount: {}, expanded: false, loaded: false, loading: false, error: '' }
+    if (diffList.value.length) { const first = diffList.value[0]; setGroup[first.setId].expanded = true; loadDiff(first.setId) }
+  } catch (e) {
+    diffList.value = []
+    initError.value = e?.message || '同步差异初始化失败'
+  } finally { pageLoading.value = false }
+}
+
+onMounted(async () => {
+  if (!setIds.value.length) { router.replace(`/business/${bizId.value}/set/template?action=sync&templateId=${setTemplateId.value}`); return }
+  await initialize()
 })
 </script>
 

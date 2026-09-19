@@ -1,6 +1,8 @@
 <template>
   <div class="template-instance">
-    <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" />
+    <el-alert v-if="error" type="error" :closable="false" show-icon>
+      {{ error }} <el-button link type="primary" @click="reload">重试</el-button>
+    </el-alert>
     <div class="toolbar">
       <el-button type="primary" :disabled="!selected.length" @click="goSync(selected)">批量同步</el-button>
       <el-select v-model="statusFilter" style="width: 150px" @change="page.current = 1"><el-option v-for="item in statusFilters" :key="item.value" :label="item.label" :value="item.value" /></el-select>
@@ -18,7 +20,7 @@
       <el-table-column label="最近同步" width="170"><template #default="{ row }">{{ row.last_time || '--' }}</template></el-table-column>
       <el-table-column label="操作" width="180"><template #default="{ row }"><el-button link type="primary" :disabled="isSyncDisabled(row.status)" @click="goSync([row])">{{ row.status === 'failure' ? '重试' : '去同步' }}</el-button><el-tooltip content="目标包含主机或由集群模板生成,不允许删除" :disabled="!isDeleteDisabled(row)"><span><el-button link type="danger" :disabled="isDeleteDisabled(row)" @click="remove(row)">删除</el-button></span></el-tooltip></template></el-table-column>
     </el-table>
-    <el-empty v-if="!loading && !filteredRows.length" description="该服务模板尚未绑定模块" :image-size="70" />
+    <el-empty v-if="!loading && !error && !filteredRows.length" description="该服务模板尚未绑定模块" :image-size="70" />
     <el-pagination v-model:current-page="page.current" :page-size="page.limit" :total="filteredRows.length" layout="total,prev,pager,next,sizes" :page-sizes="[10,20,50]" @size-change="(size) => { page.limit = size; page.current = 1 }" />
   </div>
 </template>
@@ -52,9 +54,9 @@ async function load() {
     const modules = moduleData?.info || []
     const ids = modules.map((item) => item.bk_module_id || item.id).filter(Boolean)
     const [topos, counts, statuses] = await Promise.all([
-      ids.length ? getTopoPath(props.bizId, { topo_nodes: ids.map((id) => ({ bk_obj_id: 'module', bk_inst_id: id })) }).catch(() => ({ nodes: [] })) : { nodes: [] },
-      ids.length ? getTopoNodeHostServiceInstanceCount(props.bizId, ids).catch(() => []) : [],
-      ids.length ? getServiceTemplateInstanceStatus(props.bizId, { bk_module_ids: ids, service_template_id: props.templateId }).catch(() => []) : []
+      ids.length ? getTopoPath(props.bizId, { topo_nodes: ids.map((id) => ({ bk_obj_id: 'module', bk_inst_id: id })) }) : { nodes: [] },
+      ids.length ? getTopoNodeHostServiceInstanceCount(props.bizId, ids) : [],
+      ids.length ? getServiceTemplateInstanceStatus(props.bizId, { bk_module_ids: ids, service_template_id: props.templateId }) : []
     ])
     const topoNodes = topos?.nodes || topos?.data?.nodes || []
     rows.value = modules.map((item) => {

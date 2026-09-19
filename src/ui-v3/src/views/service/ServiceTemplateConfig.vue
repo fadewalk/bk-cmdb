@@ -1,6 +1,8 @@
 <template>
   <div class="template-config" v-loading="loading">
-    <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" />
+    <el-alert v-if="error" type="error" :closable="false" show-icon>
+      {{ error }} <el-button link type="primary" @click="load">重试</el-button>
+    </el-alert>
     <section class="detail-section">
       <div class="section-title">基础信息</div>
       <div class="detail-grid"><span>模板名称</span><strong>{{ info.name || '--' }}</strong></div>
@@ -26,7 +28,7 @@
           </template>
         </div>
       </template>
-      <el-empty v-else-if="!loading" description="当前模板未配置属性" :image-size="60" />
+      <el-empty v-else-if="!loading && !error" description="当前模板未配置属性" :image-size="60" />
     </section>
     <section class="detail-section">
       <div class="section-title process-title"><span>服务进程</span><el-button type="primary" size="small" @click="openCreateProcess">新增进程模板</el-button></div>
@@ -37,7 +39,7 @@
         <el-table-column label="工作路径" min-width="180"><template #default="{ row }">{{ row.work_path || '--' }}</template></el-table-column>
         <el-table-column label="操作" width="130"><template #default="{ row }"><el-button link type="primary" @click="openEditProcess(row)">编辑</el-button><el-button link type="danger" @click="removeProcess(row)">删除</el-button></template></el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !processRows.length" description="该模板暂无进程" :image-size="60" />
+      <el-empty v-if="!loading && !error && !processRows.length" description="该模板暂无进程" :image-size="60" />
     </section>
     <ProcessFormDialog :visible="processDialog" title="进程模板" mode="template" :form="processForm" :attrs="processAttrs" :saving="saving" @update:visible="processDialog = $event" @save="saveProcess" />
   </div>
@@ -118,9 +120,9 @@ async function load() {
   try {
     const [detail, attrs, procAttrs, categoryData, processes] = await Promise.all([
       getServiceTemplateAllInfo(props.bizId, props.templateId),
-      searchModelAttributes('module', props.bizId).catch(() => []),
-      searchModelAttributes('process', props.bizId).catch(() => []),
-      searchServiceCategories(props.bizId).catch(() => []),
+      searchModelAttributes('module', props.bizId),
+      searchModelAttributes('process', props.bizId),
+      searchServiceCategories(props.bizId),
       searchProcTemplates(props.bizId, { service_template_id: props.templateId, page: { start: 0, limit: 100 } })
     ])
     info.value = detail || info.value; moduleAttrs.value = attrs || []; processAttrs.value = procAttrs || []

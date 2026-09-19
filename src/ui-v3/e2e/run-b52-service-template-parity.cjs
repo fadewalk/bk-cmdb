@@ -72,6 +72,9 @@ async function main() {
     info: [{ bk_module_id: 901, bk_module_name: 'b52-module' }]
   })))
 
+  await page.route('**/api/v3/find/topopath/biz/99', (route) => routeJson(route, envelope(true, { nodes: [{ topo_node: { bk_inst_id: 901 }, topo_path: [{ bk_inst_name: 'b52-module' }, { bk_inst_name: 'b52-biz' }] }] })))
+  await page.route('**/api/v3/find/topoinstnode/host_serviceinst_count/99', (route) => routeJson(route, envelope(true, [{ bk_inst_id: 901, host_count: 0, service_instance_count: 1 }])))
+
   // 实例同步状态(老版端点):捕获 payload
   await page.route('**/api/v3/findmany/proc/service_template_sync_status/bk_biz_id/99', (route, req) => {
     state.instanceStatusRequests.push(req.postDataJSON())
