@@ -92,7 +92,13 @@ COPY deploy/standalone/configs/web.yaml       ${CMDB_HOME}/cmdb_webserver/web.ya
 COPY deploy/standalone/run.sh /run.sh
 RUN chmod 0755 /run.sh \
     && groupadd --system --gid 10001 cmdb && useradd --system --uid 10001 --gid 10001 --home-dir ${CMDB_HOME} --no-create-home cmdb \
-    && mkdir -p ${CMDB_HOME}/logs ${CMDB_HOME}/cmdb_webserver/web ${CMDB_HOME}/cmdb_adminserver/configures \
+    && mkdir -p ${CMDB_HOME}/logs \
+      ${CMDB_HOME}/cmdb_adminserver/logs ${CMDB_HOME}/cmdb_coreservice/logs ${CMDB_HOME}/cmdb_cacheservice/logs \
+      ${CMDB_HOME}/cmdb_toposerver/logs ${CMDB_HOME}/cmdb_hostserver/logs ${CMDB_HOME}/cmdb_procserver/logs \
+      ${CMDB_HOME}/cmdb_eventserver/logs ${CMDB_HOME}/cmdb_taskserver/logs ${CMDB_HOME}/cmdb_datacollection/logs \
+      ${CMDB_HOME}/cmdb_operationserver/logs ${CMDB_HOME}/cmdb_apiserver/logs ${CMDB_HOME}/cmdb_webserver/logs \
+      ${CMDB_HOME}/cmdb_cloudserver/logs ${CMDB_HOME}/cmdb_synchronizeserver/logs ${CMDB_HOME}/cmdb_transferservice/logs \
+      ${CMDB_HOME}/cmdb_webserver/web ${CMDB_HOME}/cmdb_adminserver/configures \
     && chown -R 10001:10001 ${CMDB_HOME}
 
 WORKDIR ${CMDB_HOME}

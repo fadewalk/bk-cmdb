@@ -50,7 +50,7 @@ function audit() {
   const portBindings = cmdb?.HostConfig?.PortBindings?.['8090/tcp'] || []
   const externalPort = portBindings.some(binding => ['', '0.0.0.0', '::'].includes(binding.HostIp))
   const profile = env(cmdb, 'STANDALONE_PROFILE')
-  const cloudProcess = command('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'pgrep -af cmdb_cloudserver || true'])
+  const cloudProcess = command('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'ps -eo comm= | grep -x cmdb_cloudserver || true'])
   const runHash = command('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'sha256sum /run.sh 2>/dev/null | cut -d" " -f1'])
   const checkoutRunHash = hash('deploy/standalone/run.sh')
 

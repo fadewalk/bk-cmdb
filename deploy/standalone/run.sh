@@ -113,8 +113,8 @@ start_svc() {
         exit 1
     fi
     cd "${CMDB_HOME}/${name}"
-    mkdir -p logs
-    nohup "./${name}" "$@" > logs/std.log 2>&1 &
+    # read-only rootfs 下服务目录不可写; stdout 统一写入已挂载的日志 volume
+    nohup "./${name}" "$@" > "${LOG_DIR}/${name}.std.log" 2>&1 &
     echo "started ${name} (pid $!) on port ${port}"
 }
 
