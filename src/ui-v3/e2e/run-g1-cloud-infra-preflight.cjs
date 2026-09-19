@@ -4,7 +4,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const { execFileSync } = require('node:child_process')
 
-const ROOT = require('node:path').resolve(__dirname, '../..')
+const ROOT = require('node:path').resolve(__dirname, '../../..')
 const CONTEXT = process.env.G1_CLOUD_DOCKER_CONTEXT || 'colima-xwssd'
 const CONTAINER = process.env.G1_CLOUD_CONTAINER || 'cmdb'
 const BASE = process.env.UI_V3_BASE_URL || 'http://localhost:8090'
@@ -44,7 +44,10 @@ function envValue(container, key) {
 async function httpCheck(path) {
   try {
     const response = await fetch(`${BASE}${path}`, { redirect: 'manual' })
-    return { status: response.status, ok: response.status >= 200 && response.status < 300 }
+    const text = await response.text()
+    let body = null
+    try { body = JSON.parse(text) } catch { /* retain non-JSON response */ }
+    return { status: response.status, ok: response.status >= 200 && response.status < 300, result: body?.result, body }
   } catch (error) {
     return { status: null, ok: false, error: error.message }
   }
@@ -72,8 +75,8 @@ async function runPreflight() {
   checks.push(check(!externallyBound, 'web port is loopback-bound', JSON.stringify(portBindings)))
 
   const profile = envValue(cmdb, 'STANDALONE_PROFILE')
-  const processProbe = run('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'pgrep -af cmdb_cloudserver || true'])
-  const cloudRunning = Boolean(processProbe.stdout)
+  const processProbe = run('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'ps -eo pid=,args= | grep -E "[c]mdb_cloudserver( |$)" || true'])
+  const cloudRunning = processProbe.ok && Boolean(processProbe.stdout)
   checks.push(check(!(profile === 'core' && cloudRunning), 'core profile does not run cloudserver', JSON.stringify({ profile, cloudRunning, process: processProbe.stdout })))
 
   const checkoutRun = `${ROOT}/deploy/standalone/run.sh`
@@ -84,8 +87,8 @@ async function runPreflight() {
 
   const web = await httpCheck('/')
   checks.push(check(web.ok, 'web root ready', JSON.stringify(web)))
-  const health = await httpCheck('/api/v3/healthz')
-  checks.push(check(health.ok, 'API healthz ready', JSON.stringify(health)))
+  const health = await httpCheck('/healthz')
+  checks.push(check(health.ok && health.result === true, 'API healthz ready', JSON.stringify({ probePath: '/healthz', ...health })))
 
   const blocked = checks.filter(item => item.status === 'blocked')
   return {

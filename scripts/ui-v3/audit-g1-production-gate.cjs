@@ -50,7 +50,9 @@ function audit() {
   const portBindings = cmdb?.HostConfig?.PortBindings?.['8090/tcp'] || []
   const externalPort = portBindings.some(binding => ['', '0.0.0.0', '::'].includes(binding.HostIp))
   const profile = env(cmdb, 'STANDALONE_PROFILE')
-  const cloudProcess = command('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'ps -eo comm= | grep -x cmdb_cloudserver || true'])
+  const cloudProcess = command('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'ps -eo pid=,args= | grep -E "[c]mdb_cloudserver( |$)" || true'])
+  const cloudProbeOk = cloudProcess.ok
+  const cloudRunning = cloudProbeOk && Boolean(cloudProcess.stdout)
   const runHash = command('docker', ['--context', CONTEXT, 'exec', CONTAINER, 'sh', '-lc', 'sha256sum /run.sh 2>/dev/null | cut -d" " -f1'])
   const checkoutRunHash = hash('deploy/standalone/run.sh')
 
@@ -60,15 +62,15 @@ function audit() {
   checks.push(check('skip-login disabled in checkout', !has(web + common, /skip-login|skip_login/i), 'skip-login must not be enabled for production', ['deploy/standalone/configs/web.yaml', 'deploy/standalone/configs/common.yaml']))
   checks.push(check('TLS verification is strict', !has(web + common + compose, /insecureSkipVerify\s*:\s*true|insecure_skip_verify\s*:\s*true/i), 'insecure TLS verification remains configured or not explicitly disabled', ['deploy/standalone/configs/web.yaml', 'deploy/standalone/configs/common.yaml']))
   checks.push(check('external port exposure blocked', !externalPort, JSON.stringify(portBindings), ['docker inspect runtime']))
-  checks.push(check('runtime profile matches expected process set', !(profile === 'core' && cloudProcess.stdout), JSON.stringify({ profile, cloudProcess: cloudProcess.stdout }), ['docker inspect/runtime process probe']))
+  checks.push(check('runtime profile matches expected process set', cloudProbeOk && !(profile === 'core' && cloudRunning), JSON.stringify({ profile, probeOk: cloudProbeOk, cloudRunning, process: cloudProcess.stdout }), ['docker inspect/runtime process probe'], 'isolated-runtime'))
   checks.push(check('runtime script matches checkout', Boolean(checkoutRunHash && runHash.stdout && checkoutRunHash === runHash.stdout), JSON.stringify({ checkoutRunHash, runtimeHash: runHash.stdout || null }), ['deploy/standalone/run.sh', 'docker exec /run.sh']))
   checks.push(check('container is non-root', cmdb?.Config?.User && cmdb.Config.User !== '0' && cmdb.Config.User !== 'root', cmdb?.Config?.User || 'default/root', ['docker inspect runtime']))
   checks.push(check('readonly rootfs enabled', cmdb?.HostConfig?.ReadonlyRootfs === true, String(cmdb?.HostConfig?.ReadonlyRootfs), ['docker inspect runtime']))
   checks.push(check('capabilities dropped', Array.isArray(cmdb?.HostConfig?.CapDrop) && cmdb.HostConfig.CapDrop.length > 0, JSON.stringify(cmdb?.HostConfig?.CapDrop || null), ['docker inspect runtime']))
-  checks.push(check('session/DB/Redis/ZK secrets are externalized', has(web + common + compose, /secret|secrets|password|token/i), 'presence only; secret quality/rotation requires external review', ['deployment configs']))
-  checks.push(check('CSRF/cookie hardening documented', has(security, /CSRF|HttpOnly|SameSite|Secure/i), 'documented for follow-up, runtime proof still required', ['docs/architecture/standalone-security-boundary.md']))
-  checks.push(check('SBOM/signature/provenance documented', has(security + reliability, /SBOM|signature|sign|provenance/i), 'documented for release gate, artifact proof still required', ['security/reliability docs']))
-  checks.push(check('backup/restore documented', has(reliability, /backup|restore|PITR/i), 'runbook present; clean restore drill must be bound to release', ['docs/architecture/standalone-reliability-runbook.md']))
+  checks.push(check('session/DB/Redis/ZK secrets are externalized', false, 'external secret manager/rotation evidence required; source keyword presence is not proof', ['external-infra evidence required'], 'external-infra'))
+  checks.push(check('CSRF/cookie hardening documented', false, 'runtime HTTPS cookie/CSRF evidence required', ['external-infra evidence required'], 'external-infra'))
+  checks.push(check('SBOM/signature/provenance documented', false, 'artifact SBOM/signature/provenance evidence required', ['external-infra evidence required'], 'external-infra'))
+  checks.push(check('backup/restore documented', false, 'isolated restore drill and production PITR evidence required', ['external-infra evidence required'], 'external-infra'))
   checks.push(check('dirty worktree blocks clean release', command('git', ['status', '--porcelain']).stdout === '', 'working tree must be clean for release gate', ['git status --porcelain']))
 
   const blocked = checks.filter(item => item.status === 'blocked')

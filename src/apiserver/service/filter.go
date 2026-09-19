@@ -65,7 +65,13 @@ const (
 	CacheType RequestType = "cache"
 )
 
-// URLFilterChan url filter chan
+func selectServerEndpoint(kind RequestType, servers []string) (string, error) {
+	if len(servers) == 0 {
+		return "", fmt.Errorf("no available %s server endpoints", kind)
+	}
+	return servers[0], nil
+}
+
 func (s *service) URLFilterChan(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
 	rid := httpheader.GetRid(req.Request.Header)
 
@@ -139,16 +145,17 @@ func (s *service) URLFilterChan(req *restful.Request, resp *restful.Response, ch
 		return
 	}
 
-	if len(servers) == 0 {
-		err = fmt.Errorf("no available %s server endpoints", kind)
+	server, selectErr := selectServerEndpoint(kind, servers)
+	if selectErr != nil {
+		err = selectErr
 		return
 	}
 
-	if strings.HasPrefix(servers[0], "https://") {
-		req.Request.URL.Host = servers[0][8:]
+	if strings.HasPrefix(server, "https://") {
+		req.Request.URL.Host = server[8:]
 		req.Request.URL.Scheme = "https"
 	} else {
-		req.Request.URL.Host = servers[0][7:]
+		req.Request.URL.Host = server[7:]
 		req.Request.URL.Scheme = "http"
 	}
 
@@ -228,17 +235,18 @@ func (s *service) urlFilterChan(req *restful.Request, resp *restful.Response, ch
 		return
 	}
 
-	if len(servers) == 0 {
-		err = fmt.Errorf("no available backend server endpoints")
+	server, selectErr := selectServerEndpoint("backend", servers)
+	if selectErr != nil {
+		err = selectErr
 		return
 	}
 
 	// set the request server address through discovery
-	if strings.HasPrefix(servers[0], "https://") {
-		req.Request.URL.Host = servers[0][8:]
+	if strings.HasPrefix(server, "https://") {
+		req.Request.URL.Host = server[8:]
 		req.Request.URL.Scheme = "https"
 	} else {
-		req.Request.URL.Host = servers[0][7:]
+		req.Request.URL.Host = server[7:]
 		req.Request.URL.Scheme = "http"
 	}
 

@@ -34,7 +34,7 @@ standalone 是 ZooKeeper + MongoDB + Redis + 一个多进程 `cmdb` 容器：
 ```bash
 docker --context colima-xwssd ps --format '{{.Names}} {{.Status}}'
 docker --context colima-xwssd exec cmdb pgrep -a cmdb_
-docker --context colima-xwssd exec cmdb sh -lc 'grep -a "standalone profile\|WARNING" /data/cmdb/logs/*/std.log 2>/dev/null'
+docker --context colima-xwssd exec cmdb sh -lc 'grep -a "standalone profile\|WARNING" /data/cmdb/logs/cmdb_*.std.log 2>/dev/null'
 ```
 
 在 profile 文档和脚本修正前，不要宣称 core/cloud/full 边界已完全正确。
@@ -54,13 +54,17 @@ TCP 成功不等于 Mongo 已成为可写 primary，也不等于 Redis/ ZK 状�
 
 ### Web 与 API
 
+Standalone 的公开健康探针是根路径 `/healthz`，不是 `/api/v3/healthz`。web `/healthz` 会检查 apiserver；直接检查 apiserver 时使用容器内 `127.0.0.1:8080/healthz`。`/api/v3/healthz` 会被 web backend proxy 当作未知 backend path，不能作为健康探针。
+
+健康判断必须同时检查 HTTP 状态和 JSON 响应的 `result === true`；HTTP 200 不代表依赖 fan-out 全部健康。
+
 ```bash
+curl -fsS http://localhost:8090/healthz
+# 隔离/容器内直接检查 API server
+# docker exec cmdb curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS -o /dev/null -w 'web=%{http_code}\n' http://localhost:8090/
-curl -fsS -o /dev/null -w 'healthz=%{http_code}\n' http://localhost:8090/healthz
 curl -fsS http://localhost:8090/metrics | head
 ```
-
-需要区分：
 
 - `cmdb` 容器是否 Up；
 - `cmdb_webserver` 进程是否存在；
@@ -125,7 +129,7 @@ Change Stream 错误路径存在 Fatal：
 
 ```bash
 docker --context colima-xwssd exec cmdb pgrep -a cmdb_cacheservice
-docker --context colima-xwssd sh -lc 'grep -a -i "watch\|fatal\|resume\|rebuild" /data/cmdb/logs/cmdb_cacheservice/std.log | tail -100'
+docker --context colima-xwssd exec cmdb sh -lc 'grep -a -i "watch\|fatal\|resume\|rebuild" /data/cmdb/logs/cmdb_cacheservice.std.log | tail -100'
 ```
 
 长期修复：
