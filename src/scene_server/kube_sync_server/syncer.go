@@ -49,14 +49,21 @@ func NewSyncer(cfg Config, kube kubernetes.Interface) *Syncer {
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { s.enqueue(obj) },
 			UpdateFunc: func(_, obj interface{}) { s.enqueue(obj) },
-			DeleteFunc: func(obj interface{}) { s.enqueue(obj) },
+			DeleteFunc: func(obj interface{}) { s.enqueueDelete(obj) },
 		})
 	}
 	return s
 }
 
 func (s *Syncer) enqueue(obj interface{}) {
-	deleting := false
+	s.enqueueWithMode(obj, false)
+}
+
+func (s *Syncer) enqueueDelete(obj interface{}) {
+	s.enqueueWithMode(obj, true)
+}
+
+func (s *Syncer) enqueueWithMode(obj interface{}, deleting bool) {
 	var key string
 	var err error
 	switch value := obj.(type) {
@@ -151,25 +158,31 @@ func (s *Syncer) processNext(ctx context.Context) bool {
 	return true
 }
 
+func parseQueueKey(rawKey string) (kind string, deleting bool, key string, err error) {
+	prefixes := []struct {
+		prefix string
+		kind   string
+		delete bool
+	}{
+		{"delete:namespace:", "namespace", true}, {"delete:node:", "node", true}, {"delete:pod:", "pod", true},
+		{"namespace:", "namespace", false}, {"node:", "node", false}, {"pod:", "pod", false},
+	}
+	for _, item := range prefixes {
+		if strings.HasPrefix(rawKey, item.prefix) {
+			key = strings.TrimPrefix(rawKey, item.prefix)
+			if key == "" {
+				return "", false, "", fmt.Errorf("empty %s queue key", item.kind)
+			}
+			return item.kind, item.delete, key, nil
+		}
+	}
+	return "", false, "", fmt.Errorf("unsupported queue key %q", rawKey)
+}
+
 func (s *Syncer) reconcile(ctx context.Context, rawKey string) error {
-	kind := ""
-	deleting := false
-	key := rawKey
-	switch {
-	case len(key) > 15 && key[:15] == "delete:namespace:":
-		kind, deleting, key = "namespace", true, key[15:]
-	case len(key) > 11 && key[:11] == "delete:node:":
-		kind, deleting, key = "node", true, key[11:]
-	case len(key) > 10 && key[:10] == "delete:pod:":
-		kind, deleting, key = "pod", true, key[10:]
-	case len(key) > 9 && key[:10] == "namespace:":
-		kind, key = "namespace", key[10:]
-	case len(key) > 5 && key[:5] == "node:":
-		kind, key = "node", key[5:]
-	case len(key) > 4 && key[:4] == "pod:":
-		kind, key = "pod", key[4:]
-	default:
-		return fmt.Errorf("unsupported queue key %q", rawKey)
+	kind, deleting, key, err := parseQueueKey(rawKey)
+	if err != nil {
+		return err
 	}
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if kind == "namespace" {
@@ -222,7 +235,10 @@ func (s *Syncer) deletePodIfMapped(ctx context.Context, key string) error {
 		return err
 	}
 	s.mu.Lock()
-	delete(s.podMappings, key)
+	current, stillCurrent := s.podMappings[baseKey]
+	if stillCurrent && current == mapping {
+		delete(s.podMappings, baseKey)
+	}
 	s.mu.Unlock()
 	return nil
 }

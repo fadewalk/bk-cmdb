@@ -7,6 +7,7 @@ This gate covers only the currently safe-to-run `kube_sync_server` Go package te
 Only these files are added by D.2:
 
 - `src/scene_server/kube_sync_server/lifecycle_gate_test.go`
+- `src/scene_server/kube_sync_server/mapping_lifecycle_test.go`
 - `docs/architecture/legacy-backend-g1-kube-lifecycle-20260915.md`
 
 Existing user modifications, local rules, screenshots, and unrelated files were not changed or staged.
@@ -21,10 +22,13 @@ The new pure tests exercise the current on-disk APIs without a Kubernetes cluste
 | UID identity | A Pod deletion queue key is `delete:pod:<namespace>/<name>@<uid>`, preserving replacement-Pod identity. |
 | Deletion guard | Missing mappings and stale UIDs are ignored; a matching UID reaches the existing CMDB delete path. |
 | Retry gate | An unsupported queue key is retried eight times, then increments `RetryExhausted`, records `LastError`, and leaves the queue empty. |
+| Queue parsing | Normal and delete queue prefixes are parsed by named prefixes; delete namespace/node/pod keys no longer rely on incorrect hard-coded slice lengths. |
+| Delete event mode | A normal informer `DeleteFunc` explicitly enqueues a delete key; Pod tombstones retain the UID suffix and missing UIDs remain fail-closed. |
+| Mapping lifecycle | Matching UID deletes the CMDB Pod once and removes the base `<namespace>/<name>` mapping; stale replacement UID/missing mapping do not delete; CMDB delete failure retains mapping for retry. |
 
 Existing package tests also remain in scope for resource-specific queue keys, value/pointer tombstones, runtime container IDs, existing-only host policy, configuration validation, and CMDB HTTP contracts.
 
-The source-level boundary intentionally remains unchanged. `deletePodIfMapped` stores mappings under `<namespace>/<name>` but currently deletes using the UID-suffixed key after a successful CMDB delete. D.2 records the guard behavior without changing business code; mapping cleanup/read-back should be a follow-up implementation change in a separate batch.
+The source-level boundary is now explicit: `deletePodIfMapped` stores mappings under `<namespace>/<name>` and, after a successful CMDB delete, removes that base key only when the current ID+UID still matches the deleted mapping. Stale replacement mappings remain protected. This batch proves the in-process mapping lifecycle offline; cross-process persistence, real K3s informer/CMDB read-back, and non-Pod deletions remain blocked.
 
 ## Commands and results
 
