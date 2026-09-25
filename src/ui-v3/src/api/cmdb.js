@@ -475,6 +475,12 @@ export const updateUnique = (objId, id, data) =>
 export const deleteUnique = (objId, id) =>
   http.post(`/delete/objectunique/object/${objId}/unique/${id}`, {})
 
+// ---------- 模型拓扑布局(legacy global scope contract) ----------
+export const searchObjectTopology = () =>
+  http.post('/find/objecttopo/scope_type/global/scope_id/0', {})
+export const updateObjectTopology = (origin) =>
+  http.post('/update/objecttopo/scope_type/global/scope_id/0', { origin })
+
 // ---------- 关联类型 ----------
 export const searchAssociationTypes = (data = {}) =>
   http.post('/find/associationtype', data)

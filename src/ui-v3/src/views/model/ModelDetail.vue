@@ -101,33 +101,40 @@
 
       <!-- 模型关联 -->
       <template v-if="tab === 'assoc'">
+        <el-alert v-if="assocError" type="error" :closable="false" show-icon class="assoc-error">
+          {{ assocError }} <el-button link type="primary" @click="loadAssocs">重试</el-button>
+        </el-alert>
+        <div class="toolbar">
+          <el-button type="primary" :disabled="!canEditAssociations" @click="openAssocCreate">新建关联</el-button>
+          <div class="spacer" />
+        </div>
         <el-table :data="assocs" size="small" v-loading="assocLoading">
           <el-table-column label="方向" width="70">
-            <template #default="{ row }">{{ row.bk_obj_id === objId ? '源' : '目标' }}</template>
+            <template #default="{ row }">{{ row.bk_obj_id === objId.value ? '源' : '目标' }}</template>
           </el-table-column>
           <el-table-column label="源模型" width="130">
             <template #default="{ row }">{{ modelName(row.bk_obj_id) }}</template>
           </el-table-column>
           <el-table-column label="关联类型" width="110">
-            <template #default="{ row }">{{ row.bk_asst_id }}</template>
+            <template #default="{ row }">{{ associationTypeName(row.bk_asst_id) }}</template>
           </el-table-column>
           <el-table-column label="目标模型" width="130">
             <template #default="{ row }">{{ modelName(row.bk_asst_obj_id) }}</template>
           </el-table-column>
           <el-table-column label="源-目标约束" width="110">
-            <template #default="{ row }">{{ row.mapping || '--' }}</template>
+            <template #default="{ row }">{{ mappingName(row.mapping) }}</template>
           </el-table-column>
           <el-table-column prop="bk_obj_asst_name" label="关联描述" min-width="140">
             <template #default="{ row }">{{ row.bk_obj_asst_name || '--' }}</template>
           </el-table-column>
           <el-table-column label="操作" width="140" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openAssocEdit(row)">编辑</el-button>
-              <el-button link type="danger" size="small" :disabled="row.ispre || row.bk_asst_id === 'bk_mainline'" @click="removeAssoc(row)">删除</el-button>
+              <el-button link type="primary" size="small" :disabled="!isAssocEditable(row)" @click="openAssocEdit(row)">编辑</el-button>
+              <el-button link type="danger" size="small" :disabled="!isAssocEditable(row)" @click="removeAssoc(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="!assocLoading && assocs.length === 0" description="暂无关联关系" :image-size="70" />
+        <el-empty v-if="!assocLoading && !assocError && assocs.length === 0" description="暂无关联关系" :image-size="70" />
       </template>
 
       <!-- 唯一校验 -->
@@ -181,6 +188,39 @@
       :operating="saving"
       @confirm="saveModelEdit"
     />
+
+    <!-- 新建/编辑模型关联 -->
+    <el-dialog v-model="assocCreateVisible" title="新建关联" width="520px">
+      <el-form ref="assocCreateFormRef" :model="assocCreateForm" :rules="assocCreateRules" label-width="105px">
+        <el-form-item label="源模型" prop="bk_obj_id">
+          <el-select v-model="assocCreateForm.bk_obj_id" filterable style="width: 100%">
+            <el-option v-for="m in associationModels" :key="`src-${m.bk_obj_id}`" :label="`${m.bk_obj_name} (${m.bk_obj_id})`" :value="m.bk_obj_id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标模型" prop="bk_asst_obj_id">
+          <el-select v-model="assocCreateForm.bk_asst_obj_id" filterable style="width: 100%">
+            <el-option v-for="m in associationModels" :key="`dst-${m.bk_obj_id}`" :label="`${m.bk_obj_name} (${m.bk_obj_id})`" :value="m.bk_obj_id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联类型" prop="bk_asst_id">
+          <el-select v-model="assocCreateForm.bk_asst_id" filterable style="width: 100%">
+            <el-option v-for="kind in assocTypes" :key="kind.bk_asst_id" :label="associationTypeName(kind.bk_asst_id)" :value="kind.bk_asst_id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="源-目标约束" prop="mapping">
+          <el-select v-model="assocCreateForm.mapping" style="width: 100%">
+            <el-option label="N-N" value="n:n" />
+            <el-option v-if="assocCreateForm.bk_obj_id !== assocCreateForm.bk_asst_obj_id" label="1-N" value="1:n" />
+            <el-option label="1-1" value="1:1" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联描述"><el-input v-model="assocCreateForm.bk_obj_asst_name" maxlength="256" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="assocCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitAssocCreate">提交</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 新建/编辑字段 -->
     <el-dialog v-model="fieldFormVisible" :title="fieldForm.id ? '编辑字段' : '新建字段'" width="460px">
@@ -279,7 +319,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Close, CaretBottom, MoreFilled, Search } from '@element-plus/icons-vue'
@@ -290,13 +330,13 @@ import {
   searchFieldGroups, createFieldGroup, updateFieldGroup, deleteFieldGroup, moveAttributeToGroup, deleteAttributeGroupAssoc,
   searchUniques, createUnique, updateUnique, deleteUnique,
   getModelStatistics,
-  searchObjectAssociations, updateObjectAssociation, deleteObjectAssociation,
+  searchObjectAssociations, searchAssociationTypes, createObjectAssociation, updateObjectAssociation, deleteObjectAssociation,
   deleteModel
 } from '../../api/cmdb'
 
 const route = useRoute()
 const router = useRouter()
-const objId = String(route.params.objId || '')
+const objId = computed(() => String(route.params.objId || ''))
 
 const model = ref(null)
 const modelList = ref([])
@@ -306,7 +346,7 @@ const loading = ref(false)
 const loadError = ref('')
 const saving = ref(false)
 const deleting = ref(false)
-const tab = ref('fields')
+const tab = ref(route.query.tab === 'association' || route.query.tab === 'relation' ? 'assoc' : 'fields')
 
 const attrs = ref([])
 const fieldGroups = ref([])
@@ -325,6 +365,17 @@ const groupMoveSaving = ref(false)
 
 const assocs = ref([])
 const assocLoading = ref(false)
+const assocError = ref('')
+const assocTypes = ref([])
+const assocCreateVisible = ref(false)
+const assocCreateFormRef = ref(null)
+const assocCreateForm = ref({})
+const assocCreateRules = {
+  bk_obj_id: [{ required: true, message: '请选择源模型', trigger: 'change' }],
+  bk_asst_obj_id: [{ required: true, message: '请选择目标模型', trigger: 'change' }],
+  bk_asst_id: [{ required: true, message: '请选择关联类型', trigger: 'change' }],
+  mapping: [{ required: true, message: '请选择源-目标约束', trigger: 'change' }]
+}
 const assocDialog = ref(false)
 const assocForm = ref({})
 const uniques = ref([])
@@ -356,6 +407,36 @@ async function saveModelEdit(data) {
   } finally {
     saving.value = false
   }
+}
+
+function associationTypeName(id) {
+  return assocTypes.value.find((item) => item.bk_asst_id === id)?.bk_asst_name
+    ? `${id}(${assocTypes.value.find((item) => item.bk_asst_id === id).bk_asst_name})`
+    : id || '--'
+}
+function mappingName(mapping) {
+  return { '1:1': '1-1', '1:n': '1-N', 'n:n': 'N-N' }[mapping] || mapping || '--'
+}
+function openAssocCreate() {
+  if (!canEditAssociations.value) return
+  assocCreateForm.value = { bk_obj_id: objId.value, bk_asst_obj_id: '', bk_asst_id: assocTypes.value.find((item) => item.bk_asst_id !== 'bk_mainline')?.bk_asst_id || '', mapping: 'n:n', bk_obj_asst_name: '' }
+  assocCreateVisible.value = true
+}
+async function submitAssocCreate() {
+  const valid = await assocCreateFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+  saving.value = true
+  try {
+    await createObjectAssociation({
+      ...assocCreateForm.value,
+      bk_obj_asst_id: `${assocCreateForm.value.bk_obj_id}_${assocCreateForm.value.bk_asst_id}_${assocCreateForm.value.bk_asst_obj_id}`
+    })
+    ElMessage.success('关联创建成功')
+    assocCreateVisible.value = false
+    await loadAssocs()
+  } catch (e) {
+    ElMessage.error('关联创建失败: ' + (e?.message || '后端异常'))
+  } finally { saving.value = false }
 }
 
 function propName(keyId) {
@@ -429,9 +510,9 @@ async function dropField(targetGroup) {
   try {
     const ownerId = model.value?.bk_supplier_account || '0'
     if (groupId === 'default') {
-      await deleteAttributeGroupAssoc(ownerId, objId, propertyId, currentGroup)
+      await deleteAttributeGroupAssoc(ownerId, objId.value, propertyId, currentGroup)
     } else {
-      await moveAttributeToGroup(ownerId, objId, [{
+      await moveAttributeToGroup(ownerId, objId.value, [{
         propertyId,
         groupId,
         propertyIndex: field.bk_property_index ?? 0
@@ -455,9 +536,9 @@ async function loadModel() {
   ])
   modelList.value = all || []
   classificationList.value = classifications?.info || classifications || []
-  const m = modelList.value.find((x) => x.bk_obj_id === objId) || null
+  const m = modelList.value.find((x) => x.bk_obj_id === objId.value) || null
   if (m) {
-    const st = (stats || []).find((s) => s.bk_obj_id === objId)
+    const st = (stats || []).find((s) => s.bk_obj_id === objId.value)
     m.instCount = st ? st.instance_count : 0
   }
   model.value = m
@@ -478,8 +559,8 @@ async function deleteCurrentModel() {
   deleting.value = true
   try {
     await deleteModel(model.value.id)
-    const readBack = await searchModels({ bk_obj_id: objId })
-    if ((readBack || []).some((item) => item.bk_obj_id === objId)) {
+    const readBack = await searchModels({ bk_obj_id: objId.value })
+    if ((readBack || []).some((item) => item.bk_obj_id === objId.value)) {
       throw new Error('删除后模型仍存在')
     }
     ElMessage.success('删除成功')
@@ -495,7 +576,7 @@ async function loadFieldGroups() {
   // 拉分组列表
   let groups = []
   try {
-    const list = await searchFieldGroups(objId, {})
+    const list = await searchFieldGroups(objId.value, {})
     groups = (list || []).map((g) => ({ id: g.id, name: g.bk_group_name, bk_obj_id: g.bk_obj_id, _raw: g, items: [], collapsed: false }))
   } catch (e) { /* 容忍 */ }
   // 确保 default 分组存在
@@ -506,7 +587,7 @@ async function loadFieldGroups() {
 }
 
 async function loadAttrs() {
-  const list = await searchModelAttributes(objId)
+  const list = await searchModelAttributes(objId.value)
   attrs.value = list || []
   // 把字段按分组塞进 groups
   for (const g of fieldGroups.value) g.items = []
@@ -524,7 +605,7 @@ async function loadAttrs() {
 async function loadUniques() {
   uniqueLoading.value = true
   try {
-    const list = await searchUniques(objId, {})
+    const list = await searchUniques(objId.value, {})
     const arr = list || []
     const uniqCount = {}
     for (const u of arr) for (const k of u.keys || []) uniqCount[k.key_id] = (uniqCount[k.key_id] || 0) + 1
@@ -538,18 +619,24 @@ async function loadUniques() {
 
 async function loadAssocs() {
   assocLoading.value = true
+  assocError.value = ''
   try {
-    const data = await searchObjectAssociations({
-      condition: { $or: [{ bk_obj_id: objId }, { bk_asst_obj_id: objId }] }
-    }).catch(() => [])
+    const [data, typeData] = await Promise.all([
+      searchObjectAssociations({ condition: { $or: [{ bk_obj_id: objId.value }, { bk_asst_obj_id: objId.value }] } }),
+      searchAssociationTypes({})
+    ])
     const arr = Array.isArray(data) ? data : (data?.info || [])
-    assocs.value = arr.filter((a) => a.bk_obj_id === objId || a.bk_asst_obj_id === objId)
+    assocs.value = arr.filter((a) => a.bk_obj_id === objId.value || a.bk_asst_obj_id === objId.value)
+    assocTypes.value = typeData?.info || typeData || []
+  } catch (e) {
+    assocs.value = []
+    assocError.value = e?.message || '模型关联加载失败'
   } finally { assocLoading.value = false }
 }
 
 function openAssocEdit(row) {
-  if (row.ispre || row.bk_asst_id === 'bk_mainline') {
-    ElMessage.warning('内置或预置关联不可编辑')
+  if (!isAssocEditable(row)) {
+    ElMessage.warning('内置、停用或主线关联不可编辑')
     return
   }
   assocForm.value = { ...row }
@@ -569,6 +656,7 @@ async function submitAssocEdit() {
 }
 
 async function removeAssoc(row) {
+  if (!isAssocEditable(row)) return
   try {
     await ElMessageBox.confirm(`确定删除关联「${row.bk_obj_asst_id}」?`, '删除确认', { type: 'warning' })
   } catch {
@@ -623,14 +711,14 @@ async function saveField() {
   try {
     if (fieldForm.value.id) {
       await updateModelAttribute(fieldForm.value.id, {
-        bk_obj_id: objId,
+        bk_obj_id: objId.value,
         bk_property_name: fieldForm.value.bk_property_name,
         bk_property_group: fieldForm.value.bk_property_group,
         isrequired: fieldForm.value.isrequired
       })
       ElMessage.success('字段已更新')
     } else {
-      await createModelAttribute({ bk_obj_id: objId, ...fieldForm.value })
+      await createModelAttribute({ bk_obj_id: objId.value, ...fieldForm.value })
       ElMessage.success('字段已创建')
     }
     fieldFormVisible.value = false
@@ -665,13 +753,13 @@ async function saveGroup() {
     if (groupForm.value.id) {
       const realGroup = fieldGroups.value.find((g) => g.id === groupForm.value.id)
       if (realGroup && realGroup._raw) {
-        await updateFieldGroup(objId, realGroup._raw.id, groupForm.value.name)
+        await updateFieldGroup(objId.value, realGroup._raw.id, groupForm.value.name)
       }
       ElMessage.success('已重命名')
     } else {
       const id = 'grp_' + Date.now()
       await createFieldGroup({
-        bk_obj_id: objId,
+        bk_obj_id: objId.value,
         bk_group_id: id,
         bk_group_name: groupForm.value.name,
         bk_group_index: Date.now() % 10000,
@@ -703,7 +791,12 @@ async function onGroupCmd(cmd, g) {
 // 老版内置保护(verification.vue):模板下发(bk_template_id)与内置(ispre)规则不可编辑删除;
 // 主线模型(除 host)不提供新建入口
 const MAINLINE_OBJ_IDS = ['biz', 'set', 'module', 'host', 'process', 'service_instance', 'plat']
-const uniqueCreateLocked = computed(() => MAINLINE_OBJ_IDS.includes(objId) && objId !== 'host')
+const uniqueCreateLocked = computed(() => MAINLINE_OBJ_IDS.includes(objId.value) && objId.value !== 'host')
+const canEditAssociations = computed(() => Boolean(model.value) && !model.value.ispre && !model.value.bk_ispaused && objId.value !== 'bk_project')
+const associationModels = computed(() => modelList.value.filter((item) => (!item.bk_ishidden && !item.bk_ispaused && !MAINLINE_OBJ_IDS.includes(item.bk_obj_id)) || item.bk_obj_id === objId.value))
+function isAssocEditable(row) {
+  return canEditAssociations.value && !row.ispre && row.bk_asst_id !== 'bk_mainline'
+}
 function isUniqueLocked(row) {
   return Boolean(row.ispre || row.bk_template_id)
 }
@@ -735,12 +828,12 @@ async function submitUnique() {
   saving.value = true
   try {
     const keys = uniqueForm.value.keyIds.map((id) => ({ key_id: id, key_kind: 'property' }))
-    const data = { bk_obj_id: objId, keys, must_check: false, bk_template_id: 0 }
+    const data = { bk_obj_id: objId.value, keys, must_check: false, bk_template_id: 0 }
     if (uniqueForm.value.id) {
-      await updateUnique(objId, uniqueForm.value.id, data)
+      await updateUnique(objId.value, uniqueForm.value.id, data)
       ElMessage.success('已更新')
     } else {
-      await createUnique(objId, { from_template: false, data: { ...data, bk_unique_id: uniqueForm.value.bk_unique_id } })
+      await createUnique(objId.value, { from_template: false, data: { ...data, bk_unique_id: uniqueForm.value.bk_unique_id } })
       ElMessage.success('已创建')
     }
     uniqueDialog.value = false
@@ -754,11 +847,18 @@ async function submitUnique() {
 
 async function removeUnique(row) {
   await ElMessageBox.confirm(`确定删除唯一约束「${row.bk_unique_id}」?`, '删除确认', { type: 'warning' })
-  await deleteUnique(objId, row.id)
+  await deleteUnique(objId.value, row.id)
   ElMessage.success('已删除')
   await loadUniques()
   await loadAttrs()
 }
+
+watch(tab, async (value) => {
+  const legacyTab = value === 'assoc' ? 'association' : value === 'fields' ? 'field' : value
+  if (route.query.tab !== legacyTab) await router.replace({ query: { ...route.query, tab: legacyTab } })
+})
+
+watch(() => route.params.objId, () => load())
 
 onMounted(load)
 </script>

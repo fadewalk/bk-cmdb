@@ -173,7 +173,10 @@
       </template>
       <template v-else-if="detailTab === 'assoc'">
         <!-- 老版 general-model 详情关联 tab:列表/拓扑双视图 + 新增关联(内置模型保护) -->
-        <div class="assoc-toolbar">
+        <div class="assoc-toolbar" data-testid="instance-association-toolbar">
+          <el-alert v-if="assocError" type="error" :closable="false" show-icon class="assoc-error">
+            {{ assocError }} <el-button link type="primary" @click="loadInstAssoc">重试</el-button>
+          </el-alert>
           <el-radio-group v-model="assocView" size="small">
             <el-radio-button value="list">列表</el-radio-button>
             <el-radio-button value="topo">拓扑</el-radio-button>
@@ -185,7 +188,7 @@
           </el-tooltip>
         </div>
         <template v-if="assocView === 'list'">
-          <el-table :data="assocRows" v-loading="assocLoading" size="small">
+          <el-table :data="assocRows" v-loading="assocLoading" size="small" data-testid="instance-association-table">
             <el-table-column label="方向" width="92">
               <template #default="{ row }">{{ row.__dir === 'src' ? '关联' : '被关联' }}</template>
             </el-table-column>
@@ -202,7 +205,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-if="!assocLoading && assocRows.length === 0" description="暂无关联" :image-size="60" />
+          <el-empty v-if="!assocLoading && !assocError && assocRows.length === 0" description="暂无关联" :image-size="60" />
         </template>
         <template v-else>
           <div v-loading="assocLoading" class="assoc-topo">
@@ -291,7 +294,7 @@ const formMap = ref({})
 const detailVisible = ref(false)
 const detailRow = ref(null)
 const detailInstId = ref(null)
-const detailTab = ref('props')
+const detailTab = ref(route.query.tab === 'association' ? 'assoc' : 'props')
 const auditRows = ref([])
 const auditLoading = ref(false)
 
@@ -327,6 +330,7 @@ watch(detailTab, (v) => {
 const assocView = ref('list')
 const assocRows = ref([])
 const assocLoading = ref(false)
+const assocError = ref('')
 const assocLocked = computed(() => Boolean(model.value?.bk_ispre))
 const assocDefs = ref([])
 const assocFormVisible = ref(false)
@@ -342,6 +346,7 @@ function instIdFieldOf(obj) {
 async function loadInstAssoc() {
   if (!detailInstId.value) return
   assocLoading.value = true
+  assocError.value = ''
   try {
     // 老版契约:findmany/inst/association/object/{objId}/inst_id/{id}/offset/limit/web
     // 响应 {association:{src,dst}, instance:{objId:[实例信息]}};src 为本实例作为源模型
@@ -400,8 +405,10 @@ async function loadInstAssoc() {
       }
     } catch { defs = [] }
     assocDefs.value = defs
-  } catch {
+  } catch (error) {
     assocRows.value = []
+    assocDefs.value = []
+    assocError.value = error?.message || '实例关联加载失败'
   } finally {
     assocLoading.value = false
   }
@@ -733,10 +740,15 @@ async function batchRemove() {
 function openDetail(row) {
   detailRow.value = row
   detailInstId.value = instIdOf(row)
-  detailTab.value = 'props'
+  detailTab.value = route.query.tab === 'association' ? 'assoc' : 'props'
   auditRows.value = []
   detailVisible.value = true
+  if (detailTab.value === 'assoc') loadInstAssoc()
 }
+
+watch(detailTab, (value) => {
+  if (detailVisible.value && detailInstId.value) router.replace({ query: { ...route.query, instId: detailInstId.value, tab: value === 'assoc' ? 'association' : value } })
+})
 
 watch(objId, () => {
   if (objId.value) {

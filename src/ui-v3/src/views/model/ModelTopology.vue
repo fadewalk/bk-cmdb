@@ -43,7 +43,7 @@
           <span class="model-count">{{ navModelList.length > 1000 ? '999+' : navModelList.length }}</span>
         </div>
       </li>
-      <li v-for="group in localClassifications" :key="group.bk_classification_id" class="group-item">
+      <li v-for="group in localClassifications" :key="group.bk_classification_id" class="group-item" :data-group-id="group.bk_classification_id">
         <div
           :class="['group-info', {
             active: topoNav.activeGroupId === group.bk_classification_id,
@@ -67,6 +67,7 @@
             v-for="model in group.models"
             :key="model.bk_obj_id"
             class="model-item"
+            :data-model-id="model.bk_obj_id"
             :class="{
               invisible: hideNodeIds.includes(model.bk_obj_id),
               selected: topoNav.selectedNodeId === model.bk_obj_id
@@ -123,6 +124,7 @@
               dimmed: isEdgeDimmed(edge),
               mask: isEdgeMask(edge)
             }]"
+            :data-edge-key="edge.key"
             :marker-end="['src_to_dest', 'bidirectional'].includes(edge.direction) ? edgeMarker(edge, 'end') : undefined"
             :marker-start="['dest_to_src', 'bidirectional'].includes(edge.direction) ? edgeMarker(edge, 'start') : undefined"
           />
@@ -158,6 +160,7 @@
         <template v-for="node in visibleNodes" :key="node.bk_obj_id">
           <div
             :class="['topo-node', { 'is-pre': node.ispre, selected: selectedNodeId === node.bk_obj_id, mask: isNodeMask(node) }]"
+            :data-model-id="node.bk_obj_id"
             :style="{ left: node.x - 27.5 + 'px', top: node.y - 27.5 + 'px' }"
             @mousedown.left.stop="onNodeMouseDown(node, $event)"
             @mouseenter="onNodeEnter(node)"
@@ -189,7 +192,16 @@
         </template>
       </div>
 
+      <div v-if="loadError" class="topo-error" role="alert">
+        {{ loadError }}
+        <el-button link type="primary" @click="loadData">重试</el-button>
+      </div>
+      <div v-if="saveError" class="topo-save-error" role="alert">
+        {{ saveError }}
+        <el-button link type="primary" @click="retrySavePosition">重试保存</el-button>
+      </div>
       <div v-if="loading" class="topo-loading">加载中...</div>
+      <div v-else-if="!loadError && !visibleNodes.length" class="topo-empty">暂无模型拓扑</div>
     </div>
 
     <!-- 关联详情/编辑 -->
@@ -229,6 +241,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   searchModels, searchClassifications, searchAssociationTypes,
+  searchObjectTopology, updateObjectTopology,
   searchObjectAssociations, createObjectAssociation, updateObjectAssociation, deleteObjectAssociation,
   searchUserCustom, saveUserCustom
 } from '../../api/cmdb'
@@ -241,9 +254,13 @@ const HIDE_CONFIG_KEY = 'model_custom_hide_models'
 
 const canvasRef = ref(null)
 const loading = ref(true)
+const loadError = ref('')
+const saveError = ref('')
+const pendingPosition = ref(null)
 const modelList = ref([])
 const localClassifications = ref([])
 const assocList = ref([])
+const savedTopology = ref([])
 const relationTypes = ref([])
 const asstNameMap = ref({})
 const asstDirectionMap = ref({})
@@ -330,9 +347,14 @@ function buildLayout() {
     const row = Math.floor(i / 5)
     placed[m.bk_obj_id] = { x: 860 + col * 150, y: 80 + row * 130 }
   })
-  // 已保存位置优先(编辑拓扑拖拽结果)
   for (const id of Object.keys(placed)) {
-    if (positionsCache.value[id]) placed[id] = positionsCache.value[id]
+    const backend = savedTopology.value.find((item) => item.node_type === 'obj' && item.bk_obj_id === id)?.position
+    if (backend && backend.x !== null && backend.x !== undefined && backend.y !== null && backend.y !== undefined
+      && Number.isFinite(Number(backend.x)) && Number.isFinite(Number(backend.y))) {
+      placed[id] = { x: Number(backend.x), y: Number(backend.y) }
+    } else if (positionsCache.value[id]) {
+      placed[id] = positionsCache.value[id]
+    }
   }
   return placed
 }
@@ -566,13 +588,49 @@ function onNodeMouseMove(evt) {
 function onNodeMouseUp() {
   window.removeEventListener('mousemove', onNodeMouseMove)
   window.removeEventListener('mouseup', onNodeMouseUp)
-  if (dragState?.moved) {
+  if (!isEdit.value) {
+    dragState = null
+    return
+  }
+  const moved = dragState?.moved ? dragState.node : null
+  if (moved) {
     const dump = {}
     for (const [id, p] of Object.entries(nodePositions.value)) dump[id] = p
     positionsCache.value = dump
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(dump)) } catch { /* 忽略 */ }
+    persistNodePosition(moved, nodePositions.value[moved.bk_obj_id])
   }
   dragState = null
+}
+
+async function persistNodePosition(node, position) {
+  pendingPosition.value = { node, position: { x: Math.round(position.x), y: Math.round(position.y) } }
+  await retrySavePosition()
+}
+
+async function retrySavePosition() {
+  if (!pendingPosition.value) return
+  const { node, position } = pendingPosition.value
+  saveError.value = ''
+  try {
+    await updateObjectTopology([{
+      node_type: 'obj',
+      bk_obj_id: node.bk_obj_id,
+      bk_inst_id: Number(node.bk_inst_id) || 0,
+      node_name: node.bk_obj_name,
+      ispre: Boolean(node.ispre),
+      bk_obj_icon: node.bk_obj_icon || '',
+      position
+    }])
+    const current = savedTopology.value.filter((item) => !(item.node_type === 'obj' && item.bk_obj_id === node.bk_obj_id))
+    savedTopology.value = [...current, {
+      node_type: 'obj', bk_obj_id: node.bk_obj_id, bk_inst_id: Number(node.bk_inst_id) || 0,
+      position
+    }]
+    pendingPosition.value = null
+  } catch (error) {
+    saveError.value = error?.message || '拓扑位置保存失败'
+  }
 }
 function onNodeEnter(node) { hoverNodeKey.value = node.bk_obj_id; isTopoHover.value = true }
 function onNodeLeave() { if (!isEdit.value) hoverNodeKey.value = null; isTopoHover.value = false }
@@ -600,6 +658,14 @@ function modelName(id) {
 async function openRelationDetail(relation) {
   relationDetailVisible.value = true
   relationForm.value = { ...relation }
+  if (!relation.id) return
+  try {
+    const data = await searchObjectAssociations({ condition: { id: relation.id }, page: { start: 0, limit: 1 } })
+    const detail = Array.isArray(data) ? data[0] : (data?.info || data?.data?.info || [])[0]
+    if (detail) relationForm.value = { ...relation, ...detail }
+  } catch (error) {
+    ElMessage.error('关联详情加载失败: ' + (error?.message || '后端异常'))
+  }
 }
 function openCreateRelation(fromObjId = '') {
   relationCreateForm.value = {
@@ -611,6 +677,17 @@ function openCreateRelation(fromObjId = '') {
   }
   relationCreateVisible.value = true
 }
+async function reloadAssociations() {
+  const data = await searchObjectAssociations({
+    condition: { $or: [
+      { bk_obj_id: { $in: modelList.value.map((model) => model.bk_obj_id) } },
+      { bk_asst_obj_id: { $in: modelList.value.map((model) => model.bk_obj_id) } }
+    ] },
+    page: { start: 0, limit: 2000 }
+  })
+  assocList.value = Array.isArray(data) ? data : (data?.info || [])
+}
+
 async function createRelation() {
   const valid = await relationCreateFormRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -620,9 +697,9 @@ async function createRelation() {
       ...relationCreateForm.value,
       bk_obj_asst_id: `${relationCreateForm.value.bk_obj_id}_${relationCreateForm.value.bk_asst_id}_${relationCreateForm.value.bk_asst_obj_id}`
     })
+    await reloadAssociations()
     ElMessage.success('关联创建成功')
     relationCreateVisible.value = false
-    await reloadAssociations()
   } catch (e) {
     ElMessage.error('关联创建失败: ' + (e?.message || '后端异常'))
   } finally { relationSaving.value = false }
@@ -631,9 +708,9 @@ async function saveRelation() {
   relationSaving.value = true
   try {
     await updateObjectAssociation(relationForm.value.id, { bk_obj_asst_name: relationForm.value.bk_obj_asst_name })
+    await reloadAssociations()
     ElMessage.success('关联已更新')
     relationDetailVisible.value = false
-    await reloadAssociations()
   } catch (e) {
     ElMessage.error('关联更新失败: ' + (e?.message || '后端异常'))
   } finally { relationSaving.value = false }
@@ -645,9 +722,9 @@ async function removeRelation() {
   relationSaving.value = true
   try {
     await deleteObjectAssociation(relationForm.value.id)
+    await reloadAssociations()
     ElMessage.success('关联已删除')
     relationDetailVisible.value = false
-    await reloadAssociations()
   } catch (e) {
     ElMessage.error('关联删除失败: ' + (e?.message || '后端异常'))
   } finally { relationSaving.value = false }
@@ -660,15 +737,19 @@ function handleExitEdit() { isEdit.value = false; hoverNodeKey.value = null }
 // ---------- 初始化 ----------
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
-    const [models, groups] = await Promise.all([
+    const [models, groups, topology] = await Promise.all([
       searchModels({}),
-      searchClassifications().catch(() => [])
+      searchClassifications(),
+      searchObjectTopology()
     ])
     modelList.value = models?.info || models || []
-    // 分类接口不携带对象,按 bk_classification_id 归组(旧版 localClassifications 语义:
+    const groupList = groups?.info || groups || []
+    const topologyList = topology?.info || topology?.data || topology || []
+    savedTopology.value = Array.isArray(topologyList) ? topologyList : []
     // 过滤隐藏与停用,未分类固定最后)
-    localClassifications.value = (groups?.info || groups || [])
+    localClassifications.value = groupList
       .filter((g) => !g.bk_ishidden)
       .map((g) => ({
         ...g,
@@ -681,13 +762,12 @@ async function loadData() {
       condition: { $or: [{ bk_obj_id: { $in: modelList.value.map((m) => m.bk_obj_id) } }, { bk_asst_obj_id: { $in: modelList.value.map((m) => m.bk_obj_id) } }] },
       page: { start: 0, limit: 2000 }
     })
-    // 该接口响应 data 直接是数组(区别于分页型 {count, info})
     assocList.value = Array.isArray(data) ? data : (data?.info || [])
     loadCachedPositions()
     nodePositions.value = buildLayout()
     resizeFit()
   } catch (e) {
-    ElMessage.error('拓扑数据加载失败: ' + (e?.message || '后端异常'))
+    loadError.value = e?.message || '拓扑数据加载失败'
   } finally { loading.value = false }
 }
 
@@ -702,6 +782,23 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.topo-error,
+.topo-save-error {
+  position: absolute;
+  z-index: 20;
+  left: 230px;
+  top: 70px;
+  right: 20px;
+  padding: 10px 14px;
+  color: #ea3636;
+  background: #fff;
+  border: 1px solid #ffb3b3;
+  border-radius: 2px;
+}
+.topo-save-error { top: 120px; }
+.topo-error .el-button,
+.topo-save-error .el-button { position: relative; z-index: 21; }
+
 .topo-wrapper {
   position: relative;
   height: 100%;

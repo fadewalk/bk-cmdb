@@ -24,6 +24,10 @@
       />
     </div>
 
+    <el-alert v-if="loadError" type="error" :closable="false" show-icon class="relation-error">
+      {{ loadError }} <el-button link type="primary" @click="load">重试</el-button>
+    </el-alert>
+
     <el-table
       :data="rows"
       v-loading="loading"
@@ -57,10 +61,11 @@
       </el-table-column>
     </el-table>
 
-    <el-empty v-if="!loading && rows.length === 0" :description="keyword ? '没有匹配的关联类型' : '暂无关联类型'" :image-size="80">
+    <el-empty v-if="!loading && !loadError && rows.length === 0" :description="keyword ? '没有匹配的关联类型' : '暂无关联类型'" :image-size="80">
       <el-button v-if="keyword" link type="primary" @click="clearFilter">清空筛选</el-button>
     </el-empty>
     <el-pagination
+      v-if="!loadError && total > 0"
       v-model:current-page="page"
       :page-size="pageSize"
       :page-sizes="[10, 20, 50]"
@@ -124,6 +129,7 @@ const keyword = ref('')
 const sentKeyword = ref('')
 const rows = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -163,14 +169,18 @@ const rules = {
   direction: [{ required: true, message: '请选择方向', trigger: 'change' }]
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 const condition = computed(() => {
   const c = {}
-  if (sentKeyword.value.trim()) c.bk_asst_name = { $regex: sentKeyword.value.trim() }
+  if (sentKeyword.value.trim()) c.bk_asst_name = { $regex: escapeRegex(sentKeyword.value.trim()) }
   return c
 })
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const data = await searchAssociationTypes({
       condition: condition.value,
@@ -190,7 +200,10 @@ async function load() {
       } catch { /* 使用数失败不阻断列表 */ }
     }
   } catch (e) {
-    ElMessage.error('关联类型加载失败: ' + (e?.message || '后端异常'))
+    rows.value = []
+    total.value = 0
+    loadError.value = e?.message || '关联类型加载失败'
+    ElMessage.error('关联类型加载失败: ' + loadError.value)
   } finally { loading.value = false }
 }
 function reload() {
