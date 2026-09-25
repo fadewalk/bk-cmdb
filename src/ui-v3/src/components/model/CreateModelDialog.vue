@@ -73,11 +73,13 @@
 <script setup>
 // 旧版 components/model-manage/_create-model.vue 复刻:图标选择 + 分组/标识/名称,600px 弹窗
 import { reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import ChooseIcon from './ChooseIcon.vue'
 
 const props = defineProps({
   isShow: { type: Boolean, default: false },
   title: { type: String, default: '新建模型' },
+  model: { type: Object, default: null },
   groupId: { type: String, default: '' },
   operating: { type: Boolean, default: false },
   isMainLine: { type: Boolean, default: false },
@@ -96,18 +98,24 @@ const form = reactive({
 
 watch(() => props.isShow, (show) => {
   if (show) {
-    form.bk_obj_icon = 'icon-cc-default'
-    form.bk_obj_id = ''
-    form.bk_obj_name = ''
-    form.bk_classification_id = props.groupId || ''
+    form.bk_obj_icon = props.model?.bk_obj_icon || 'icon-cc-default'
+    form.bk_obj_id = props.model?.bk_obj_id || ''
+    form.bk_obj_name = props.model?.bk_obj_name || ''
+    form.bk_classification_id = props.model?.bk_classification_id || props.groupId || ''
     iconListShow.value = false
   }
 })
-watch(() => props.groupId, (v) => { if (v) form.bk_classification_id = v })
+watch(() => props.groupId, (v) => { if (v && !props.model) form.bk_classification_id = v })
 
 function confirm() {
-  if (!form.bk_obj_id || !form.bk_obj_name || (!form.bk_classification_id && !props.isMainLine)) return
-  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(form.bk_obj_id)) return
+  if (!form.bk_obj_id || !form.bk_obj_name || (!form.bk_classification_id && !props.isMainLine)) {
+    ElMessage.warning('请填写模型标识、名称和所属分组')
+    return
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(form.bk_obj_id)) {
+    ElMessage.warning('模型标识需以英文开头，可使用英文、数字、下划线')
+    return
+  }
   emit('confirm', { ...form })
 }
 function cancel() {

@@ -5,6 +5,11 @@
       <span class="crumb-title">模型详情【{{ model?.bk_obj_name || objId }}】</span>
     </div>
 
+    <div v-if="loadError" class="model-load-error">
+      {{ loadError }}
+      <el-button link type="primary" @click="load">重试</el-button>
+    </div>
+
     <div v-if="model" class="head-card">
       <div class="big-icon">
         <span>{{ model.bk_obj_name?.slice(0, 1) || 'M' }}</span>
@@ -34,6 +39,7 @@
           </div>
         </div>
         <div v-if="model && !model.ispre" class="head-actions">
+          <el-button plain @click="openModelEdit">编辑模型</el-button>
           <el-button
             data-testid="delete-model-button"
             type="danger"
@@ -166,6 +172,16 @@
       </template>
     </div>
 
+    <create-model-dialog
+      v-model:is-show="modelEditVisible"
+      title="编辑模型"
+      :model="model"
+      :editing="true"
+      :classifications="classificationList"
+      :operating="saving"
+      @confirm="saveModelEdit"
+    />
+
     <!-- 新建/编辑字段 -->
     <el-dialog v-model="fieldFormVisible" :title="fieldForm.id ? '编辑字段' : '新建字段'" width="460px">
       <el-form label-width="90px">
@@ -267,9 +283,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Close, CaretBottom, MoreFilled, Search } from '@element-plus/icons-vue'
+import CreateModelDialog from '../../components/model/CreateModelDialog.vue'
 import {
   searchModels, searchModelAttributes,
-  createModelAttribute, updateModelAttribute, deleteModelAttribute,
+  searchClassifications, updateModel, createModelAttribute, updateModelAttribute, deleteModelAttribute,
   searchFieldGroups, createFieldGroup, updateFieldGroup, deleteFieldGroup, moveAttributeToGroup, deleteAttributeGroupAssoc,
   searchUniques, createUnique, updateUnique, deleteUnique,
   getModelStatistics,
@@ -283,7 +300,10 @@ const objId = String(route.params.objId || '')
 
 const model = ref(null)
 const modelList = ref([])
+const classificationList = ref([])
+const modelEditVisible = ref(false)
 const loading = ref(false)
+const loadError = ref('')
 const saving = ref(false)
 const deleting = ref(false)
 const tab = ref('fields')
@@ -314,6 +334,29 @@ const uniqueForm = ref({ id: null, bk_unique_id: '', keyIds: [] })
 
 function fmtTime(t) { return t ? String(t).replace('T', ' ').slice(0, 19) : '--' }
 function goBack() { router.push('/model/management') }
+
+function openModelEdit() {
+  if (!model.value || model.value.ispre) return
+  modelEditVisible.value = true
+}
+
+async function saveModelEdit(data) {
+  saving.value = true
+  try {
+    await updateModel(model.value.id, {
+      bk_obj_name: data.bk_obj_name,
+      bk_obj_icon: data.bk_obj_icon,
+      bk_classification_id: data.bk_classification_id
+    })
+    ElMessage.success('修改成功')
+    modelEditVisible.value = false
+    await loadModel()
+  } catch (e) {
+    ElMessage.error('保存模型失败: ' + (e?.message || '后端异常'))
+  } finally {
+    saving.value = false
+  }
+}
 
 function propName(keyId) {
   const a = attrs.value.find((x) => x.id === keyId)
@@ -405,11 +448,13 @@ async function dropField(targetGroup) {
 }
 
 async function loadModel() {
-  const [all, stats] = await Promise.all([
+  const [all, stats, classifications] = await Promise.all([
     searchModels({}),
-    getModelStatistics().catch(() => [])
+    getModelStatistics().catch(() => []),
+    searchClassifications().catch(() => [])
   ])
   modelList.value = all || []
+  classificationList.value = classifications?.info || classifications || []
   const m = modelList.value.find((x) => x.bk_obj_id === objId) || null
   if (m) {
     const st = (stats || []).find((s) => s.bk_obj_id === objId)
@@ -540,12 +585,17 @@ async function removeAssoc(row) {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     await loadModel()
     await loadFieldGroups()
     await loadAttrs()
     await Promise.all([loadUniques(), loadAssocs()])
-  } finally { loading.value = false }
+  } catch (error) {
+    loadError.value = error?.message || '模型详情加载失败'
+  } finally {
+    loading.value = false
+  }
 }
 
 function openFieldForm(field) {
@@ -653,7 +703,7 @@ async function onGroupCmd(cmd, g) {
 // 老版内置保护(verification.vue):模板下发(bk_template_id)与内置(ispre)规则不可编辑删除;
 // 主线模型(除 host)不提供新建入口
 const MAINLINE_OBJ_IDS = ['biz', 'set', 'module', 'host', 'process', 'service_instance', 'plat']
-const uniqueCreateLocked = computed(() => MAINLINE_OBJ_IDS.includes(objId.value) && objId.value !== 'host')
+const uniqueCreateLocked = computed(() => MAINLINE_OBJ_IDS.includes(objId) && objId !== 'host')
 function isUniqueLocked(row) {
   return Boolean(row.ispre || row.bk_template_id)
 }
@@ -715,6 +765,11 @@ onMounted(load)
 
 <style scoped>
 .model-detail { height: 100%; display: flex; flex-direction: column; background: #fff; overflow-y: auto; }
+.model-load-error {
+  margin: 12px 32px;
+  color: #ea3636;
+}
+
 .crumb-row {
   display: flex; align-items: center; gap: 10px;
   padding: 0 20px; height: 50px; line-height: 50px; flex: 0 0 50px;

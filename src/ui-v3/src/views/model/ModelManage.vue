@@ -46,9 +46,21 @@
       </div>
     </div>
 
-    <div class="model-management-body">
-      <ul class="group-list">
-        <li v-for="cls in currentClassifications" :key="cls.bk_classification_id" class="group-item">
+      <el-alert
+        v-if="loadError"
+        type="error"
+        :closable="false"
+        show-icon
+        class="model-load-error"
+      >
+        {{ loadError }}
+        <el-button link type="primary" @click="load">重试</el-button>
+      </el-alert>
+
+        <div class="model-management-body">
+          <el-empty v-if="loadingDone && !loadError && currentClassifications.length === 0" description="暂无模型" :image-size="70" />
+          <ul v-else class="group-list">
+        <li v-for="cls in currentClassifications" :key="cls.bk_classification_id" class="group-item" :data-group-id="cls.bk_classification_id">
           <div class="group-header">
             <div
               :class="['collapse-group-title', { 'is-collapse': collapsedState[cls.id] }]"
@@ -91,6 +103,7 @@
             <div
               v-for="model in modelsOf(cls)"
               :key="model.bk_obj_id"
+              :data-model-id="model.bk_obj_id"
               :class="['model-item', { 'is-paused': model.bk_ispaused, 'is-builtin': model.ispre, 'is-dragging': dragObjId === model.bk_obj_id }]"
               :draggable="isModelSelectable ? 'false' : 'true'"
               @dragstart="onDragStart(model, $event)"
@@ -366,6 +379,7 @@ const router = useRouter()
 const tipsVisible = ref(true)
 const loadingDone = ref(false)
 const saving = ref(false)
+const loadError = ref('')
 
 const rawGroups = ref([]) // find/classificationobject 原始数据
 const dialogClassifications = ref([]) // find/objectclassification(弹窗下拉)
@@ -484,13 +498,22 @@ function countText(objId) {
 
 // ---------- 加载 ----------
 async function load() {
-  const [groupData, clsData] = await Promise.all([
-    searchClassificationWithObjects(),
-    searchClassifications().catch(() => [])
-  ])
-  rawGroups.value = groupData || []
-  dialogClassifications.value = (clsData?.info || clsData || []).filter((c) => !c.bk_ishidden)
-  loadingDone.value = true
+  loadingDone.value = false
+  loadError.value = ''
+  try {
+    const [groupData, clsData] = await Promise.all([
+      searchClassificationWithObjects(),
+      searchClassifications()
+    ])
+    rawGroups.value = groupData || []
+    dialogClassifications.value = (clsData?.info || clsData || []).filter((c) => !c.bk_ishidden)
+  } catch (error) {
+    rawGroups.value = []
+    dialogClassifications.value = []
+    loadError.value = error?.message || '模型列表加载失败'
+  } finally {
+    loadingDone.value = true
+  }
 }
 
 // ---------- 交互 ----------
@@ -902,6 +925,9 @@ onMounted(load)
 }
 .model-search-input {
   width: 240px;
+}
+.model-load-error {
+  margin: 0 24px 12px;
 }
 
 .model-management-body {
