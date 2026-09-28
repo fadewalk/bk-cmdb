@@ -4,10 +4,19 @@
     <div class="topo-body">
       <!-- 左:拓扑树(对齐旧版:无卡片边框,顶部关键词过滤) -->
       <div class="tree-col">
-        <el-input v-model="keyword" placeholder="请输入关键词" size="small" clearable suffix-icon="Search" style="margin-bottom: 8px" />
+        <el-input
+          v-model="keyword"
+          data-testid="business-topology-keyword"
+          placeholder="请输入关键词"
+          size="small"
+          clearable
+          suffix-icon="Search"
+          style="margin-bottom: 8px"
+        />
         <el-tree
           ref="treeRef"
-          :data="treeData"
+          data-testid="business-topology-tree"
+          :data="filteredTree"
           :props="{ label: 'label', children: 'children' }"
           default-expand-all
           node-key="id"
@@ -19,7 +28,7 @@
           @node-contextmenu="onNodeContextmenu"
         >
           <template #default="{ data }">
-            <span class="tree-node">
+            <span class="tree-node" data-testid="business-topology-node" :data-node-id="data.id" :data-node-type="data.type">
               <i :class="['bk-cmdb-icon', 'node-icon', nodeIconClass(data), { 'node-icon-biz': data.type === 'biz' }]" />
               <span class="node-label">{{ data.label }}</span>
               <span v-if="data.hostCount != null" class="node-count">{{ data.hostCount }}</span>
@@ -32,7 +41,7 @@
 
       <!-- 右:主机列表 / 服务实例 / 节点信息 -->
       <div class="main-col">
-        <el-tabs v-model="rightTab" class="right-tabs">
+        <el-tabs v-model="rightTab" class="right-tabs" data-testid="business-topology-tabs">
           <el-tab-pane label="主机列表" name="host" />
           <el-tab-pane label="服务实例" name="instance" />
           <el-tab-pane label="节点信息" name="node" />
@@ -135,6 +144,7 @@
         <!-- 主机列表 -->
         <template v-if="rightTab === 'host'">
           <el-table
+            data-testid="business-topology-host-table"
             :data="hosts"
             v-loading="hostLoading"
             size="small"
@@ -174,13 +184,14 @@
             <span class="selected-info">已选择{{ selectedHosts.length }}条</span>
             <div class="spacer" />
             <el-pagination
+              data-testid="business-topology-host-pagination"
               v-model:current-page="hostPage"
               :page-size="hostPageSize"
               :total="hostTotal"
               :page-sizes="[10, 20, 50, 100]"
               layout="sizes, prev, pager, next"
               small
-              @current-change="loadHosts"
+              @current-change="onHostPageChange"
               @size-change="onHostPageSizeChange"
             />
             <el-popover placement="bottom-end" :width="220" trigger="click" v-model:visible="colPickerVisible">
@@ -205,7 +216,10 @@
 
         <!-- 服务实例 -->
         <template v-if="rightTab === 'instance'">
-          <el-table :data="svcInstances" v-loading="instLoading" size="small" class="bk-table"
+          <el-table
+            data-testid="business-topology-instance-table"
+            :data="svcInstances"
+            v-loading="instLoading" size="small" class="bk-table"
             @selection-change="onInstanceSelect">
             <el-table-column type="selection" width="36" />
             <el-table-column label="实例名称" min-width="200" show-overflow-tooltip>
@@ -584,16 +598,34 @@ const router = useRouter()
 const bizStore = useBizStore()
 const bizId = computed(() => Number(route.query.biz || route.params.bizId || bizStore.bizId) || null)
 
-const keyword = ref('')
+const queryScalar = (value) => Array.isArray(value) ? value[0] : value
+const queryText = (value) => String(queryScalar(value) ?? '')
+const queryPositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(queryText(value), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+const LEGACY_TAB_MAP = {
+  hostList: 'host',
+  serviceInstance: 'instance',
+  podList: 'instance',
+  nodeInfo: 'node',
+  host: 'host',
+  instance: 'instance',
+  node: 'node'
+}
+const LOCAL_TAB_TO_LEGACY = { host: 'hostList', instance: 'serviceInstance', node: 'nodeInfo' }
+const normalizeTab = (value) => LEGACY_TAB_MAP[queryText(value)] || 'host'
+const normalizeServiceView = (value) => queryText(value) === 'process' ? 'process' : 'instance'
+
+const keyword = ref(queryText(route.query.keyword))
 const treeData = ref([])
 const hosts = ref([])
 const hostTotal = ref(0)
 const selectedHosts = ref([])
 const loading = ref(false)
 const hostLoading = ref(false)
-// 老版 tab 命名空间: hostList/serviceInstance/podList(容器,独立环境回落实例)/nodeInfo
-const LEGACY_TAB_MAP = { hostList: 'host', serviceInstance: 'instance', podList: 'instance', nodeInfo: 'host' }
-const rightTab = ref(LEGACY_TAB_MAP[route.query.tab] || (route.query.tab === 'instance' ? 'instance' : 'host'))
+const rightTab = ref(normalizeTab(route.query.tab))
+const serviceView = ref(normalizeServiceView(route.query.view))
 const svcInstances = ref([])
 const selectedInstances = ref([])
 const instLoading = ref(false)
@@ -690,7 +722,14 @@ const legacyModuleId = computed(() => Number(route.query.module) || null)
 
 function applyLegacyInstanceContext() {
   if (rightTab.value === 'instance' && legacyModuleId.value) {
-    currentNode.value = treeData.value.flatMap((node) => node.children || []).flatMap((set) => [set, ...(set.children || [])]).find((node) => node.moduleId === legacyModuleId.value) || currentNode.value
+    const found = treeData.value
+      .flatMap((node) => node.children || [])
+      .flatMap((set) => [set, ...(set.children || [])])
+      .find((node) => node.moduleId === legacyModuleId.value)
+    if (found) {
+      currentNode.value = found
+      currentKey.value = found.id
+    }
   }
   if (legacyDeleteIds.value.length) {
     ElMessage.info(`已保留 ${legacyDeleteIds.value.length} 个待处理实例，请在服务实例页确认后操作`)
@@ -701,8 +740,8 @@ const ipKeyword = ref('')
 const treeRef = ref(null)
 
 // 主机分页
-const hostPage = ref(1)
-const hostPageSize = ref(20)
+const hostPage = ref(queryPositiveInt(route.query.page, 1))
+const hostPageSize = ref(queryPositiveInt(route.query.limit, 20))
 
 // 字段显示设置:候选字段池(可勾选)
 const hostColumnPool = [
@@ -873,15 +912,16 @@ async function load() {
       children
     }]
     treeData.value = nodes
-    // 老版 node 深链恢复(module-{id}/set-{id});topo_path 为集群链回退,当前树一次拉全,直接按 id 命中
-    const queryNode = String(route.query.node || '')
-    if (queryNode) {
-      const found = findTreeNode(nodes, queryNode)
-      if (found) {
-        currentNode.value = found
-        currentKey.value = found.id
-      }
+    const restoredNode = findQueryNode(nodes, route.query)
+    if (restoredNode) {
+      currentNode.value = restoredNode
+      currentKey.value = restoredNode.id
+    } else {
+      currentNode.value = null
+      currentKey.value = ''
     }
+    await nextTick()
+    syncTopoQuery()
     await Promise.all([loadHosts(), loadInstances()])
     applyLegacyInstanceContext()
     const legacyAction = String(route.query.action || '')
@@ -898,6 +938,44 @@ function findTreeNode(list, id) {
     if (hit) return hit
   }
   return null
+}
+
+function findQueryNode(nodes, query) {
+  const queryNode = queryText(query.node)
+  if (queryNode) {
+    const exact = findTreeNode(nodes, queryNode)
+    if (exact) return exact
+  }
+
+  const topoPath = queryText(query.topo_path).split(',').filter(Boolean)
+  for (let index = topoPath.length - 1; index >= 0; index -= 1) {
+    const ancestor = findTreeNode(nodes, topoPath[index])
+    if (ancestor) return ancestor
+  }
+
+  if (normalizeTab(query.tab) === 'instance' && queryText(query.module)) {
+    const moduleId = Number(queryText(query.module))
+    const module = nodes.flatMap((root) => root.children || [])
+      .flatMap((set) => [set, ...(set.children || [])])
+      .find((node) => node.type === 'module' && Number(node.moduleId) === moduleId)
+    if (module) return module
+  }
+
+  const search = queryText(query.keyword).trim().toLowerCase()
+  if (search) {
+    const visit = (list) => {
+      for (const node of list) {
+        if ((node.label || '').toLowerCase().includes(search)) return node
+        const child = visit(node.children || [])
+        if (child) return child
+      }
+      return null
+    }
+    const match = visit(nodes)
+    if (match) return match
+  }
+
+  return nodes[0] || null
 }
 
 async function loadHosts() {
@@ -940,12 +1018,6 @@ async function loadHosts() {
   } finally {
     hostLoading.value = false
   }
-}
-
-function onHostPageSizeChange(sz) {
-  hostPageSize.value = sz
-  hostPage.value = 1
-  loadHosts()
 }
 
 async function loadInstances() {
@@ -996,30 +1068,105 @@ function clearInstanceSearch() {
   loadInstances()
 }
 
-function onNodeClick(node) {
-  currentNode.value = node
-  currentKey.value = node.id
-  if (rightTab.value === 'host') loadHosts()
-  else if (rightTab.value === 'instance') {
-    instanceLabelKey.value = ''
-    instanceLabelValues.value = []
-    Promise.all([loadInstances(), loadInstanceLabelAggregation()])
-  }
-  syncTopoQuery()
+function serializeQuery(query) {
+  return JSON.stringify(Object.entries(query || {}).sort(([left], [right]) => left.localeCompare(right)))
 }
 
-// 老版契约:节点点击/切 tab 都把 node/tab 写回 query(tab 用老版 hostList/serviceInstance 命名),
-// 刷新与深链不丢选中节点
-function syncTopoQuery() {
-  const legacyTab = rightTab.value === 'instance' ? 'serviceInstance' : 'hostList'
-  router.replace({
-    query: { ...route.query, tab: legacyTab, ...(currentNode.value ? { node: currentNode.value.id } : {}) }
-  }).catch(() => {})
+const pendingTopoQuerySyncs = new Set()
+let applyingTopoRouteQuery = false
+
+function syncTopoQuery({ clearTopoPath = false } = {}) {
+  const query = { ...route.query }
+  query.tab = LOCAL_TAB_TO_LEGACY[rightTab.value] || 'hostList'
+  if (currentNode.value?.id) query.node = currentNode.value.id
+  else delete query.node
+  query.page = String(hostPage.value)
+  query.limit = String(hostPageSize.value)
+  if (keyword.value) query.keyword = keyword.value
+  else delete query.keyword
+  if (rightTab.value === 'instance') query.view = serviceView.value
+  else delete query.view
+  if (clearTopoPath) delete query.topo_path
+
+  const nextQueryKey = serializeQuery(query)
+  if (nextQueryKey === serializeQuery(route.query)) return
+  pendingTopoQuerySyncs.add(nextQueryKey)
+  router.replace({ query }).catch(() => {
+    pendingTopoQuerySyncs.delete(nextQueryKey)
+  })
 }
-watch(rightTab, () => {
+
+function loadForActiveTab() {
+  if (rightTab.value === 'host') return loadHosts()
+  if (rightTab.value === 'instance') return Promise.all([loadInstances(), loadInstanceLabelAggregation()])
+  return Promise.resolve()
+}
+
+watch(keyword, () => {
+  if (!applyingTopoRouteQuery) syncTopoQuery()
+}, { flush: 'sync' })
+
+watch(rightTab, (tab, previousTab) => {
+  if (applyingTopoRouteQuery) return
+  if (tab !== previousTab) hostPage.value = 1
   syncTopoQuery()
-  if (rightTab.value === 'instance') Promise.all([loadInstances(), loadInstanceLabelAggregation()])
-})
+  loadForActiveTab()
+}, { flush: 'sync' })
+
+watch(() => route.query, async (query, previousQuery = {}) => {
+  const queryKey = serializeQuery(query)
+  if (pendingTopoQuerySyncs.has(queryKey)) {
+    pendingTopoQuerySyncs.delete(queryKey)
+    return
+  }
+
+  const previousTab = normalizeTab(previousQuery.tab)
+  const previousNodeId = currentNode.value?.id || ''
+  const previousPage = hostPage.value
+  const previousLimit = hostPageSize.value
+  applyingTopoRouteQuery = true
+  keyword.value = queryText(query.keyword)
+  rightTab.value = normalizeTab(query.tab)
+  serviceView.value = normalizeServiceView(query.view)
+  hostPage.value = queryPositiveInt(query.page, 1)
+  hostPageSize.value = queryPositiveInt(query.limit, 20)
+  const restoredNode = findQueryNode(treeData.value, query)
+  currentNode.value = restoredNode
+  currentKey.value = restoredNode?.id || ''
+  applyingTopoRouteQuery = false
+
+  const tabChanged = rightTab.value !== previousTab
+  const nodeChanged = currentNode.value?.id !== previousNodeId
+  const pageChanged = hostPage.value !== previousPage || hostPageSize.value !== previousLimit
+  if (tabChanged || nodeChanged || pageChanged) await loadForActiveTab()
+}, { deep: true })
+
+function onHostPageChange(page) {
+  hostPage.value = queryPositiveInt(page, 1)
+  syncTopoQuery()
+  loadHosts()
+}
+
+function onHostPageSizeChange(size) {
+  hostPageSize.value = queryPositiveInt(size, hostPageSize.value)
+  hostPage.value = 1
+  syncTopoQuery()
+  loadHosts()
+}
+
+function onNodeClick(node) {
+  const selected = findTreeNode(treeData.value, node.id) || node
+  currentNode.value = selected
+  currentKey.value = selected.id
+  hostPage.value = 1
+  if (rightTab.value === 'instance') {
+    instanceLabelKey.value = ''
+    instanceLabelValues.value = []
+  }
+  syncTopoQuery({ clearTopoPath: true })
+  loadForActiveTab()
+}
+
 
 function onHostSelect(rows) {
   selectedHosts.value = rows
