@@ -33,15 +33,16 @@ async function waitForRecord(predicate, message, timeout = 5000) {
   throw new Error(message)
 }
 
-async function run() {
-  const browser = await chromium.launch({ headless: true })
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-  const page = await context.newPage()
-  page.setDefaultTimeout(8000)
+function makeState() {
+  return { usercustom: {} }
+}
 
-  const records = { hostQueries: [], instanceQueries: [], unexpectedKube: [], apiRequests: [], apiResponses: [], errors: [] }
+function makeRecords() {
+  return { hostQueries: [], instanceQueries: [], usercustom: [], unexpectedKube: [], apiResponses: [], errors: [] }
+}
+
+function attachObservers(page, records) {
   page.on('request', (request) => {
-    if (request.url().includes('/api/v3/')) records.apiRequests.push({ url: request.url(), body: request.postData() })
     if (/\/find\/kube\//.test(request.url())) records.unexpectedKube.push(request.url())
   })
   page.on('response', (response) => {
@@ -51,7 +52,14 @@ async function run() {
   page.on('console', (message) => {
     if (message.type() === 'error') records.errors.push(`console.error: ${message.text()}`)
   })
+}
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+async function installM3(page, state, records, options = {}) {
+  let failHost = Boolean(options.failHost)
   await page.route('**/*', (route) => {
     const headers = { ...route.request().headers(), 'Cache-Control': 'no-cache' }
     delete headers['if-none-match']
@@ -60,8 +68,13 @@ async function run() {
   await page.route('**/userinfo', (route) => json(route, ok({ username: 'm3-mock', chname: 'M3 Mock', current_supplier: '0' })))
   await page.route('**/api/v3/biz/search/0', (route) => json(route, ok({ count: 1, info: [{ bk_biz_id: 2, bk_biz_name: 'Mock Business' }] })))
   await page.route('**/api/v3/findmany/biz_set', (route) => json(route, ok({ count: 0, info: [] })))
-  await page.route('**/api/v3/usercustom/user/search', (route) => json(route, ok({})))
-  await page.route('**/api/v3/usercustom', (route) => json(route, ok({})))
+  await page.route('**/api/v3/usercustom/user/search', (route) => json(route, ok(clone(state.usercustom))))
+  await page.route('**/api/v3/usercustom', async (route) => {
+    const body = route.request().postDataJSON() || {}
+    records.usercustom.push(body)
+    Object.assign(state.usercustom, body)
+    return json(route, ok({}))
+  })
   await page.route('**/api/v3/find/classificationobject', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/object', (route) => json(route, ok([])))
   await page.route(/\/api\/v3\/find\/topoinst_with_statistics\/biz\/2(?:\?.*)?$/, (route) => json(route, ok([
@@ -88,6 +101,10 @@ async function run() {
   await page.route('**/api/v3/findmany/hosts/search/with_biz', async (route) => {
     const body = route.request().postDataJSON() || {}
     records.hostQueries.push(body)
+    if (failHost && body.page?.limit !== 500) {
+      failHost = false
+      return json(route, { result: false, bk_error_code: 500, bk_error_msg: '主机服务不可用' })
+    }
     const count = body.page?.limit === 500 ? 3 : 100
     const rows = body.page?.limit === 500 ? [] : Array.from({ length: Math.min(body.page?.limit || 20, 5) }, (_, index) => ({
       host: { bk_host_id: index + 100, bk_host_innerip: `10.0.0.${index + 1}`, bk_host_name: `host-${index + 1}` },
@@ -103,6 +120,18 @@ async function run() {
   })
   await page.route('**/api/v3/find/objectattgroup/object/biz', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([])))
+}
+
+async function run() {
+  const browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const page = await context.newPage()
+  page.setDefaultTimeout(8000)
+
+  const state = makeState()
+  const records = makeRecords()
+  attachObservers(page, records)
+  await installM3(page, state, records)
 
   const checks = []
   try {
@@ -190,6 +219,69 @@ async function run() {
     assert(hashQuery(page).get('view') === 'instance', '重新进入服务实例 Tab 时未设置默认 view=instance')
     assert(!records.unexpectedKube.length, `M3-A 不应发送 K8s 请求: ${records.unexpectedKube.join(', ')}`)
     checks.push('node selection, nodeInfo tab mapping, and no K8s deep-path request')
+
+    // === M3-B: 主机列表契约 ===
+    await page.goto(`${BASE}/#/business/2/index?tab=hostList&node=module-21&page=1&limit=10`, { waitUntil: 'load' })
+    await page.locator('[data-testid="business-topology-host-table"]').waitFor()
+    await waitForRecord(() => {
+      const condition = records.hostQueries.at(-1)?.condition?.find((entry) => entry.bk_obj_id === 'module')?.condition?.[0]
+      return condition?.field === 'bk_module_id' && condition?.operator === '$eq' && condition?.value === 21
+    }, '模块节点条件未注入 bk_module_id $eq')
+    checks.push('host module node condition payload')
+
+    // 服务端排序: 表头点击 asc → desc → 清除,page.sort 写入请求(sort 不落 URL,老版仅内存)
+    const ipHeader = page.locator('.el-table__header th').filter({ hasText: '内网IPv4' }).first()
+    await ipHeader.click()
+    await waitForRecord(() => records.hostQueries.at(-1)?.page?.sort === 'bk_host_innerip', '升序点击未写入 page.sort=bk_host_innerip')
+    await ipHeader.click()
+    await waitForRecord(() => records.hostQueries.at(-1)?.page?.sort === '-bk_host_innerip', '降序点击未写入 page.sort=-bk_host_innerip')
+    await ipHeader.click()
+    await waitForRecord(() => records.hostQueries.at(-1)?.page?.sort === 'bk_host_id', '清除排序未回退 page.sort=bk_host_id')
+    assert(!hashQuery(page).has('sort'), 'sort 不应写入 URL(老版排序仅存内存)')
+    checks.push('server-side sort cycle into page.sort')
+
+    // IP 搜索: 老版顶层 ip/ipv6 对象(data/exact/flag) + URL ip query(text=逗号分隔)
+    const ipInput = page.getByTestId('business-topology-host-ip')
+    await ipInput.fill('192.168.1.1,2001:db8::1,asset-01')
+    await ipInput.press('Enter')
+    await waitForRecord(() => {
+      const body = records.hostQueries.at(-1) || {}
+      return Array.isArray(body.ip?.data) && body.ip.data.includes('192.168.1.1') && body.ip.data.includes('asset-01')
+        && Array.isArray(body.ipv6?.data) && body.ipv6.data.includes('2001:db8::1')
+        && body.ip.exact === 1 && body.ip.flag === 'bk_host_innerip|bk_host_outerip'
+    }, `IP 搜索请求体不符合老版 ip/ipv6 契约: ${JSON.stringify(records.hostQueries.at(-1))}`)
+    await waitForRecord(() => (hashQuery(page).get('ip') || '').startsWith('text=192.168.1.1'), `IP 搜索未持久化到 URL ip query: ${page.url()}`)
+    await ipInput.fill('')
+    await ipInput.press('Enter')
+    await waitForRecord(() => Array.isArray(records.hostQueries.at(-1)?.ip?.data) && records.hostQueries.at(-1).ip.data.length === 0, '清空 IP 搜索后请求体未回归空 ip.data')
+    await waitForRecord(() => !hashQuery(page).has('ip'), '清空 IP 搜索后 URL 未删除 ip query')
+    checks.push('legacy ip/ipv6 search body and URL persistence')
+
+    // 列配置: usercustom 读写 business_topology_table_column_config,固定列不可取消
+    await page.locator('.col-set').click()
+    await page.locator('.col-picker').waitFor()
+    assert(await page.locator('.col-picker-row .el-checkbox.is-disabled').count() >= 3, '固定列应不可取消勾选')
+    await page.locator('.col-picker').getByText('主机名').click()
+    await waitForRecord(() => (records.usercustom.at(-1)?.business_topology_table_column_config || []).includes('bk_host_name'), '列配置变更未写入 usercustom')
+    await page.reload({ waitUntil: 'load' })
+    await page.locator('[data-testid="business-topology-host-table"]').waitFor()
+    assert(await page.locator('.el-table__header th').filter({ hasText: '主机名' }).count() === 1, 'usercustom 列配置刷新后未恢复')
+    checks.push('usercustom column config read/write with fixed columns')
+
+    // 错误态 + 重试(失败只注入列表请求,放过 limit=500 的统计请求)
+    const errorPage = await context.newPage()
+    errorPage.setDefaultTimeout(8000)
+    const errorRecords = makeRecords()
+    attachObservers(errorPage, errorRecords)
+    await installM3(errorPage, makeState(), errorRecords, { failHost: true })
+    await errorPage.goto(`${BASE}/#/business/2/index?tab=hostList&node=module-21`, { waitUntil: 'load' })
+    await errorPage.locator('[data-testid="business-topology-host-error"]').waitFor()
+    await errorPage.locator('[data-testid="business-topology-host-error"]').getByRole('button', { name: '重试' }).click()
+    await errorPage.locator('[data-testid="business-topology-host-table"]').waitFor()
+    assert(await errorPage.locator('[data-testid="business-topology-host-error"]').count() === 0, '重试后错误态未消失')
+    assert(!errorRecords.unexpectedKube.length, `主机失败路径不应触发 K8s 请求: ${errorRecords.unexpectedKube.join(', ')}`)
+    await errorPage.close()
+    checks.push('host load error state with retry recovery')
 
     await page.goto(`${BASE}/#/business/2/index?node=module-999&topo_path=set-10,module-999&tab=hostList`, { waitUntil: 'load' })
     await page.locator('[data-node-id="set-10"]').waitFor()

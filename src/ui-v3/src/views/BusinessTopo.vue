@@ -121,13 +121,26 @@
           <el-button size="small" :icon="'Refresh'" @click="load">刷新</el-button>
           <span class="refresh-time">{{ refreshText }}</span>
           <el-input
-            v-model="ipKeyword"
-            :placeholder="rightTab === 'host' ? '请输入IP或固资编号' : '请输入实例名称或选择标签'"
+            v-if="rightTab === 'host'"
+            v-model="hostIpText"
+            data-testid="business-topology-host-ip"
+            placeholder="请输入IP或固资编号"
             size="small"
             clearable
             style="width: 220px; margin-left: 8px"
-            @keyup.enter="rightTab === 'host' ? loadHosts() : loadInstances()"
-            @clear="rightTab === 'host' ? loadHosts() : clearInstanceSearch()"
+            @keyup.enter="onHostIpSearch"
+            @clear="onHostIpSearch"
+          />
+          <el-input
+            v-else
+            v-model="ipKeyword"
+            data-testid="business-topology-instance-search"
+            placeholder="请输入实例名称或选择标签"
+            size="small"
+            clearable
+            style="width: 220px; margin-left: 8px"
+            @keyup.enter="loadInstances()"
+            @clear="clearInstanceSearch()"
           />
           <template v-if="rightTab === 'instance'">
             <el-select v-if="rightTab === 'instance' && instanceLabelAggregationError" v-model="instanceLabelKey" disabled size="small" placeholder="标签筛选不可用" style="width: 150px" />
@@ -141,78 +154,85 @@
           </template>
         </div>
 
-        <!-- 主机列表 -->
-        <template v-if="rightTab === 'host'">
-          <el-table
-            data-testid="business-topology-host-table"
-            :data="hosts"
-            v-loading="hostLoading"
-            size="small"
-            class="bk-table"
-            @selection-change="onHostSelect"
-          >
-            <el-table-column type="selection" width="36" />
-            <el-table-column label="ID" width="80">
-              <template #default="{ row }">
-                <el-link type="primary" :underline="false" @click="goHostDetail(row)">{{ row.bk_host_id }}</el-link>
-              </template>
-            </el-table-column>
-            <el-table-column
-              v-for="col in activeHostColumns"
-              :key="col.bk_property_id"
-              :prop="col.bk_property_id"
-              :label="col.bk_property_name"
-              :min-width="col.minWidth || 120"
-              sortable
-              show-overflow-tooltip
-            >
-              <template #default="{ row }">
-                <el-link v-if="col.bk_property_id === 'bk_host_innerip'" type="primary" :underline="false"
-                  @click="goHostDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
-                <span v-else>{{ hostCell(row, col.bk_property_id) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="__moduleName" label="模块名 (模块)" min-width="130" sortable>
-              <template #default="{ row }">{{ row.__moduleName || '--' }}</template>
-            </el-table-column>
-            <el-table-column prop="__setName" label="集群名 (集群)" min-width="130" sortable>
-              <template #default="{ row }">{{ row.__setName || '--' }}</template>
-            </el-table-column>
-          </el-table>
-          <div class="table-footer">
-            <span>共计{{ hostTotal }}条</span>
-            <span class="selected-info">已选择{{ selectedHosts.length }}条</span>
-            <div class="spacer" />
-            <el-pagination
-              data-testid="business-topology-host-pagination"
-              v-model:current-page="hostPage"
-              :page-size="hostPageSize"
-              :total="hostTotal"
-              :page-sizes="[10, 20, 50, 100]"
-              layout="sizes, prev, pager, next"
-              small
-              @current-change="onHostPageChange"
-              @size-change="onHostPageSizeChange"
-            />
-            <el-popover placement="bottom-end" :width="220" trigger="click" v-model:visible="colPickerVisible">
-              <template #reference>
-                <el-button size="small" :icon="'Setting'" class="col-set">字段设置</el-button>
-              </template>
-              <div class="col-picker">
-                <div class="col-picker-title">已显示字段(可拖动排序)</div>
-                <el-checkbox-group v-model="pickedColumnIds">
-                  <div v-for="col in hostColumnPool" :key="col.bk_property_id" class="col-picker-row">
-                    <el-checkbox :value="col.bk_property_id">{{ col.bk_property_name }}</el-checkbox>
+          <template v-if="rightTab === 'host'">
+            <div v-if="hostLoadError && !hostLoading" class="load-error" data-testid="business-topology-host-error">
+              <span>主机列表加载失败：{{ hostLoadError }}</span>
+              <el-button size="small" type="primary" @click="loadHosts">重试</el-button>
+            </div>
+            <template v-else>
+              <el-table
+                data-testid="business-topology-host-table"
+                :data="hosts"
+                v-loading="hostLoading"
+                size="small"
+                class="bk-table"
+                @selection-change="onHostSelect"
+                @sort-change="onHostSortChange"
+              >
+                <el-table-column type="selection" width="36" />
+                <el-table-column label="ID" width="80">
+                  <template #default="{ row }">
+                    <el-link type="primary" :underline="false" @click="goHostDetail(row)">{{ row.bk_host_id }}</el-link>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  v-for="col in activeHostColumns"
+                  :key="col.bk_property_id"
+                  :prop="col.bk_property_id"
+                  :label="col.bk_property_name"
+                  :min-width="col.minWidth || 120"
+                  sortable="custom"
+                  show-overflow-tooltip
+                >
+                  <template #default="{ row }">
+                    <el-link v-if="col.bk_property_id === 'bk_host_innerip'" type="primary" :underline="false"
+                      @click="goHostDetail(row)">{{ row.bk_host_innerip || '--' }}</el-link>
+                    <span v-else>{{ hostCell(row, col.bk_property_id) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="__moduleName" label="模块名 (模块)" min-width="130" sortable="custom">
+                  <template #default="{ row }">{{ row.__moduleName || '--' }}</template>
+                </el-table-column>
+                <el-table-column prop="__setName" label="集群名 (集群)" min-width="130" sortable="custom">
+                  <template #default="{ row }">{{ row.__setName || '--' }}</template>
+                </el-table-column>
+              </el-table>
+              <div class="table-footer">
+                <span>共计{{ hostTotal }}条</span>
+                <span class="selected-info">已选择{{ selectedHosts.length }}条</span>
+                <div class="spacer" />
+                <el-pagination
+                  data-testid="business-topology-host-pagination"
+                  v-model:current-page="hostPage"
+                  :page-size="hostPageSize"
+                  :total="hostTotal"
+                  :page-sizes="[10, 20, 50, 100]"
+                  layout="sizes, prev, pager, next"
+                  small
+                  @current-change="onHostPageChange"
+                  @size-change="onHostPageSizeChange"
+                />
+                <el-popover placement="bottom-end" :width="220" trigger="click" v-model:visible="colPickerVisible">
+                  <template #reference>
+                    <el-button size="small" :icon="'Setting'" class="col-set">字段设置</el-button>
+                  </template>
+                  <div class="col-picker">
+                    <div class="col-picker-title">已显示字段(可拖动排序)</div>
+                    <el-checkbox-group v-model="pickedColumnIds">
+                      <div v-for="col in hostColumnPool" :key="col.bk_property_id" class="col-picker-row">
+                        <el-checkbox :value="col.bk_property_id" :disabled="FIXED_TOPO_COLUMNS.includes(col.bk_property_id)">{{ col.bk_property_name }}</el-checkbox>
+                      </div>
+                    </el-checkbox-group>
+                    <div class="col-picker-actions">
+                      <el-button size="small" @click="resetColumns">恢复默认</el-button>
+                      <el-button size="small" type="primary" @click="colPickerVisible = false">关闭</el-button>
+                    </div>
                   </div>
-                </el-checkbox-group>
-                <div class="col-picker-actions">
-                  <el-button size="small" @click="resetColumns">恢复默认</el-button>
-                  <el-button size="small" type="primary" @click="colPickerVisible = false">关闭</el-button>
-                </div>
+                </el-popover>
               </div>
-            </el-popover>
-          </div>
-        </template>
+              <el-empty v-if="!hostLoading && hosts.length === 0" description="暂无主机" :image-size="60" />
+            </template>
+          </template>
 
         <!-- 服务实例 -->
         <template v-if="rightTab === 'instance'">
@@ -584,6 +604,7 @@ import {
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   searchModelAttributes, exportHosts,
   searchBusinessById, searchFieldGroups,
+  searchUserCustom, saveUserCustom,
   http
 } from '../api/cmdb'
 import { useBizStore } from '../stores/biz'
@@ -739,9 +760,52 @@ function applyLegacyInstanceContext() {
 const ipKeyword = ref('')
 const treeRef = ref(null)
 
-// 主机分页
+// 主机分页(老版 host/instance 共用同一对 page/limit query 键)
 const hostPage = ref(queryPositiveInt(route.query.page, 1))
 const hostPageSize = ref(queryPositiveInt(route.query.limit, 20))
+// 老版 IP 搜索: query `ip` 形如 `text=a,b`(逗号分隔,恢复时还原换行);排序仅在内存,不进 URL
+const hostIpText = ref(parseIpQueryText(route.query.ip))
+const hostSort = ref('bk_host_id')
+const hostLoadError = ref('')
+
+function parseIpQueryText(value) {
+  const raw = queryText(value)
+  if (!raw) return ''
+  const text = raw.startsWith('text=') ? raw.slice(5) : raw
+  return text.replace(/,/g, '\n')
+}
+
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/
+const IPV6_RE = /^[0-9a-fA-F:]+$/
+// 老版 FilterStore.getSearchParams 契约: 顶层 ip/ipv6 对象;非法 IP 归入 ip.data(固资编号),默认精确+内外网
+function buildHostIpParams(text) {
+  const entries = text.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean)
+  const ipv4 = []
+  const ipv6 = []
+  const others = []
+  for (const entry of entries) {
+    if (IPV4_RE.test(entry)) ipv4.push(entry)
+    else if (entry.includes(':') && IPV6_RE.test(entry)) ipv6.push(entry)
+    else others.push(entry)
+  }
+  const flag = 'bk_host_innerip|bk_host_outerip'
+  return {
+    ip: { data: [...ipv4, ...others], exact: 1, flag },
+    ipv6: { data: ipv6, exact: 1, flag }
+  }
+}
+
+function onHostIpSearch() {
+  syncTopoQuery()
+  loadHosts()
+}
+
+// 老版 handleSortChange: 只更新内存 sort 并重查(sort 不落 URL);模块/集群名列映射回真实字段
+function onHostSortChange({ prop, order }) {
+  const field = prop === '__moduleName' ? 'bk_module_name' : prop === '__setName' ? 'bk_set_name' : prop
+  hostSort.value = order === 'ascending' ? field : order === 'descending' ? `-${field}` : 'bk_host_id'
+  loadHosts()
+}
 
 // 字段显示设置:候选字段池(可勾选)
 const hostColumnPool = [
@@ -757,9 +821,12 @@ const hostColumnPool = [
   { bk_property_id: 'bk_isp_name', bk_property_name: '运营商', minWidth: 100 }
 ]
 const DEFAULT_PICKED = ['bk_host_innerip', 'bk_host_innerip_v6', 'bk_cloud_id']
-const PICK_KEY = 'topo.hostColumns'
+// 老版 route meta customInstanceColumn 键(usercustom 读写),固定列不可取消
+const COLUMN_CONFIG_KEY = 'business_topology_table_column_config'
+const FIXED_TOPO_COLUMNS = ['bk_host_innerip', 'bk_host_innerip_v6', 'bk_cloud_id']
 const pickedColumnIds = ref([...DEFAULT_PICKED])
 const colPickerVisible = ref(false)
+let columnConfigReady = false
 const activeHostColumns = computed(() => {
   const map = new Map(hostColumnPool.map((c) => [c.bk_property_id, c]))
   return pickedColumnIds.value.map((id) => map.get(id)).filter(Boolean)
@@ -770,14 +837,20 @@ function hostCell(row, key) {
   const v = row[key]
   return v === '' || v === null || v === undefined ? '--' : v
 }
-function loadPickedColumns() {
+async function loadPickedColumns() {
   try {
-    const raw = localStorage.getItem(PICK_KEY)
-    if (raw) pickedColumnIds.value = JSON.parse(raw)
-  } catch (e) { /* ignore */ }
+    const custom = await searchUserCustom()
+    const saved = custom?.[COLUMN_CONFIG_KEY]
+    if (Array.isArray(saved) && saved.length) {
+      const known = saved.filter((id) => hostColumnPool.some((c) => c.bk_property_id === id))
+      pickedColumnIds.value = [...new Set([...FIXED_TOPO_COLUMNS, ...known])]
+    }
+  } catch { /* usercustom 不可用时保留默认列 */ }
+  columnConfigReady = true
 }
 watch(pickedColumnIds, (v) => {
-  try { localStorage.setItem(PICK_KEY, JSON.stringify(v)) } catch (e) { /* ignore */ }
+  if (!columnConfigReady) return
+  saveUserCustom({ [COLUMN_CONFIG_KEY]: [...v] }).catch(() => { /* 保存失败保留本地状态 */ })
 }, { deep: true })
 function resetColumns() {
   pickedColumnIds.value = [...DEFAULT_PICKED]
@@ -981,11 +1054,15 @@ function findQueryNode(nodes, query) {
 async function loadHosts() {
   if (!bizId.value) return
   hostLoading.value = true
+  hostLoadError.value = ''
   try {
-    // 契约: HostCommonSearch 四对象关联查询,返回 host/set/module 关联数组(模块名/集群名列数据源)
+    // 契约: HostCommonSearch 四对象关联查询 + 顶层 ip/ipv6;节点条件按老版注入对应对象(biz 根节点注入 bk_biz_id)
     const node = currentNode.value
     const condition = [
-      { bk_obj_id: 'biz', fields: [] },
+      {
+        bk_obj_id: 'biz', fields: [],
+        ...(node?.type === 'biz' ? { condition: [{ field: 'bk_biz_id', operator: '$eq', value: bizId.value }] } : {})
+      },
       {
         bk_obj_id: 'set', fields: [],
         ...(node?.type === 'set' ? { condition: [{ field: 'bk_set_id', operator: '$eq', value: node.setId }] } : {})
@@ -994,15 +1071,13 @@ async function loadHosts() {
         bk_obj_id: 'module', fields: [],
         ...(node?.type === 'module' ? { condition: [{ field: 'bk_module_id', operator: '$eq', value: node.moduleId }] } : {})
       },
-      {
-        bk_obj_id: 'host', fields: [],
-        ...(ipKeyword.value ? { condition: [{ field: 'bk_host_innerip', operator: '$regex', value: ipKeyword.value }] } : {})
-      }
+      { bk_obj_id: 'host', fields: [] }
     ]
     const data = await http.post(`/findmany/hosts/search/with_biz`, {
       bk_biz_id: bizId.value,
       condition,
-      page: { start: (hostPage.value - 1) * hostPageSize.value, limit: hostPageSize.value, sort: 'bk_host_id' }
+      ...buildHostIpParams(hostIpText.value),
+      page: { start: (hostPage.value - 1) * hostPageSize.value, limit: hostPageSize.value, sort: hostSort.value }
     })
     const list = (data?.info || []).map((h) => {
       const host = h.host || {}
@@ -1015,6 +1090,10 @@ async function loadHosts() {
     hosts.value = list
     hostTotal.value = data?.count || 0
     refreshText.value = '刚刚刷新'
+  } catch (error) {
+    hosts.value = []
+    hostTotal.value = 0
+    hostLoadError.value = error?.message || '主机列表加载失败'
   } finally {
     hostLoading.value = false
   }
@@ -1086,6 +1165,8 @@ function syncTopoQuery({ clearTopoPath = false } = {}) {
   else delete query.keyword
   if (rightTab.value === 'instance') query.view = serviceView.value
   else delete query.view
+  if (rightTab.value === 'host' && hostIpText.value.trim()) query.ip = `text=${hostIpText.value.trim().replace(/\n/g, ',')}`
+  else delete query.ip
   if (clearTopoPath) delete query.topo_path
 
   const nextQueryKey = serializeQuery(query)
@@ -1130,6 +1211,7 @@ watch(() => route.query, async (query, previousQuery = {}) => {
   serviceView.value = normalizeServiceView(query.view)
   hostPage.value = queryPositiveInt(query.page, 1)
   hostPageSize.value = queryPositiveInt(query.limit, 20)
+  hostIpText.value = parseIpQueryText(query.ip)
   const restoredNode = findQueryNode(treeData.value, query)
   currentNode.value = restoredNode
   currentKey.value = restoredNode?.id || ''
@@ -1947,6 +2029,10 @@ onBeforeUnmount(() => {
 }
 .table-footer .spacer { flex: 1 1 20px; min-width: 0; }
 .selected-info { color: #3A84FF; }
+.load-error {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 32px 0; font-size: 12px; color: #EA3636;
+}
 .col-set { margin-left: 8px; }
 .col-picker-title { font-size: 12px; color: #63656E; margin-bottom: 8px; }
 .col-picker-row { padding: 4px 0; }
