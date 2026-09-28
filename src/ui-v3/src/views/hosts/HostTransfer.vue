@@ -183,6 +183,9 @@ const route = useRoute()
 const router = useRouter()
 const bizStore = useBizStore()
 
+// 老版契约:按 URL 业务操作(路由 :bizId 优先),避免 URL 业务与实际操作业务不一致
+const transferBizId = computed(() => Number(route.params.bizId) || bizStore.bizId)
+
 const type = ref(route.params.type)
 const resources = ref([])
 const targetModules = ref([])
@@ -272,7 +275,7 @@ function resolveData() {
 async function loadHosts() {
   if (!resources.value.length) return
   try {
-    const data = await listBizHosts(bizStore.bizId, { start: 0, limit: 500 }, {
+    const data = await listBizHosts(transferBizId.value, { start: 0, limit: 500 }, {
       condition: 'AND',
       rules: [{ field: 'bk_host_id', operator: '$in', value: resources.value }]
     })
@@ -286,7 +289,7 @@ async function loadModulePaths(moduleIds) {
   const unique = [...new Set(moduleIds.filter(Boolean).map(Number))]
   if (!unique.length) return
   try {
-    const result = await getTopoPath(bizStore.bizId, {
+    const result = await getTopoPath(transferBizId.value, {
       topo_nodes: unique.map((id) => ({ bk_obj_id: 'module', bk_inst_id: id }))
     })
     const map = { ...moduleMap.value }
@@ -308,7 +311,7 @@ async function loadAttrList() {
 async function loadIdleModule() {
   if (type.value !== 'remove') return
   try {
-    const topo = await getBizInternalTopo(bizStore.bizId)
+    const topo = await getBizInternalTopo(transferBizId.value)
     const idle = (topo?.module || []).find((m) => Number(m.default) === 1)
     idleModuleId.value = idle?.bk_module_id || null
   } catch { idleModuleId.value = null }
@@ -318,7 +321,7 @@ async function loadPreview() {
   const params = resolveData()
   loading.value = true
   try {
-    const data = await transferPreview(bizStore.bizId, params)
+    const data = await transferPreview(transferBizId.value, params)
     previewPlans.value = data || []
 
     // 变更确认 tabs(老版 setXxxServiceInstance 语义)
@@ -368,8 +371,8 @@ async function openModuleSelector() {
   moduleSelectorVisible.value = true
   if (!moduleTree.value.length) {
     const [mainTree, idleTopo] = await Promise.allSettled([
-      getBizTopoTree(bizStore.bizId),
-      getBizInternalTopo(bizStore.bizId)
+      getBizTopoTree(transferBizId.value),
+      getBizInternalTopo(transferBizId.value)
     ])
     const tree = []
     if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
@@ -438,7 +441,7 @@ async function handleConfirm() {
     if (tabs.value.hostAttrsAutoApply.info.length) {
       params.options = { ...(params.options || {}), host_apply_trans_rule: { changed: false } }
     }
-    await transferExecute(bizStore.bizId, params)
+    await transferExecute(transferBizId.value, params)
     ElMessage.success(({ remove: '移除成功', add: '添加成功' })[type.value] || '转移成功')
     router.back()
   } catch (e) {

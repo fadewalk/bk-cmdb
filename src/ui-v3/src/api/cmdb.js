@@ -152,9 +152,9 @@ export const transferHostModule = (bizId, hostIds, moduleIds, isIncrement = fals
     is_increment: isIncrement
   })
 
-// 转移主机至资源池
-export const transferHostToResource = (bizId, hostIds) =>
-  http.post('/hosts/modules/resource', { bk_biz_id: bizId, bk_host_id: hostIds })
+// 归还主机池(老版契约:必须指定目标资源目录 bk_module_id)
+export const transferHostToResource = (bizId, hostIds, moduleId = null) =>
+  http.post('/hosts/modules/resource', { bk_biz_id: bizId, bk_host_id: hostIds, ...(moduleId ? { bk_module_id: moduleId } : {}) })
 
 // 跨业务转移
 export const transferHostAcrossBiz = (params) =>

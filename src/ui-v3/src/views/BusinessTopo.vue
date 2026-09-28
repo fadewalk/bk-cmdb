@@ -58,8 +58,10 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="module">业务模块</el-dropdown-item>
                   <el-dropdown-item command="idle">转移至空闲机池</el-dropdown-item>
-                  <el-dropdown-item command="resource">转移到资源池</el-dropdown-item>
-                  <el-dropdown-item command="across">跨业务转移</el-dropdown-item>
+                  <el-dropdown-item command="resource" :disabled="selectionIdlePoolGated"
+                    :title="`主机需在「${idleSetName}」下才允许转移至主机池`">转移到资源池</el-dropdown-item>
+                  <el-dropdown-item command="across" :disabled="selectionIdlePoolGated"
+                    :title="`主机需在「${idleSetName}」下才允许转移至其他业务`">跨业务转移</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -504,6 +506,31 @@
       </template>
     </el-dialog>
 
+    <!-- 归还主机池(老版 MoveToResourceConfirm 语义) -->
+    <el-dialog v-model="resourceVisible" title="确认归还主机池" width="520px">
+      <p class="confirm-line">
+        {{ resourceInvalidHosts.length
+          ? `所选的${resourceValidHosts.length + resourceInvalidHosts.length}台主机有${resourceInvalidHosts.length}台不属于${idleSetName}，不能移除至主机池，将会自动忽略`
+          : `确认将${resourceValidHosts.length}台${idleSetName}转移到主机池？` }}
+      </p>
+      <el-form label-width="90px">
+        <el-form-item label="归还至目录" required>
+          <el-select v-model="resourceDirId" filterable placeholder="请选择资源目录" style="width: 100%">
+            <el-option v-for="d in resourceDirs" :key="d.bk_module_id" :label="d.bk_module_name" :value="d.bk_module_id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div class="field-tip">请务必确认业务进程已停止或主机处于关机状态</div>
+      <template v-if="resourceInvalidHosts.length">
+        <div class="confirm-line" style="margin-top: 8px">以下主机不能移除</div>
+        <div class="invalid-hosts">{{ resourceInvalidHosts.map((h) => h.bk_host_innerip).join('、') }}</div>
+      </template>
+      <template #footer>
+        <el-button @click="resourceVisible = false">取消</el-button>
+        <el-button type="primary" :loading="resourceSubmitting" @click="submitResourceTransfer">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 批量编辑主机属性(契约 PUT /hosts/batch) -->
     <el-drawer v-model="topoBatchVisible" title="编辑主机属性" size="480px">
       <el-form label-width="120px">
@@ -617,6 +644,7 @@ import {
   getBizTopoTree, getBizInternalTopo, listBizHosts,
   createSet, deleteSet, updateSet, createModule, deleteModule, updateModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
+  listResourceDirectory, transferExecute,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
   countInstanceProcesses, listInstanceLabels, deleteInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
@@ -1105,6 +1133,8 @@ async function loadHosts() {
       const sets = (h.set || []).map((x) => x.bk_set_name).filter(Boolean)
       host.__moduleName = mods.length ? mods.join(',') : '--'
       host.__setName = sets.length ? sets.join(',') : '--'
+      // 老版转移校验依赖 module.default(0=业务模块,>=1=空闲机池),随行保留
+      host.__modules = h.module || []
       return host
     })
     hosts.value = list
@@ -1371,16 +1401,48 @@ async function doAppend() {
 
 // ---------- 工具栏下拉/筛选/收藏/批量编辑 ----------
 const transferType = ref('business')
+// 转移/追加共用弹窗标题;此前未声明导致标题恒为"追加主机"且赋值抛错
+const transferMode = ref('move')
+// 老版转移校验:module.default 0=业务模块,>=1=空闲机池;空闲机池名/空闲模块取自树 idle 节点
+const idleSetName = computed(() => treeData.value[0]?.children?.find((n) => n.isIdle)?.label || '空闲机池')
+const idleSetModuleId = computed(() => {
+  const idle = treeData.value[0]?.children?.find((n) => n.isIdle)
+  return idle?.children?.[0]?.moduleId || null
+})
+const hostAllIdleSet = (h) => (h.__modules || []).length > 0 && (h.__modules || []).every((m) => Number(m.default) >= 1)
+const hostInIdlePool = (h) => (h.__modules || []).length > 0 && (h.__modules || []).every((m) => Number(m.default) !== 0)
+const selectionIdlePoolGated = computed(() => selectedHosts.value.length > 0 && !selectedHosts.value.every(hostAllIdleSet))
+
 function onTransferCmd(cmd) {
   if (!selectedHosts.value.length) return
   if (cmd === 'idle') {
+    // 老版契约:所选主机已在空闲机池内时直接转移,不进预览页
+    if (selectedHosts.value.every(hostInIdlePool)) return transferDirectlyToIdle()
     transferType.value = 'idle'
+    transferMode.value = 'move'
     transferVisible.value = true
   } else if (cmd === 'module') {
     transferType.value = 'business'
+    transferMode.value = 'move'
     transferVisible.value = true
   } else {
     onHostMore(cmd)
+  }
+}
+
+async function transferDirectlyToIdle() {
+  if (!idleSetModuleId.value) { ElMessage.warning(`未找到「${idleSetName.value}」的空闲模块`); return }
+  try {
+    await transferExecute(bizId.value, {
+      bk_host_ids: selectedHosts.value.map((h) => h.bk_host_id),
+      is_remove_from_all: true,
+      default_internal_module: idleSetModuleId.value
+    })
+    ElMessage.success('转移成功')
+    loadHosts()
+    load()
+  } catch (e) {
+    ElMessage.error('转移失败: ' + (e?.message || '后端异常'))
   }
 }
 
@@ -1482,15 +1544,59 @@ async function submitTopoBatchEdit() {
   } finally { topoBatchSaving.value = false }
 }
 
+// 归还主机池:老版 MoveToResourceConfirm 契约(校验空闲机池/忽略清单/归还目录/警示文案)
+const resourceVisible = ref(false)
+const resourceDirs = ref([])
+const resourceDirId = ref(null)
+const resourceValidHosts = ref([])
+const resourceInvalidHosts = ref([])
+const resourceSubmitting = ref(false)
+
+async function openResourceTransfer() {
+  const valid = selectedHosts.value.filter(hostAllIdleSet)
+  const invalid = selectedHosts.value.filter((h) => !hostAllIdleSet(h))
+  if (!valid.length) {
+    ElMessage.warning(`所选主机不属于「${idleSetName.value}」，不能移除`)
+    return
+  }
+  resourceValidHosts.value = valid
+  resourceInvalidHosts.value = invalid
+  resourceDirId.value = null
+  resourceVisible.value = true
+  try {
+    const data = await listResourceDirectory({ page: { start: 0, limit: 200 } })
+    resourceDirs.value = data?.info || []
+  } catch { resourceDirs.value = [] }
+}
+
+async function submitResourceTransfer() {
+  if (!resourceDirId.value) { ElMessage.warning('请选择归还至目录'); return }
+  resourceSubmitting.value = true
+  try {
+    await transferHostToResource(bizId.value, resourceValidHosts.value.map((h) => h.bk_host_id), resourceDirId.value)
+    ElMessage.success('已转移至资源池')
+    resourceVisible.value = false
+    loadHosts()
+    load()
+  } catch (e) {
+    ElMessage.error('归还资源池失败: ' + (e?.message || '后端异常'))
+  } finally { resourceSubmitting.value = false }
+}
+
 async function onHostMore(cmd) {
   if (!selectedHosts.value.length) return
   if (cmd === 'resource') {
-    await ElMessageBox.confirm(`将所选 ${selectedHosts.value.length} 台主机转移到资源池?`, '转移确认', { type: 'warning' })
-    await transferHostToResource(bizId.value, selectedHosts.value.map((h) => h.bk_host_id))
-    ElMessage.success('已转移至资源池')
-    loadHosts()
-    load()
+    await openResourceTransfer()
   } else if (cmd === 'across') {
+    // 老版契约:跨业务仅允许空闲机池主机;部分不属于时忽略并在确认文案中提示
+    const valid = selectedHosts.value.filter(hostAllIdleSet)
+    const invalid = selectedHosts.value.filter((h) => !hostAllIdleSet(h))
+    if (!valid.length) {
+      ElMessage.warning(`所选主机不属于「${idleSetName.value}」，不能移除`)
+      return
+    }
+    acrossValidHosts.value = valid
+    acrossInvalidHosts.value = invalid
     acrossForm.value = { dstBiz: null, modulePath: null }
     acrossVisible.value = true
     loadAcrossModuleOptions()
@@ -1503,6 +1609,8 @@ const acrossForm = ref({ dstBiz: null, modulePath: null })
 const acrossModules = ref([])
 const acrossLoading = ref(false)
 const acrossSubmitting = ref(false)
+const acrossValidHosts = ref([])
+const acrossInvalidHosts = ref([])
 const acrossBizOptions = computed(() => bizStore.bizList.filter((b) => b.bk_biz_id !== bizId.value))
 
 async function loadAcrossModuleOptions() {
@@ -1510,32 +1618,29 @@ async function loadAcrossModuleOptions() {
   if (!acrossForm.value.dstBiz) return
   acrossLoading.value = true
   try {
-    const options = []
-    const [mainTree, idleTopo] = await Promise.allSettled([getBizTopoTree(acrossForm.value.dstBiz), getBizInternalTopo(acrossForm.value.dstBiz)])
-    const mapSet = (node) => ({
-      value: node.bk_inst_id, label: node.bk_inst_name,
-      children: (node.child || []).filter((c) => c.bk_obj_id === 'module' || c.child).map((c) => (c.bk_obj_id === 'module'
-        ? { value: c.bk_inst_id, label: c.bk_inst_name } : mapSet(c)))
-    })
-    if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
-      for (const bizNode of mainTree.value) options.push(...(bizNode.child || []).map(mapSet))
+    // 老版 same-default 约束:业务拓扑入口的跨业务要求主机在空闲机池,目标也只能是目标业务空闲机模块
+    const idleTopo = await getBizInternalTopo(acrossForm.value.dstBiz)
+    if (idleTopo?.bk_set_id) {
+      acrossModules.value = [{
+        value: idleTopo.bk_set_id,
+        label: idleTopo.bk_set_name,
+        children: (idleTopo.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name }))
+      }]
     }
-    if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
-      const s = idleTopo.value
-      options.push({ value: s.bk_set_id, label: s.bk_set_name, children: (s.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name })) })
-    }
-    acrossModules.value = options
-  } finally { acrossLoading.value = false }
+  } catch { acrossModules.value = [] } finally { acrossLoading.value = false }
 }
 
 async function submitAcrossTransfer() {
-  const hostIds = selectedHosts.value.map((h) => h.bk_host_id)
+  const hostIds = acrossValidHosts.value.map((h) => h.bk_host_id)
   if (!acrossForm.value.dstBiz || !acrossForm.value.modulePath) {
     ElMessage.warning('请选择目标业务与模块')
     return
   }
   try {
-    await ElMessageBox.confirm(`将所选 ${hostIds.length} 台主机转移至目标业务的所选模块?`, '跨业务转移确认', { type: 'warning' })
+    const ignoreNote = acrossInvalidHosts.value.length
+      ? `所选的${acrossValidHosts.value.length + acrossInvalidHosts.value.length}台主机有${acrossInvalidHosts.value.length}台不属于${idleSetName.value}，不能移除至其他业务，将会自动忽略。`
+      : ''
+    await ElMessageBox.confirm(`${ignoreNote}将所选 ${hostIds.length} 台主机转移至目标业务的所选模块?`, '跨业务转移确认', { type: 'warning' })
   } catch { return }
   acrossSubmitting.value = true
   try {
@@ -2084,6 +2189,11 @@ onBeforeUnmount(() => {
 }
 .table-footer .spacer { flex: 1 1 20px; min-width: 0; }
 .selected-info { color: #3A84FF; }
+.confirm-line { font-size: 13px; color: #63656E; margin: 0 0 10px; line-height: 1.6; }
+.invalid-hosts {
+  font-size: 12px; color: #EA3636; line-height: 1.8;
+  background: #FFF0F0; border: 1px solid #FFD9D9; border-radius: 2px; padding: 6px 10px;
+}
 .load-error {
   display: flex; align-items: center; justify-content: center; gap: 12px;
   padding: 32px 0; font-size: 12px; color: #EA3636;
