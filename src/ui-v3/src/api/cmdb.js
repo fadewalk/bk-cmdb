@@ -71,6 +71,9 @@ export const searchProcessInstances = (bizId, serviceInstanceId, page) =>
   http.post('/findmany/proc/process_instance', {
     bk_biz_id: bizId, service_instance_id: serviceInstanceId, page
   })
+// 实例进程数统计(老版 roll 请求,前端按 100 条分批)
+export const countInstanceProcesses = (ids) =>
+  http.post('/count/service_instance/processes', { ids })
 
 // 模块下未绑定服务实例的主机
 export const listHostsWithNoSvcInst = (bizId, moduleId) =>

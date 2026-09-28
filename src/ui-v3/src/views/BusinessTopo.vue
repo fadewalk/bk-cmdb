@@ -133,14 +133,14 @@
           />
           <el-input
             v-else
-            v-model="ipKeyword"
+            v-model="instanceName"
             data-testid="business-topology-instance-search"
             placeholder="请输入实例名称或选择标签"
             size="small"
             clearable
             style="width: 220px; margin-left: 8px"
-            @keyup.enter="loadInstances()"
-            @clear="clearInstanceSearch()"
+            @keyup.enter="onInstanceSearch"
+            @clear="clearInstanceSearch"
           />
           <template v-if="rightTab === 'instance'">
             <el-select v-if="rightTab === 'instance' && instanceLabelAggregationError" v-model="instanceLabelKey" disabled size="small" placeholder="标签筛选不可用" style="width: 150px" />
@@ -209,8 +209,8 @@
                   :page-sizes="[10, 20, 50, 100]"
                   layout="sizes, prev, pager, next"
                   small
-                  @current-change="onHostPageChange"
-                  @size-change="onHostPageSizeChange"
+                  @current-change="onPageChange"
+                  @size-change="onPageSizeChange"
                 />
                 <el-popover placement="bottom-end" :width="220" trigger="click" v-model:visible="colPickerVisible">
                   <template #reference>
@@ -236,11 +236,16 @@
 
         <!-- 服务实例 -->
         <template v-if="rightTab === 'instance'">
-          <el-table
-            data-testid="business-topology-instance-table"
-            :data="svcInstances"
-            v-loading="instLoading" size="small" class="bk-table"
-            @selection-change="onInstanceSelect">
+          <div v-if="instanceLoadError && !instLoading" class="load-error" data-testid="business-topology-instance-error">
+            <span>服务实例加载失败：{{ instanceLoadError }}</span>
+            <el-button size="small" type="primary" @click="loadInstances">重试</el-button>
+          </div>
+          <template v-else>
+            <el-table
+              data-testid="business-topology-instance-table"
+              :data="svcInstances"
+              v-loading="instLoading" size="small" class="bk-table"
+              @selection-change="onInstanceSelect">
             <el-table-column type="selection" width="36" />
             <el-table-column label="实例名称" min-width="200" show-overflow-tooltip>
               <template #default="{ row }">
@@ -268,10 +273,23 @@
             </el-table-column>
           </el-table>
           <div class="table-footer">
-            <span>共计{{ svcInstances.length }}条</span>
+            <span>共计{{ instanceTotal }}条</span>
             <span class="selected-info">已选择{{ selectedInstances.length }}条</span>
+            <div class="spacer" />
+            <el-pagination
+              data-testid="business-topology-instance-pagination"
+              v-model:current-page="hostPage"
+              :page-size="hostPageSize"
+              :total="instanceTotal"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="sizes, prev, pager, next"
+              small
+              @current-change="onPageChange"
+              @size-change="onPageSizeChange"
+            />
           </div>
           <el-empty v-if="!instLoading && svcInstances.length === 0" description="暂无服务实例(选中模块后可点击「新建服务实例」)" :image-size="60" />
+          </template>
         </template>
 
         <!-- 节点信息 -->
@@ -600,7 +618,7 @@ import {
   createSet, deleteSet, updateSet, createModule, deleteModule, updateModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
-  listInstanceLabels, deleteInstanceLabels,
+  countInstanceProcesses, listInstanceLabels, deleteInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
   searchModelAttributes, exportHosts,
   searchBusinessById, searchFieldGroups,
@@ -648,6 +666,7 @@ const hostLoading = ref(false)
 const rightTab = ref(normalizeTab(route.query.tab))
 const serviceView = ref(normalizeServiceView(route.query.view))
 const svcInstances = ref([])
+const instanceTotal = ref(0)
 const selectedInstances = ref([])
 const instLoading = ref(false)
 const instanceLoadError = ref('')
@@ -757,7 +776,8 @@ function applyLegacyInstanceContext() {
   }
 }
 
-const ipKeyword = ref('')
+// 老版实例名称搜索走独立 query 键 `instanceName`(与树 keyword/主机 ip 分离)
+const instanceName = ref(queryText(route.query.instanceName))
 const treeRef = ref(null)
 
 // 主机分页(老版 host/instance 共用同一对 page/limit query 键)
@@ -1100,22 +1120,50 @@ async function loadHosts() {
 }
 
 async function loadInstances() {
+  if (!bizId.value) return
   instLoading.value = true
   instanceLoadError.value = ''
   try {
-    const data = await searchServiceInstances(bizId.value, { start: 0, limit: 200 }, currentModuleId.value, buildServiceInstanceSearchOptions({
-      searchKey: ipKeyword.value,
+    // 老版契约: host/instance 共用同一对 page/limit query 键;search_key/selectors/with_name 同体
+    const data = await searchServiceInstances(bizId.value, {
+      start: (hostPage.value - 1) * hostPageSize.value,
+      limit: hostPageSize.value
+    }, currentModuleId.value, buildServiceInstanceSearchOptions({
+      searchKey: instanceName.value,
       labelKey: instanceLabelKey.value,
       labelValues: instanceLabelValues.value
     }))
     const rows = data?.info || []
     svcInstances.value = rows
+    instanceTotal.value = data?.count || 0
+    await loadInstanceProcessCounts()
   } catch (error) {
     svcInstances.value = []
+    instanceTotal.value = 0
     instanceLoadError.value = error?.message || '服务实例加载失败'
   } finally {
     instLoading.value = false
   }
+}
+
+// 老版 getProcessCounts: count/service_instance/processes 按 100 条分批回填 process_count
+// 必须通过 svcInstances 代理数组回填,直接改原始对象不触发响应式
+async function loadInstanceProcessCounts() {
+  const rows = svcInstances.value
+  const ids = rows.map((row) => row.id)
+  const counts = []
+  try {
+    for (let index = 0; index < ids.length; index += 100) {
+      counts.push(...await countInstanceProcesses(ids.slice(index, index + 100)))
+    }
+  } catch { /* 进程数统计失败保留占位,不阻塞列表 */ }
+  const byId = new Map(counts.map((item) => [item.id, item.count]))
+  rows.forEach((row) => { row.process_count = byId.get(row.id) ?? 0 })
+}
+
+function onInstanceSearch() {
+  syncTopoQuery()
+  loadInstances()
 }
 
 async function loadInstanceLabelAggregation() {
@@ -1141,9 +1189,10 @@ function onInstanceLabelKeyChange() {
 }
 
 function clearInstanceSearch() {
-  ipKeyword.value = ''
+  instanceName.value = ''
   instanceLabelKey.value = ''
   instanceLabelValues.value = []
+  syncTopoQuery()
   loadInstances()
 }
 
@@ -1165,6 +1214,8 @@ function syncTopoQuery({ clearTopoPath = false } = {}) {
   else delete query.keyword
   if (rightTab.value === 'instance') query.view = serviceView.value
   else delete query.view
+  if (rightTab.value === 'instance' && instanceName.value.trim()) query.instanceName = instanceName.value.trim()
+  else delete query.instanceName
   if (rightTab.value === 'host' && hostIpText.value.trim()) query.ip = `text=${hostIpText.value.trim().replace(/\n/g, ',')}`
   else delete query.ip
   if (clearTopoPath) delete query.topo_path
@@ -1212,6 +1263,7 @@ watch(() => route.query, async (query, previousQuery = {}) => {
   hostPage.value = queryPositiveInt(query.page, 1)
   hostPageSize.value = queryPositiveInt(query.limit, 20)
   hostIpText.value = parseIpQueryText(query.ip)
+  instanceName.value = queryText(query.instanceName)
   const restoredNode = findQueryNode(treeData.value, query)
   currentNode.value = restoredNode
   currentKey.value = restoredNode?.id || ''
@@ -1223,17 +1275,18 @@ watch(() => route.query, async (query, previousQuery = {}) => {
   if (tabChanged || nodeChanged || pageChanged) await loadForActiveTab()
 }, { deep: true })
 
-function onHostPageChange(page) {
+// 老版 page/limit 由 host/instance 两个列表共用,翻页后按当前 Tab 重载
+function onPageChange(page) {
   hostPage.value = queryPositiveInt(page, 1)
   syncTopoQuery()
-  loadHosts()
+  loadForActiveTab()
 }
 
-function onHostPageSizeChange(size) {
+function onPageSizeChange(size) {
   hostPageSize.value = queryPositiveInt(size, hostPageSize.value)
   hostPage.value = 1
   syncTopoQuery()
-  loadHosts()
+  loadForActiveTab()
 }
 
 function onNodeClick(node) {
@@ -1242,6 +1295,8 @@ function onNodeClick(node) {
   currentKey.value = selected.id
   hostPage.value = 1
   if (rightTab.value === 'instance') {
+    // 老版契约:节点切换清空实例名与标签筛选
+    instanceName.value = ''
     instanceLabelKey.value = ''
     instanceLabelValues.value = []
   }
@@ -1356,7 +1411,7 @@ async function onMoreCmd(cmd) {
 }
 
 function saveFavorite() {
-  const kw = ipKeyword.value.trim()
+  const kw = hostIpText.value.trim()
   if (!kw) { ElMessage.warning('请先输入筛选条件再收藏'); return }
   let favs = []
   try { favs = JSON.parse(localStorage.getItem('topo.hostFavorites') || '[]') } catch { favs = [] }

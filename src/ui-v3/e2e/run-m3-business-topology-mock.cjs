@@ -33,12 +33,17 @@ async function waitForRecord(predicate, message, timeout = 5000) {
   throw new Error(message)
 }
 
+const M3_INSTANCE_ROWS = [
+  { id: 501, name: 'inst-alpha', bk_host_innerip: '10.0.0.9', labels: { env: 'test' } },
+  { id: 502, name: 'inst-beta', bk_host_innerip: '10.0.0.10', labels: {} }
+]
+
 function makeState() {
   return { usercustom: {} }
 }
 
 function makeRecords() {
-  return { hostQueries: [], instanceQueries: [], usercustom: [], unexpectedKube: [], apiResponses: [], errors: [] }
+  return { hostQueries: [], instanceQueries: [], processCountQueries: [], processQueries: [], usercustom: [], unexpectedKube: [], apiResponses: [], errors: [] }
 }
 
 function attachObservers(page, records) {
@@ -60,6 +65,7 @@ function clone(value) {
 
 async function installM3(page, state, records, options = {}) {
   let failHost = Boolean(options.failHost)
+  let failInstance = Boolean(options.failInstance)
   await page.route('**/*', (route) => {
     const headers = { ...route.request().headers(), 'Cache-Control': 'no-cache' }
     delete headers['if-none-match']
@@ -116,6 +122,19 @@ async function installM3(page, state, records, options = {}) {
   await page.route('**/api/v3/findmany/proc/service_instance/labels/aggregation', (route) => json(route, ok({ env: ['test'] })))
   await page.route('**/api/v3/findmany/proc/service_instance', async (route) => {
     records.instanceQueries.push(route.request().postDataJSON() || {})
+    if (failInstance) {
+      failInstance = false
+      return json(route, { result: false, bk_error_code: 500, bk_error_msg: '服务实例服务不可用' })
+    }
+    return json(route, ok({ count: M3_INSTANCE_ROWS.length, info: clone(M3_INSTANCE_ROWS) }))
+  })
+  await page.route('**/api/v3/count/service_instance/processes', async (route) => {
+    const body = route.request().postDataJSON() || {}
+    records.processCountQueries.push(body)
+    return json(route, ok((body.ids || []).map((id) => ({ id, count: id === 501 ? 3 : 0 }))))
+  })
+  await page.route('**/api/v3/findmany/proc/process_instance', async (route) => {
+    records.processQueries.push(route.request().postDataJSON() || {})
     return json(route, ok({ count: 0, info: [] }))
   })
   await page.route('**/api/v3/find/objectattgroup/object/biz', (route) => json(route, ok([])))
@@ -282,6 +301,65 @@ async function run() {
     assert(!errorRecords.unexpectedKube.length, `主机失败路径不应触发 K8s 请求: ${errorRecords.unexpectedKube.join(', ')}`)
     await errorPage.close()
     checks.push('host load error state with retry recovery')
+
+    // === M3-C: 服务实例契约 ===
+    await page.goto(`${BASE}/#/business/2/index?tab=serviceInstance&node=module-22&page=2&limit=10`, { waitUntil: 'load' })
+    await page.locator('[data-testid="business-topology-instance-table"]').waitFor()
+    await waitForRecord(() => {
+      const body = records.instanceQueries.at(-1) || {}
+      return body.bk_module_id === 22 && body.page?.start === 10 && body.page?.limit === 10 && body.with_name === true
+    }, `服务实例分页 payload 不符合契约: ${JSON.stringify(records.instanceQueries.at(-1))}`)
+    assert((await page.locator('[data-testid="business-topology-instance-table"]').textContent()).includes('inst-alpha'), '服务实例行未渲染')
+    assert((await page.locator('.table-footer').last().textContent()).includes('共计2条'), '实例 footer 未显示服务端 total')
+    await waitForRecord(() => {
+      const body = records.processCountQueries.at(-1) || {}
+      return Array.isArray(body.ids) && body.ids.includes(501) && body.ids.includes(502)
+    }, `进程数统计请求未按 ids 发出: ${JSON.stringify(records.processCountQueries)}`)
+    assert((await page.locator('[data-testid="business-topology-instance-table"] tbody tr').first().textContent()).includes('3'), '进程数列未回填统计值')
+    checks.push('instance shared pagination payload, with_name, and process count rollup')
+
+    await page.locator('[data-testid="business-topology-instance-table"] tbody tr').first().getByText('查看/编辑进程').click()
+    await waitForRecord(() => {
+      const body = records.processQueries.at(-1) || {}
+      return body.bk_biz_id === 2 && body.service_instance_id === 501 && body.page?.start === 0
+    }, `进程抽屉 payload 不符合契约: ${JSON.stringify(records.processQueries.at(-1))}`)
+    await page.locator('.el-drawer').filter({ hasText: '进程实例' }).waitFor()
+    await page.keyboard.press('Escape')
+    checks.push('process drawer request contract')
+
+    const nameInput = page.getByTestId('business-topology-instance-search')
+    await nameInput.fill('alpha')
+    await nameInput.press('Enter')
+    await waitForRecord(() => records.instanceQueries.at(-1)?.search_key === 'alpha', '实例名搜索未写入 search_key')
+    await waitForRecord(() => hashQuery(page).get('instanceName') === 'alpha', `实例名搜索未持久化到 URL instanceName: ${page.url()}`)
+    await nameInput.fill('')
+    await nameInput.press('Enter')
+    await waitForRecord(() => records.instanceQueries.at(-1)?.search_key === '', '清空实例名后 search_key 未复位')
+    await waitForRecord(() => !hashQuery(page).has('instanceName'), '清空实例名后 URL 未删除 instanceName')
+    checks.push('instanceName search body and URL persistence')
+
+    await page.locator('.toolbar .el-select').filter({ hasText: '标签键' }).click()
+    await page.locator('.el-select-dropdown__item').filter({ hasText: /^env$/ }).last().click()
+    await page.locator('.toolbar .el-select').filter({ hasText: '标签值' }).click()
+    await page.locator('.el-select-dropdown__item').filter({ hasText: /^test$/ }).last().click()
+    await waitForRecord(() => {
+      const selectors = records.instanceQueries.at(-1)?.selectors
+      return Array.isArray(selectors) && selectors.some((item) => item.key === 'env' && item.operator === 'in' && Array.isArray(item.values) && item.values.includes('test'))
+    }, `标签 selectors 未按 in 操作符写入: ${JSON.stringify(records.instanceQueries.at(-1))}`)
+    checks.push('label selectors operator contract')
+
+    const instErrorPage = await context.newPage()
+    instErrorPage.setDefaultTimeout(8000)
+    const instErrorRecords = makeRecords()
+    attachObservers(instErrorPage, instErrorRecords)
+    await installM3(instErrorPage, makeState(), instErrorRecords, { failInstance: true })
+    await instErrorPage.goto(`${BASE}/#/business/2/index?tab=serviceInstance&node=module-22`, { waitUntil: 'load' })
+    await instErrorPage.locator('[data-testid="business-topology-instance-error"]').waitFor()
+    await instErrorPage.locator('[data-testid="business-topology-instance-error"]').getByRole('button', { name: '重试' }).click()
+    await instErrorPage.locator('[data-testid="business-topology-instance-table"]').waitFor()
+    assert(!instErrorRecords.unexpectedKube.length, `服务实例失败路径不应触发 K8s 请求: ${instErrorRecords.unexpectedKube.join(', ')}`)
+    await instErrorPage.close()
+    checks.push('instance load error state with retry recovery')
 
     await page.goto(`${BASE}/#/business/2/index?node=module-999&topo_path=set-10,module-999&tab=hostList`, { waitUntil: 'load' })
     await page.locator('[data-node-id="set-10"]').waitFor()
