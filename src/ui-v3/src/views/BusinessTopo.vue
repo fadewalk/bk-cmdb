@@ -103,23 +103,23 @@
           <div class="spacer" />
           <template v-if="rightTab === 'host'">
             <el-tooltip content="收藏当前筛选条件" placement="top">
-              <el-button size="small" :icon="'Star'" class="square-btn" @click="saveFavorite" />
+              <el-button size="small" :icon="'Star'" class="square-btn" data-testid="business-topology-save-favorite" @click="saveFavorite" />
             </el-tooltip>
-            <el-popover placement="bottom-end" :width="260" trigger="click">
-              <template #reference>
-                <el-button size="small" :icon="'Filter'" class="square-btn" />
+            <el-dropdown data-testid="business-topology-favorites" trigger="click" @command="onFavoriteCmd">
+              <el-button size="small" :icon="'ArrowDown'" class="square-btn" />
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="!favorites.length" disabled>暂无收藏</el-dropdown-item>
+                  <el-dropdown-item v-for="fav in favorites" :key="fav.id" :command="`apply:${fav.id}`" data-testid="business-topology-favorite-item">
+                    {{ fav.name }}
+                    <el-button link type="danger" size="small" class="fav-delete" @click.stop="onFavoriteCmd(`delete:${fav.id}`)">删除</el-button>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
               </template>
-              <div class="filter-pop">
-                <div class="filter-row-label">集群</div>
-                <el-select v-model="filterSetId" placeholder="全部集群" clearable size="small" style="width: 100%" @change="onFilterChange">
-                  <el-option v-for="n in setNodes" :key="n.id" :label="n.label" :value="n.id" />
-                </el-select>
-                <div class="filter-row-label">模块</div>
-                <el-select v-model="filterModuleId" placeholder="全部模块" clearable size="small" style="width: 100%" @change="onFilterChange">
-                  <el-option v-for="n in moduleNodes" :key="n.id" :label="n.label" :value="n.id" />
-                </el-select>
-              </div>
-            </el-popover>
+            </el-dropdown>
+            <el-tooltip content="高级筛选" placement="top">
+              <el-button size="small" :icon="'Filter'" class="square-btn" data-testid="business-topology-filter" @click="openAdvancedFilter" />
+            </el-tooltip>
           </template>
           <el-button size="small" :icon="'Refresh'" @click="load">刷新</el-button>
           <span class="refresh-time">{{ refreshText }}</span>
@@ -507,6 +507,15 @@
       </template>
     </el-dialog>
 
+    <!-- 高级筛选(老版 FilterForm/FilterStore 契约,复用资源主机页组件) -->
+    <AdvancedHostFilter
+      v-model="advancedFilterVisible"
+      :properties="advancedProperties"
+      :initial="advancedInitial"
+      @submit="handleAdvancedSubmit"
+      @reset="handleAdvancedReset"
+    />
+
     <!-- 新增主机(老版 HostSelector:源模块树选主机 → type=add 预览页) -->
     <el-dialog v-model="addHostVisible" title="新增主机到模块" width="720px" data-testid="business-topology-add-host-dialog">
       <div class="add-host-body">
@@ -691,6 +700,7 @@ import {
   createSet, deleteSet, updateSet, createModule, deleteModule, updateModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   listResourceDirectory, transferExecute,
+  listHostFavorites, createHostFavorite, deleteHostFavorite,
   searchServiceInstances, deleteServiceInstances, searchProcessInstances, updateProcessInstance, createInstanceLabels,
   countInstanceProcesses, listInstanceLabels, deleteInstanceLabels,
   listHostsWithNoSvcInst, createServiceInstance, createProcessInstance,
@@ -703,6 +713,8 @@ import { useBizStore } from '../stores/biz'
 import { pushNavHistory } from '../utils/nav-history'
 import { normalizeProcessInfo, buildRawCloneInstance } from '../utils/service-instance-payload'
 import { normalizeLabelAggregation, buildServiceInstanceSearchOptions } from '../utils/service-instance-search'
+import { serializeFilterConditions, parseFilterConditions, fetchHostFilterProperties } from '../utils/host-filter'
+import AdvancedHostFilter from '../components/AdvancedHostFilter.vue'
 import { searchProcTemplates } from '../api/cmdb'
 import ProcessFormDialog from '../components/ProcessFormDialog.vue'
 
@@ -861,6 +873,8 @@ const hostPageSize = ref(queryPositiveInt(route.query.limit, 20))
 const hostIpText = ref(parseIpQueryText(route.query.ip))
 const hostSort = ref('bk_host_id')
 const hostLoadError = ref('')
+// 老版 FilterStore 契约:`filter` query 条件随路由恢复,进请求体 host.condition
+const hostConditions = ref(parseFilterConditions(queryText(route.query.filter)))
 
 function parseIpQueryText(value) {
   const raw = queryText(value)
@@ -1166,7 +1180,10 @@ async function loadHosts() {
         bk_obj_id: 'module', fields: [],
         ...(node?.type === 'module' ? { condition: [{ field: 'bk_module_id', operator: '$eq', value: node.moduleId }] } : {})
       },
-      { bk_obj_id: 'host', fields: [] }
+      {
+        bk_obj_id: 'host', fields: [],
+        ...(hostConditionRules.value.length ? { condition: hostConditionRules.value } : {})
+      }
     ]
     const data = await http.post(`/findmany/hosts/search/with_biz`, {
       bk_biz_id: bizId.value,
@@ -1293,6 +1310,8 @@ function syncTopoQuery({ clearTopoPath = false } = {}) {
   else delete query.view
   if (rightTab.value === 'instance' && instanceName.value.trim()) query.instanceName = instanceName.value.trim()
   else delete query.instanceName
+  if (rightTab.value === 'host' && hostConditions.value.length) query.filter = serializeFilterConditions(hostConditions.value)
+  else delete query.filter
   if (rightTab.value === 'host' && hostIpText.value.trim()) query.ip = `text=${hostIpText.value.trim().replace(/\n/g, ',')}`
   else delete query.ip
   if (clearTopoPath) delete query.topo_path
@@ -1341,6 +1360,7 @@ watch(() => route.query, async (query, previousQuery = {}) => {
   hostPageSize.value = queryPositiveInt(query.limit, 20)
   hostIpText.value = parseIpQueryText(query.ip)
   instanceName.value = queryText(query.instanceName)
+  hostConditions.value = parseFilterConditions(queryText(query.filter))
   const restoredNode = findQueryNode(treeData.value, query)
   currentNode.value = restoredNode
   currentKey.value = restoredNode?.id || ''
@@ -1602,32 +1622,104 @@ async function onMoreCmd(cmd) {
   }
 }
 
-function saveFavorite() {
-  const kw = hostIpText.value.trim()
-  if (!kw) { ElMessage.warning('请先输入筛选条件再收藏'); return }
-  let favs = []
-  try { favs = JSON.parse(localStorage.getItem('topo.hostFavorites') || '[]') } catch { favs = [] }
-  if (!favs.includes(kw)) favs.push(kw)
-  try { localStorage.setItem('topo.hostFavorites', JSON.stringify(favs)) } catch { /* ignore */ }
-  ElMessage.success(`已收藏筛选条件「${kw}」`)
+// ---------- 高级筛选 + 收藏(老版 FilterStore/hosts-favorites 契约) ----------
+// hostConditions 声明在主机搜索状态区(随路由初始化);收藏走 hosts/favorites API
+const advancedFilterVisible = ref(false)
+const advancedProperties = ref([])
+const advancedInitial = ref({ IP: { text: '', inner: true, outer: true, exact: true }, conditions: [] })
+const favorites = ref([])
+
+const hostConditionRules = computed(() => hostConditions.value.map((item) => ({
+  field: item.field,
+  operator: `$${String(item.operator).replace(/^\$/, '')}`,
+  value: item.value
+})))
+
+function openAdvancedFilter() {
+  advancedFilterVisible.value = true
 }
 
-// 漏斗筛选: 树节点级联(集群/模块)
-const filterSetId = ref(null)
-const filterModuleId = ref(null)
-const setNodes = computed(() => treeData.value.flatMap((r) => (r.children || []).filter((n) => n.type === 'set')))
-const moduleNodes = computed(() => treeData.value.flatMap((r) => (r.children || []).flatMap((n) => n.type === 'set' ? (n.children || []).filter((c) => c.type === 'module') : [])))
-function onFilterChange() {
-  if (filterModuleId.value) {
-    const mod = moduleNodes.value.find((n) => n.id === filterModuleId.value)
-    if (mod) { onNodeClick(mod); return }
+async function ensureAdvancedProperties() {
+  if (advancedProperties.value.length) return
+  advancedProperties.value = await fetchHostFilterProperties().catch(() => [])
+}
+
+watch(advancedFilterVisible, (visible) => {
+  if (visible) {
+    advancedInitial.value = {
+      IP: { text: hostIpText.value, inner: true, outer: true, exact: true },
+      conditions: hostConditions.value.map((item) => ({ ...item }))
+    }
+    ensureAdvancedProperties()
   }
-  if (filterSetId.value) {
-    const set = setNodes.value.find((n) => n.id === filterSetId.value)
-    if (set) { onNodeClick(set); return }
+})
+
+function handleAdvancedSubmit(result) {
+  advancedFilterVisible.value = false
+  const filter = result?.filter || ''
+  hostConditions.value = parseFilterConditions(filter)
+  hostIpText.value = result?.IP?.text || ''
+  hostPage.value = 1
+  syncTopoQuery()
+  loadHosts()
+}
+
+function handleAdvancedReset() {
+  advancedFilterVisible.value = false
+  hostConditions.value = []
+  hostPage.value = 1
+  syncTopoQuery()
+  loadHosts()
+}
+
+async function loadFavorites() {
+  if (!bizId.value) return
+  try {
+    const data = await listHostFavorites({ bk_biz_id: bizId.value, page: { start: 0, limit: 100 } })
+    favorites.value = data?.info || []
+  } catch { favorites.value = [] }
+}
+
+// 老版保存收藏:info=IP JSON,query_params=条件 JSON(后端仅存取,均按本端序列化自洽)
+async function saveFavorite() {
+  if (!hostConditions.value.length && !hostIpText.value.trim()) {
+    ElMessage.warning('请先输入筛选条件再收藏')
+    return
   }
-  const root = treeData.value[0]
-  if (root) onNodeClick(root)
+  try {
+    const { value: name } = await ElMessageBox.prompt('请输入收藏名称', '收藏筛选条件', { inputValidator: (v) => Boolean(String(v || '').trim()) || '名称不能为空' })
+    await createHostFavorite({
+      bk_biz_id: bizId.value,
+      name: String(name).trim(),
+      info: JSON.stringify({ text: hostIpText.value, exact: true, inner: true, outer: true }),
+      query_params: JSON.stringify(hostConditions.value.map((item) => ({ ...item })))
+    })
+    ElMessage.success('收藏成功')
+    loadFavorites()
+  } catch { /* 取消或失败静默 */ }
+}
+
+function onFavoriteCmd(cmd) {
+  const [action, id] = String(cmd).split(':')
+  const favorite = favorites.value.find((item) => String(item.id) === String(id))
+  if (action === 'delete' && favorite) {
+    deleteHostFavorite(favorite.id).then(() => {
+      ElMessage.success('已删除')
+      loadFavorites()
+    }).catch(() => {})
+    return
+  }
+  if (action === 'apply' && favorite) {
+    try {
+      const ipInfo = JSON.parse(favorite.info || '{}')
+      const conditions = JSON.parse(favorite.query_params || '[]')
+      hostIpText.value = Array.isArray(ipInfo) ? '' : String(ipInfo.text || '')
+      hostConditions.value = Array.isArray(conditions) ? conditions : []
+      hostPage.value = 1
+      syncTopoQuery()
+      loadHosts()
+    } catch { ElMessage.error('收藏条件解析失败') }
+  }
 }
 
 // 批量编辑主机属性(契约 PUT /hosts/batch,只提交变更字段)
@@ -2225,6 +2317,7 @@ watch(bizId, () => {
   if (bizId.value) {
     load()
     loadModuleOptions()
+    loadFavorites()
     if (rightTab.value === 'instance') Promise.all([loadInstances(), loadInstanceLabelAggregation()])
   }
 })
@@ -2244,6 +2337,7 @@ onMounted(async () => {
     if (fromQuery && bizStore.bizList.some((b) => b.bk_biz_id === fromQuery)) bizStore.select(fromQuery)
     load()
     loadModuleOptions()
+    loadFavorites()
     if (rightTab.value === 'instance') Promise.all([loadInstances(), loadInstanceLabelAggregation()])
   }
 })

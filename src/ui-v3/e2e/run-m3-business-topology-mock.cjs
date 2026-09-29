@@ -139,6 +139,8 @@ async function installM3(page, state, records, options = {}) {
   })
   await page.route('**/api/v3/find/objectattgroup/object/biz', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([])))
+  await page.route('**/api/v3/hosts/favorites/search', (route) => json(route, ok({ count: 0, info: [] })))
+  await page.route('**/api/v3/find/objectattr/web', (route) => json(route, ok([])))
 }
 
 async function run() {

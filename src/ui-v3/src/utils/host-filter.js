@@ -109,6 +109,30 @@ export function serializeFilterConditions(conditions = []) {
     }).join('&')
 }
 
+// 旧版 setupPropertyQuery 契约:`field.operator=v1,v2` 逐段还原;key 兼容数字属性 id 与 bk_property_id
+export function parseFilterConditions(filter = '') {
+  const conditions = []
+  for (const segment of String(filter || '').split('&')) {
+    if (!segment) continue
+    const eqIndex = segment.indexOf('=')
+    if (eqIndex < 0) continue
+    const key = segment.slice(0, eqIndex)
+    const value = segment.slice(eqIndex + 1)
+    const dotIndex = key.lastIndexOf('.')
+    if (dotIndex <= 0) continue
+    const field = key.slice(0, dotIndex)
+    const operator = key.slice(dotIndex + 1)
+    if (!field || !operator || value === '') continue
+    const values = value.split(',')
+    conditions.push({
+      field,
+      operator: operator.replace(/^\$/, ''),
+      value: ['in', 'nin', 'range'].includes(operator.replace(/^\$/, '')) ? values : (values.length > 1 ? values : values[0])
+    })
+  }
+  return conditions
+}
+
 function isEmptyValue(value) {
   return value === '' || value === null || value === undefined || (Array.isArray(value) && !value.length)
 }
