@@ -202,14 +202,31 @@
               :disabled="!effectiveBiz"
             />
           </el-form-item>
-          <el-form-item label="追加模式">
-            <el-switch v-model="isIncrement" />
-            <span class="hint">开启后主机保留原模块归属</span>
-          </el-form-item>
         </el-form>
 
-        <el-alert v-if="transferType === 'idle'" type="info" :closable="false"
-          title="将所选主机直接转入空闲机池" />
+        <!-- 老版分配到契约:资源池主机→选目标业务直接分配;业务主机→选空闲模块走预览页 -->
+        <el-form v-if="transferType === 'idle'" label-width="100px">
+          <template v-if="selectionAllResource">
+            <el-form-item label="目标业务" required>
+              <el-select v-model="targetBiz" filterable style="width: 100%">
+                <el-option v-for="b in bizStore.bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
+              </el-select>
+            </el-form-item>
+            <el-alert type="info" :closable="false" title="资源池主机将直接分配到目标业务的空闲机池" />
+          </template>
+          <template v-else>
+            <el-form-item label="空闲模块" required>
+              <el-cascader
+                v-model="targetModule"
+                :options="idleModuleOptions"
+                :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
+                style="width: 100%"
+                :disabled="!effectiveBiz"
+              />
+            </el-form-item>
+            <el-alert type="info" :closable="false" title="业务主机将转入所选空闲模块(进入预览确认)" />
+          </template>
+        </el-form>
         <el-alert v-if="transferType === 'across' && !targetBiz" type="warning" :closable="false"
           title="跨业务转移需要选择目标业务" />
       </template>
@@ -249,6 +266,23 @@
       <template #footer>
         <el-button @click="dirDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="transferring" :disabled="!targetDir" @click="doTransferToDir">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 归还主机池(老版 MoveToResourceConfirm 语义) -->
+    <el-dialog v-model="returnVisible" title="确认归还主机池" width="520px">
+      <p class="confirm-line">确认将{{ selectedHosts.length }}台空闲机池主机转移到主机池？</p>
+      <el-form label-width="90px">
+        <el-form-item label="归还至目录" required>
+          <el-select v-model="returnDirId" filterable placeholder="请选择资源目录" style="width: 100%">
+            <el-option v-for="d in returnDirs" :key="d.bk_module_id" :label="d.bk_module_name" :value="d.bk_module_id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div class="hint">请务必确认业务进程已停止或主机处于关机状态</div>
+      <template #footer>
+        <el-button @click="returnVisible = false">取消</el-button>
+        <el-button type="primary" :loading="transferring" @click="submitReturnToResource">确定</el-button>
       </template>
     </el-dialog>
 
@@ -419,7 +453,7 @@ import {
   parseHostSearch, serializeIpCondition, fetchHostFilterProperties, resolveInitialConditions, toUserBehavior, RESOURCE_FILTER_USERCUSTOM_KEY
 } from '../utils/host-filter'
 import {
-  http, transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
+  http, transferHostToResource, transferHostToIdle, transferHostAcrossBiz,
   transferHostsToDirectory, importHosts, updateHostsByExcel, downloadHostTemplate, listResourceDirectory, deleteHostsBatch, exportHosts,
   updateResourceDirectory, deleteResourceDirectory, createResourceDirectory,
   listHostFavorites, createHostFavorite, incrHostFavorite, deleteHostFavorite,
@@ -465,25 +499,37 @@ const advancedProperties = ref([])
 const advancedInitial = ref({ IP: { text: '', inner: true, outer: true, exact: true }, conditions: [] })
 const advActive = computed(() => !!(route.query.filter || parseIpQuery(route.query.ip).text || route.query.cloudId !== undefined))
 
-// 分配到(多步)
-const transferVisible = ref(false) // 兼容老 el-dialog 名,新版不直接用
+// 分配到(多步;老版契约:资源主机 idle=分配到业务空闲机(/hosts/modules/resource/idle),
+// 业务主机 move/idle=跳转移预览页,across=MULTI_TO_ONE /hosts/resource/cross/biz)
 const wizardVisible = ref(false)
 const wizardStep = ref(0)
 const transferType = ref('move')
 const targetBiz = ref(null)
 const targetModule = ref(null)
-const isIncrement = ref(false)
 const transferring = ref(false)
 const moduleOptions = ref([])
+const idleModuleOptions = ref([])
 
-const effectiveBiz = computed(() => bizStore.bizId || targetBiz.value)
+// 老版 host-store 判定:biz[0].default===1 为资源池主机;module[].default!==0 为空闲机池内
+const isResourceHost = (h) => !h.__biz?.length || Number(h.__biz[0]?.default) === 1
+const hostInIdleSet = (h) => (h.__module || []).length > 0 && (h.__module || []).every((m) => Number(m.default) !== 0)
+const selectionAllResource = computed(() => selectedHosts.value.length > 0 && selectedHosts.value.every(isResourceHost))
+const selectionBizId = computed(() => {
+  const ids = [...new Set(selectedHosts.value.map((h) => Number(h.__biz?.[0]?.bk_biz_id)).filter(Boolean))]
+  return ids.length === 1 ? ids[0] : null
+})
+
+const effectiveBiz = computed(() => selectionBizId.value || bizStore.bizId || targetBiz.value)
 const moduleLabel = computed(() => {
   const m = targetModule.value
   if (!m) return '--'
-  return moduleOptions.value.find((s) => s.value === m)?.label || m
+  const pool = [...moduleOptions.value, ...idleModuleOptions.value]
+  return pool.find((s) => s.value === m)?.label || m
 })
 const canGoNext = computed(() => {
-  if (transferType.value === 'idle') return true
+  if (transferType.value === 'idle') {
+    return selectionAllResource.value ? !!targetBiz.value : (!!effectiveBiz.value && !!targetModule.value)
+  }
   if (transferType.value === 'move' || transferType.value === 'across') {
     return !!effectiveBiz.value && !!targetModule.value
   }
@@ -988,19 +1034,37 @@ async function loadModuleOptions() {
   moduleOptions.value = options
 }
 
+// 空闲机池选项(老版 same-default 约束:idle/across 目标只能是空闲机模块)
+async function loadBizIdleOptions(bizId) {
+  if (!bizId) { idleModuleOptions.value = []; return }
+  try {
+    const idleTopo = await getBizInternalTopo(bizId)
+    idleModuleOptions.value = idleTopo?.bk_set_id
+      ? [{ value: idleTopo.bk_set_id, label: idleTopo.bk_set_name, children: (idleTopo.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name })) }]
+      : []
+  } catch { idleModuleOptions.value = [] }
+}
+
 function openTransferWizard() {
   if (!selectedHosts.value.length) return
-  transferType.value = bizStore.bizId ? 'move' : 'idle'
+  transferType.value = selectionAllResource.value ? 'idle' : 'move'
   targetBiz.value = null
   targetModule.value = null
-  isIncrement.value = false
   wizardStep.value = 0
   wizardVisible.value = true
   loadModuleOptions()
+  if (!selectionAllResource.value) loadBizIdleOptions(selectionBizId.value)
 }
 
 watch(() => bizStore.bizId, loadModuleOptions)
-watch(targetBiz, loadModuleOptions)
+// 跨业务目标模块限定为目标业务空闲机模块(老版 AcrossBusinessModuleSelector same-default)
+watch([targetBiz, transferType], ([biz, type]) => {
+  if (type === 'across' && biz) {
+    loadBizIdleOptions(biz).then(() => { moduleOptions.value = idleModuleOptions.value })
+  } else if (type === 'move') {
+    loadModuleOptions()
+  }
+})
 
 function resetWizard() {
   wizardVisible.value = false
@@ -1008,22 +1072,45 @@ function resetWizard() {
 }
 
 async function doTransfer() {
+  const hostIds = selectedHosts.value.map((h) => h.bk_host_id)
+  // 老版门禁文案(逐字)
+  if (transferType.value !== 'idle' || !selectionAllResource.value) {
+    if (selectionAllResource.value) { ElMessage.error('仅支持对业务下的主机进行操作'); return }
+    if (!selectionBizId.value) { ElMessage.error('仅支持对相同业务下的主机进行操作'); return }
+  }
+  if (transferType.value === 'across' && !selectedHosts.value.every(hostInIdleSet)) {
+    ElMessage.error('仅允许业务下空闲机跨业务转移')
+    return
+  }
   transferring.value = true
   try {
-    if (transferType.value === 'idle') {
-      await transferHostToResource(bizStore.bizId || 0, selectedHosts.value.map((h) => h.bk_host_id))
-      ElMessage.success('已转入空闲机池')
-    } else if (transferType.value === 'across') {
-      const srcBiz = bizStore.bizId
-      if (!srcBiz || !targetBiz.value || !targetModule.value) {
-        ElMessage.warning('请选择目标业务与模块')
-        return
-      }
-      await transferBizHostAcrossBiz(srcBiz, targetBiz.value, selectedHosts.value.map((h) => h.bk_host_id), targetModule.value)
-      ElMessage.success('跨业务转移成功')
+    if (transferType.value === 'idle' && selectionAllResource.value) {
+      // 资源池主机分配到业务空闲机:老版 host-options assignHostsToBusiness 契约
+      await transferHostToIdle(targetBiz.value, hostIds)
+      ElMessage.success('分配成功')
+    } else if (transferType.value === 'idle') {
+      // 业务主机转空闲机:老版 gotoTransferPage 契约(预览页内可改模块)
+      wizardVisible.value = false
+      router.push(`/business/${selectionBizId.value}/host/transfer/idle?resources=${hostIds.join(',')}&targetModules=${targetModule.value}`)
+      return
+    } else if (transferType.value === 'move') {
+      // 业务主机转业务模块:老版不走 /hosts/modules,统一预览页确认
+      wizardVisible.value = false
+      router.push(`/business/${selectionBizId.value}/host/transfer/business?resources=${hostIds.join(',')}&targetModules=${targetModule.value}`)
+      return
     } else {
-      const biz = effectiveBiz.value
-      await transferHostModule(biz, selectedHosts.value.map((h) => h.bk_host_id), [targetModule.value], isIncrement.value)
+      // 跨业务 MULTI_TO_ONE:按源业务分组(老版 transferHostToOtherBizModule 契约)
+      const grouped = new Map()
+      for (const h of selectedHosts.value) {
+        const srcBiz = Number(h.__biz?.[0]?.bk_biz_id)
+        if (!grouped.has(srcBiz)) grouped.set(srcBiz, [])
+        grouped.get(srcBiz).push(h.bk_host_id)
+      }
+      await transferHostAcrossBiz({
+        resource_hosts: [...grouped.entries()].map(([srcBiz, ids]) => ({ src_bk_biz_id: srcBiz, src_bk_host_ids: ids })),
+        dst_bk_biz_id: targetBiz.value,
+        dst_bk_module_id: targetModule.value
+      })
       ElMessage.success('转移成功')
     }
     wizardVisible.value = false
@@ -1150,10 +1237,15 @@ async function onMore(cmd) {
       ElMessage.success('已导出')
     } catch (e) { ElMessage.error('导出失败: ' + (e?.message || '后端异常')) }
   } else if (cmd === 'toResource') {
-    await ElMessageBox.confirm(`将 ${selectedHosts.value.length} 台主机转移到资源池?`, '确认', { type: 'warning' })
-    await transferHostToResource(bizStore.bizId || 0, selectedHosts.value.map((h) => h.bk_host_id))
-    ElMessage.success('已转移')
-    reload()
+    // 老版 transferToResourcePool 契约:资源主机不可再归还,空闲机池外主机不可归还
+    if (selectedHosts.value.every(isResourceHost)) { ElMessage.error('所选主机已在主机池中'); return }
+    if (!selectedHosts.value.every(hostInIdleSet)) { ElMessage.error('仅支持对空闲机池下的主机进行操作'); return }
+    returnDirId.value = null
+    returnVisible.value = true
+    try {
+      const data = await listResourceDirectory({ page: { start: 0, limit: 200 } })
+      returnDirs.value = data?.info || []
+    } catch { returnDirs.value = [] }
   } else if (cmd === 'toDir') {
     targetDir.value = null
     dirDialogVisible.value = true
@@ -1167,6 +1259,26 @@ async function doTransferToDir() {
     await transferHostsToDirectory({ bk_module_id: targetDir.value, bk_host_ids: selectedHosts.value.map((h) => h.bk_host_id) })
     ElMessage.success('已转移到目录')
     dirDialogVisible.value = false
+    reload()
+  } catch (e) {
+    ElMessage.error('转移失败: ' + (e?.message || '后端异常'))
+  } finally {
+    transferring.value = false
+  }
+}
+
+// 归还主机池(老版 MoveToResourceConfirm 契约:目录必选,bk_module_id 随 payload)
+const returnVisible = ref(false)
+const returnDirs = ref([])
+const returnDirId = ref(null)
+async function submitReturnToResource() {
+  if (!returnDirId.value) { ElMessage.warning('请选择归还至目录'); return }
+  transferring.value = true
+  try {
+    await transferHostToResource(selectionBizId.value, selectedHosts.value.map((h) => h.bk_host_id), returnDirId.value)
+    ElMessage.success('转移成功')
+    returnVisible.value = false
+    selectedHosts.value = []
     reload()
   } catch (e) {
     ElMessage.error('转移失败: ' + (e?.message || '后端异常'))
@@ -1369,4 +1481,5 @@ onMounted(async () => {
 .table-footer .spacer { flex: 1; }
 .import-toolbar { display: flex; align-items: center; gap: 8px; }
 .hint { color: #979ba5; font-size: 12px; margin-left: 10px; }
+.confirm-line { font-size: 13px; color: #63656e; margin: 0 0 10px; line-height: 1.6; }
 </style>
