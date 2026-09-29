@@ -44,42 +44,44 @@
     <div class="info-row change-row">
       <span class="info-label">变更确认：</span>
       <div class="info-value confirm-area" v-loading="loading">
-        <el-empty v-if="!loading && !availableTabs.length" description="主机无需要变更的内容" :image-size="90" />
+        <el-empty v-if="!loading && !availableTabs.length" :description="previewPlans.length ? '无服务实例变更信息' : '无'" :image-size="90" />
         <template v-else>
           <ul class="tab-head">
             <li
               v-for="t in availableTabs"
               :key="t.id"
               :class="{ active: activeTab === t.id }"
-              @click="activeTab = t.id"
+              @click="handleTabClick(t.id)"
             >
               <span class="tab-label">{{ t.label }}</span>
-              <span class="tab-count">{{ t.info.length > 999 ? '999+' : t.info.length }}</span>
+              <span class="tab-count" :class="{ unconfirmed: !visitedTabs.has(t.id) }">{{ t.info.length > 999 ? '999+' : t.info.length }}</span>
             </li>
           </ul>
 
-          <!-- 新增服务实例 -->
-          <el-table
-            v-if="activeTab === 'createServiceInstance'"
-            :data="tabs.createServiceInstance.info"
-            size="small"
-            border
-            max-height="360"
-          >
-            <el-table-column label="主机" min-width="150">
-              <template #default="{ row }">{{ hostIp(row.bk_host_id) }}</template>
-            </el-table-column>
-            <el-table-column label="所属模块" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">
-                <el-tooltip :content="modulePath(row.bk_module_id)" placement="top">
-                  <span>{{ moduleName(row.bk_module_id) || row.bk_module_id }}</span>
-                </el-tooltip>
-              </template>
-            </el-table-column>
-            <el-table-column label="服务模板" min-width="140">
-              <template #default="{ row }">{{ row.service_template?.name || '--' }}</template>
-            </el-table-column>
-          </el-table>
+          <!-- 新增服务实例(老版 create-service-instance:逐实例进程编辑,提交 created/updated) -->
+          <div v-if="activeTab === 'createServiceInstance'" class="svc-create-list">
+            <div v-for="(entry, idx) in createEntries" :key="idx" class="svc-create-item" data-testid="transfer-create-entry">
+              <div class="svc-create-head">
+                <span class="svc-host">{{ hostIp(entry.bk_host_id) }}</span>
+                <span class="svc-module">{{ modulePath(entry.bk_module_id) || entry.bk_module_id }}</span>
+                <el-button v-if="!entry.service_template" link type="primary" size="small" @click="openCreateProcess(entry)">添加进程</el-button>
+              </div>
+              <el-table :data="entryRows(entry)" size="small" border max-height="240">
+                <el-table-column label="进程名称" min-width="140">
+                  <template #default="{ row }">{{ row.bk_func_name || '--' }}</template>
+                </el-table-column>
+                <el-table-column label="端口" width="110">
+                  <template #default="{ row }">{{ row.port || '--' }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="90">
+                  <template #default="{ row, $index }">
+                    <el-button link type="primary" size="small" @click="openEditTransferProcess(entry, row, $index)">编辑</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-if="!entryRows(entry).length" class="svc-empty-tip">(未添加进程)</div>
+            </div>
+          </div>
 
           <!-- 删除服务实例 -->
           <el-table
@@ -89,9 +91,12 @@
             border
             max-height="360"
           >
+            <el-table-column label="操作" width="90">
+              <template #default><span class="delete-flag">删除</span></template>
+            </el-table-column>
             <el-table-column label="服务实例" prop="name" min-width="200" show-overflow-tooltip />
             <el-table-column label="所属模块" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ moduleName(row.bk_module_id) || row.bk_module_id }}</template>
+              <template #default="{ row }">{{ modulePath(row.bk_module_id) || row.bk_module_id }}</template>
             </el-table-column>
             <el-table-column label="主机" min-width="140">
               <template #default="{ row }">{{ hostIp(row.bk_host_id) }}</template>
@@ -105,38 +110,55 @@
             </el-tag>
           </div>
 
-          <!-- 属性自动应用 -->
-          <el-table
-            v-else-if="activeTab === 'hostAttrsAutoApply'"
-            :data="tabs.hostAttrsAutoApply.info"
-            size="small"
-            border
-            max-height="360"
-          >
-            <el-table-column label="主机" min-width="140">
-              <template #default="{ row }">{{ hostIp(row.bk_host_id) }}</template>
-            </el-table-column>
-            <el-table-column label="冲突字段" min-width="220">
-              <template #default="{ row }">
-                <template v-if="row.conflicts?.length">
-                  <el-tag v-for="c in row.conflicts" :key="c.bk_attribute_id" type="danger" size="small" class="field-tag">
-                    {{ propName(c.bk_attribute_id) }}
-                  </el-tag>
+          <!-- 属性自动应用(老版 host-attrs-auto-apply:更新选项+冲突规则解决) -->
+          <div v-else-if="activeTab === 'hostAttrsAutoApply'" class="apply-panel" data-testid="transfer-apply-panel">
+            <div class="apply-option">
+              <span class="apply-label" title="属性值与目标模块配置不一致的主机">是否更新主机属性</span>
+              <el-radio-group v-model="applyChanged" @change="onApplyOptionChange">
+                <el-radio :value="true">是将把转移的主机更新为目标模块配置</el-radio>
+                <el-radio :value="false">否将保留主机原有配置</el-radio>
+              </el-radio-group>
+            </div>
+            <div v-if="conflictSelects.length && applyChanged" class="apply-conflict">
+              <span class="apply-label" title="目标模块配置了不同的自动应用属性，需要重新指定配置">冲突字段配置</span>
+              <div v-for="c in conflictSelects" :key="c.bk_attribute_id" class="conflict-row">
+                <span class="conflict-prop">{{ propName(c.bk_attribute_id) }}</span>
+                <el-select v-model="c.selectedRuleId" size="small" style="width: 220px" @change="onConflictRuleChange(c)">
+                  <el-option v-for="r in c.rules" :key="r.id" :label="modulePath(r.bk_module_id) || `模块 ${r.bk_module_id}`" :value="r.id" />
+                </el-select>
+              </div>
+            </div>
+            <el-table :data="applyRows" size="small" border max-height="360">
+              <el-table-column label="内网IP" min-width="140">
+                <template #default="{ row }">{{ hostIp(row.bk_host_id) }}</template>
+              </el-table-column>
+              <el-table-column label="当前值" min-width="240">
+                <template #default="{ row }">
+                  <template v-if="row.conflicts?.length">
+                    <el-tag v-for="c in row.conflicts" :key="c.bk_attribute_id" type="danger" size="small" class="field-tag">
+                      {{ propName(c.bk_attribute_id) }}: {{ displayValue(c.bk_property_value) }}
+                    </el-tag>
+                  </template>
+                  <span v-else>--</span>
                 </template>
-                <span v-else>--</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="自动应用字段" min-width="240">
-              <template #default="{ row }">
-                <template v-if="row.update_fields?.length">
-                  <el-tag v-for="f in row.update_fields" :key="f.bk_attribute_id" size="small" class="field-tag">
-                    {{ propName(f.bk_attribute_id) }} → {{ f.bk_property_value }}
-                  </el-tag>
+              </el-table-column>
+              <el-table-column label="目标值" min-width="260">
+                <template #default="{ row }">
+                  <template v-if="applyChanged && row.update_fields?.length">
+                    <el-tag v-for="f in row.update_fields" :key="f.bk_attribute_id" size="small" class="field-tag">
+                      {{ propName(f.bk_attribute_id) }} → {{ displayValue(f.bk_property_value) }}
+                    </el-tag>
+                  </template>
+                  <template v-else-if="!applyChanged && row.conflicts?.length">
+                    <el-tag v-for="c in row.conflicts" :key="c.bk_attribute_id" size="small" class="field-tag">
+                      {{ propName(c.bk_attribute_id) }} → {{ displayValue(c.bk_property_value) }}
+                    </el-tag>
+                  </template>
+                  <span v-else>--</span>
                 </template>
-                <span v-else>--</span>
-              </template>
-            </el-table-column>
-          </el-table>
+              </el-table-column>
+            </el-table>
+          </div>
         </template>
       </div>
     </div>
@@ -145,6 +167,17 @@
       <el-button type="primary" :loading="confirming" :disabled="loading" @click="handleConfirm">{{ confirmText }}</el-button>
       <el-button @click="router.back()">取消</el-button>
     </div>
+
+    <!-- 进程编辑(新增服务实例:无模板加进程/模板进程调整) -->
+    <ProcessFormDialog
+      :visible="processFormVisible"
+      :title="processEditing ? '编辑进程' : '添加进程'"
+      mode="instance"
+      :form="processForm"
+      :saving="false"
+      @update:visible="processFormVisible = $event"
+      @save="saveTransferProcess"
+    />
 
     <!-- 模块选择(空闲模块/业务模块) -->
     <el-dialog v-model="moduleSelectorVisible" :title="moduleSelectorTitle" width="560px">
@@ -178,6 +211,7 @@ import {
   transferPreview, transferExecute, searchModelAttributes
 } from '../../api/cmdb'
 import { useBizStore } from '../../stores/biz'
+import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -198,6 +232,8 @@ const idleModuleId = ref(null)
 const previewPlans = ref([])
 
 const activeTab = ref('')
+// 老版"已确认"语义:tab 被访问过一次即取消红标(unconfirmed)
+const visitedTabs = ref(new Set())
 const tabs = ref({
   createServiceInstance: { label: '新增服务实例', info: [] },
   deletedServiceInstance: { label: '删除服务实例', info: [] },
@@ -231,6 +267,161 @@ const availableTabs = computed(() =>
 watch(availableTabs, (list) => {
   if (!list.some((t) => t.id === activeTab.value)) activeTab.value = list[0]?.id || ''
 }, { immediate: true })
+
+watch(activeTab, (id) => {
+  if (id) visitedTabs.value.add(id)
+})
+
+function handleTabClick(id) {
+  visitedTabs.value.add(id)
+  activeTab.value = id
+}
+
+// ---------- 新增服务实例(老版 create-service-instance 契约) ----------
+// entry: {bk_host_id, bk_module_id, service_template, templateProcesses, edited: Map<index,{process_template_id,process_info}>, added: [{process_info}]}
+const createEntries = ref([])
+const processFormVisible = ref(false)
+const processEditing = ref(null)
+const processForm = ref({})
+let processTarget = null
+
+function flattenTemplateProperty(property = {}) {
+  const out = {}
+  for (const [key, tpl] of Object.entries(property)) {
+    if (key === 'bind_info') {
+      const first = (tpl.value || [])[0] || {}
+      out.port = first.port?.value ?? ''
+      out.bk_bind_ip = typeof first.ip?.value === 'string' ? first.ip.value : '127.0.0.1'
+    } else {
+      out[key] = typeof tpl === 'object' && tpl !== null && 'value' in tpl ? tpl.value : tpl
+    }
+  }
+  return out
+}
+
+function entryRows(entry) {
+  if (entry.service_template) {
+    return entry.templateProcesses.map((tpl, index) => {
+      const edited = entry.edited.get(index)
+      if (edited) return { ...edited.process_info, __process_template_id: edited.process_template_id }
+      return flattenTemplateProperty(tpl.property)
+    })
+  }
+  return entry.added.map((item) => item.process_info)
+}
+
+function openCreateProcess(entry) {
+  processTarget = { entry, kind: 'added' }
+  processEditing.value = null
+  processForm.value = { bk_func_name: '', bk_process_name: '', bk_bind_ip: '127.0.0.1', port: '', user: 'root', work_path: '/tmp', start_cmd: '', stop_cmd: '', description: '' }
+  processFormVisible.value = true
+}
+
+function openEditTransferProcess(entry, row, index) {
+  processTarget = { entry, kind: entry.service_template ? 'edited' : 'added', index }
+  processEditing.value = row
+  // 编辑已改过的模板进程时,行对象已带 process_info(展示层解包)
+  processForm.value = { ...(row.process_info || row) }
+  processFormVisible.value = true
+}
+
+function saveTransferProcess(form) {
+  if (!processTarget) return
+  if (!form.bk_func_name) { ElMessage.warning('请输入进程名称'); return }
+  const info = { ...form }
+  if (info.port) info.port = String(info.port)
+  const { entry, kind, index } = processTarget
+  if (kind === 'added') {
+    if (index === undefined || index === null) entry.added.push({ process_info: info })
+    else entry.added[index] = { process_info: info }
+  } else {
+    const tpl = entry.templateProcesses[index]
+    entry.edited.set(index, { process_template_id: tpl?.process_template_id, process_info: info })
+  }
+  processFormVisible.value = false
+}
+
+// 老版 getServiceInstanceOptions:模板实例 created 不带 processes(空进程不能作为添加项),编辑过的进 updated;无模板 added 进 created
+function getServiceInstanceOptions() {
+  const created = []
+  const updated = []
+  for (const entry of createEntries.value) {
+    const changed = [...entry.edited.values()]
+    if (entry.service_template) {
+      if (entry.added.length) created.push({ bk_module_id: entry.bk_module_id, bk_host_id: entry.bk_host_id })
+      if (changed.length) updated.push({ bk_module_id: entry.bk_module_id, bk_host_id: entry.bk_host_id, processes: changed })
+    } else if (entry.added.length) {
+      created.push({
+        bk_module_id: entry.bk_module_id,
+        bk_host_id: entry.bk_host_id,
+        processes: entry.added.map((item) => ({ process_info: item.process_info }))
+      })
+    }
+  }
+  return { created, updated }
+}
+
+// ---------- 属性自动应用(老版 host-attrs-auto-apply 契约) ----------
+const applyChanged = ref(true)
+// conflictSelects: 每个冲突字段一条规则选择(默认第一条),final_rules 随选择同步
+const conflictSelects = ref([])
+const finalRules = ref([])
+
+function seedConflictResolvers() {
+  conflictSelects.value = []
+  finalRules.value = []
+  const byAttr = new Map()
+  for (const plan of tabs.value.hostAttrsAutoApply.info || []) {
+    for (const conflict of plan.conflicts || []) {
+      if (!byAttr.has(conflict.bk_attribute_id)) byAttr.set(conflict.bk_attribute_id, [])
+      const rules = conflict.host_apply_rules || []
+      const list = byAttr.get(conflict.bk_attribute_id)
+      for (const rule of rules) {
+        if (!list.some((item) => item.id === rule.id)) list.push(rule)
+      }
+    }
+  }
+  for (const [bkAttributeId, rules] of byAttr.entries()) {
+    if (!rules.length) continue
+    const selected = rules[0]
+    conflictSelects.value.push({ bk_attribute_id: bkAttributeId, rules, selectedRuleId: selected.id })
+    finalRules.value.push({ id: selected.id, bk_attribute_id: bkAttributeId, bk_property_value: selected.bk_property_value })
+  }
+}
+
+const applyRows = computed(() => (tabs.value.hostAttrsAutoApply.info || []).filter((item) => (item.unresolved_conflict_count || 0) > 0))
+
+function displayValue(value) {
+  if (value === undefined || value === null || value === '') return '--'
+  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+
+function onApplyOptionChange() {
+  // 老版语义:否=保留主机当前值(目标值回落为 conflicts 值);final_rules 仅在 changed 时提交
+  if (!applyChanged.value) return
+  seedConflictResolvers()
+}
+
+function onConflictRuleChange(select) {
+  const rule = select.rules.find((item) => item.id === select.selectedRuleId) || select.rules[0]
+  const target = finalRules.value.find((item) => item.bk_attribute_id === select.bk_attribute_id)
+  if (target) {
+    target.id = rule.id
+    target.bk_property_value = rule.bk_property_value
+  }
+  for (const plan of tabs.value.hostAttrsAutoApply.info || []) {
+    const field = (plan.update_fields || []).find((item) => item.bk_attribute_id === select.bk_attribute_id)
+    if (field) field.bk_property_value = rule.bk_property_value
+  }
+}
+
+function getHostApplyConflictResolvers() {
+  if (!applyChanged.value) return { changed: false }
+  return {
+    changed: true,
+    final_rules: finalRules.value.map(({ id, bk_attribute_id, bk_property_value }) => ({ id, bk_attribute_id, bk_property_value }))
+  }
+}
 
 watch(moduleKeyword, (kw) => moduleTreeRef.value?.filter(kw))
 
@@ -325,12 +516,19 @@ async function loadPreview() {
     previewPlans.value = data || []
 
     // 变更确认 tabs(老版 setXxxServiceInstance 语义)
-    const createInfo = []
+    const entries = []
     const deletedInfo = []
     const applyInfo = []
     for (const item of previewPlans.value) {
       for (const m of item.to_add_to_modules || []) {
-        createInfo.push({ bk_host_id: item.bk_host_id, ...m })
+        entries.push({
+          bk_host_id: item.bk_host_id,
+          bk_module_id: m.bk_module_id,
+          service_template: m.service_template || null,
+          templateProcesses: m.service_template?.process_templates || [],
+          edited: new Map(),
+          added: []
+        })
       }
       for (const m of item.to_remove_from_modules || []) {
         deletedInfo.push(...(m.service_instances || []).map((s) => ({ ...s, bk_module_id: m.bk_module_id })))
@@ -338,9 +536,12 @@ async function loadPreview() {
       const plan = item.host_apply_plan
       if (plan && ((plan.conflicts?.length) || (plan.update_fields?.length))) applyInfo.push(plan)
     }
-    tabs.value.createServiceInstance.info = createInfo
+    createEntries.value = entries
+    tabs.value.createServiceInstance.info = entries
     tabs.value.deletedServiceInstance.info = deletedInfo
     tabs.value.hostAttrsAutoApply.info = applyInfo
+    visitedTabs.value = new Set()
+    seedConflictResolvers()
 
     // 模块路径:目标 + 涉及模块
     const moduleIds = [...targetModules.value]
@@ -434,12 +635,12 @@ async function handleConfirm() {
   const params = resolveData()
   confirming.value = true
   try {
-    // 老版契约:tab 有数据时提交对应 options;独立模式默认行为等价于不做实例定制/不解决冲突
+    // 老版契约:tab 有数据时经 ref 收集 options(实例 created/updated + 冲突规则 final_rules)
     if (tabs.value.createServiceInstance.info.length) {
-      params.options = { ...(params.options || {}), service_instance_options: { created: [], updated: [] } }
+      params.options = { ...(params.options || {}), service_instance_options: getServiceInstanceOptions() }
     }
     if (tabs.value.hostAttrsAutoApply.info.length) {
-      params.options = { ...(params.options || {}), host_apply_trans_rule: { changed: false } }
+      params.options = { ...(params.options || {}), host_apply_trans_rule: getHostApplyConflictResolvers() }
     }
     await transferExecute(transferBizId.value, params)
     ElMessage.success(({ remove: '移除成功', add: '添加成功' })[type.value] || '转移成功')
@@ -497,6 +698,17 @@ onMounted(() => {
 .tab-head li.active + li { border-left: none; }
 .tab-count { min-width: 20px; height: 18px; line-height: 18px; text-align: center; background: #a2b1c6; border-radius: 9px; color: #fff; font-size: 12px; padding: 0 4px; }
 .tab-head li.active .tab-count { background: #3a84ff; }
+.tab-head .tab-count.unconfirmed { background: #ff5656; }
+.svc-create-list { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; }
+.svc-create-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px; color: #313238; }
+.svc-host { font-weight: 600; }
+.svc-module { color: #979ba5; }
+.svc-empty-tip { font-size: 12px; color: #979ba5; padding: 4px 0; }
+.delete-flag { color: #ff5656; font-weight: 600; }
+.apply-option, .apply-conflict { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.apply-label { flex: 0 0 auto; line-height: 30px; font-size: 13px; color: #63656e; }
+.conflict-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.conflict-prop { min-width: 90px; font-size: 13px; color: #313238; }
 .idle-hosts { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
 .idle-tag { font-size: 12px; }
 .field-tag { margin: 2px 6px 2px 0; }
