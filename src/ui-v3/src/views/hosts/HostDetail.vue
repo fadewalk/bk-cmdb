@@ -191,39 +191,62 @@
         </template>
       </el-drawer>
 
-      <!-- 4. 主机转移 -->
+      <!-- 4. 主机转移(老版 info.vue 契约:归属模块行+逐模块移除+修改归属三 tab 选择器) -->
       <template v-if="tab === 'transfer'">
         <el-card shadow="never" style="max-width: 640px">
-          <el-form label-width="100px">
-            <el-form-item label="当前归属">
-              <el-tag v-if="bizId" size="small">业务 {{ bizId }}</el-tag>
-              <el-tag v-else size="small" type="info">资源池</el-tag>
-            </el-form-item>
-            <el-form-item v-if="!bizId" label="目标业务" required>
-              <el-select v-model="targetBiz" filterable style="width: 100%" placeholder="选择业务">
-                <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="目标模块" required>
-              <el-cascader
-                v-model="targetModulePath"
-                :options="moduleOptions"
-                :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
-                placeholder="选择集群 / 模块"
-                style="width: 100%"
-                :disabled="!bizId && !targetBiz"
-              />
-            </el-form-item>
-            <el-form-item label="追加模式">
-              <el-switch v-model="isIncrement" />
-              <span class="hint">开启后主机保留原模块归属</span>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="transferring" @click="doTransfer">转移到所选模块</el-button>
-              <el-button v-if="bizId" :loading="transferring" @click="toResource">转移到资源池</el-button>
-            </el-form-item>
-          </el-form>
+          <div class="transfer-block">
+            <div class="transfer-label">当前归属</div>
+            <div class="module-rows">
+              <div v-for="m in hostModules" :key="m.bk_module_id" class="module-row">
+                <span class="module-name">{{ m.bk_module_name }}</span>
+                <el-button link type="danger" @click="removeFromModule(m.bk_module_id)">从该模块移除</el-button>
+              </div>
+              <span v-if="!hostModules.length" class="hint">资源池主机无业务模块,可在资源池主机页分配到业务</span>
+            </div>
+            <el-button v-if="bizId" type="primary" @click="openEditTopo">修改归属</el-button>
+          </div>
         </el-card>
+
+        <!-- 修改归属(老版 ModuleSelectorWithTab 语义) -->
+        <el-dialog v-model="editTopoVisible" title="修改主机归属" width="560px">
+          <el-radio-group v-model="topoTab" style="margin-bottom: 12px">
+            <el-radio-button label="business">业务模块</el-radio-button>
+            <el-radio-button label="idle">空闲机</el-radio-button>
+            <el-radio-button v-if="showAcrossTab" label="across">跨业务</el-radio-button>
+          </el-radio-group>
+          <el-form label-width="90px">
+            <template v-if="topoTab === 'business' || topoTab === 'idle'">
+              <el-form-item :label="topoTab === 'idle' ? '空闲模块' : '目标模块'" required>
+                <el-cascader
+                  v-model="topoModule"
+                  :options="topoTab === 'idle' ? idleOptions : moduleOptions"
+                  :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </template>
+            <template v-else>
+              <el-form-item label="目标业务" required>
+                <el-select v-model="acrossBiz" filterable style="width: 100%" @change="loadAcrossIdleOptions">
+                  <el-option v-for="b in bizList" :key="b.bk_biz_id" :label="b.bk_biz_name" :value="b.bk_biz_id" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="空闲模块" required>
+                <el-cascader
+                  v-model="acrossModule"
+                  :options="acrossIdleOptions"
+                  :props="{ value: 'value', label: 'label', children: 'children', emitPath: false }"
+                  style="width: 100%"
+                  :disabled="!acrossBiz"
+                />
+              </el-form-item>
+            </template>
+          </el-form>
+          <template #footer>
+            <el-button @click="editTopoVisible = false">取消</el-button>
+            <el-button type="primary" :loading="transferring" @click="confirmEditTopo">确定</el-button>
+          </template>
+        </el-dialog>
       </template>
     </template>
     <el-empty v-else-if="!loading" description="主机不存在" />
@@ -278,13 +301,15 @@ import {
   http, searchBusiness, searchModelAttributes, getInstTopo, searchInstAssociations,
   searchObjectAssociations, searchMainlineModels,
   searchBizHostDetail, searchResourceHostDetail, searchNoAuthHostDetail,
-  getBizTopoTree, getBizInternalTopo, transferHostModule, transferHostToResource,
+  getBizTopoTree, getBizInternalTopo, transferExecute, transferBizHostAcrossBiz,
   searchServiceInstances, searchProcessInstances, deleteServiceInstances, createProcessInstance, updateProcessInstance,
   getAuditDictionary, searchInstAudit
 } from '../../api/cmdb'
+import { useBizStore } from '../../stores/biz'
 
 const route = useRoute()
 const router = useRouter()
+const bizStore = useBizStore()
 
 // 老版多上下文返回链:优先弹出来源快照(业务拓扑 node/tab、资源列表 scope 上下文随快照恢复);
 // 直达深链无快照时按上下文回相对菜单(业务主机→业务拓扑,其余→资源池主机)
@@ -354,13 +379,21 @@ const procFormVisible = ref(false)
 const procSaving = ref(false)
 const procForm = ref({})
 
-// 转移
+// 转移(老版 info.vue 契约:修改归属三 tab + 逐模块移除;不直调 /hosts/modules)
 const bizList = ref([])
-const targetBiz = ref(null)
-const targetModulePath = ref(null)
-const isIncrement = ref(false)
+const hostModules = ref([])
+const editTopoVisible = ref(false)
+const topoTab = ref('business')
+const topoModule = ref(null)
+const acrossBiz = ref(null)
+const acrossModule = ref(null)
+const acrossIdleOptions = ref([])
+const idleOptions = ref([])
 const transferring = ref(false)
 const moduleOptions = ref([])
+// 老版 module-selector-with-tab:跨业务 tab 仅当主机全部模块 default >= 1(已在空闲机池)时显示
+const showAcrossTab = computed(() => hostModules.value.length > 0 && hostModules.value.every((m) => Number(m.default) >= 1))
+const hostAllIdleSet = computed(() => hostModules.value.length > 0 && hostModules.value.every((m) => Number(m.default) !== 0))
 
 function defaultHistoryRange() {
   const today = new Date().toISOString().slice(0, 10)
@@ -476,17 +509,20 @@ async function openHistoryDetail(row) {
     ElMessage.error('变更记录详情加载失败: ' + (e?.message || '后端异常'))
   }
 }
-async function loadHost() {
+async function loadHost(bizOverride = null) {
   loading.value = true
   try {
     // 老版契约:业务上下文走 with_biz,资源池走 resource,深链兜底 noauth;不再请求未注册的 /host/search
+    const effectiveBizId = Number(bizOverride ?? bizId) || null
     let data = null
-    if (bizId) data = await searchBizHostDetail(bizId, hostId).catch(() => null)
+    if (effectiveBizId) data = await searchBizHostDetail(effectiveBizId, hostId).catch(() => null)
     if (!data?.info?.length) data = await searchResourceHostDetail(hostId).catch(() => null)
     if (!data?.info?.length) data = await searchNoAuthHostDetail(hostId).catch(() => null)
     const exact = (data?.info || []).find((item) => Number(item?.host?.bk_host_id ?? item?.bk_host_id) === hostId)
     if (!exact) throw new Error('目标主机不存在')
     host.value = exact.host || exact
+    // 老版 info.vue 依赖 module 关联(归属行/移除/空闲机池门禁),随主机一并保留
+    hostModules.value = exact.module || []
   } catch (e) {
     host.value = null
     ElMessage.error('主机加载失败: ' + (e?.message || '后端异常'))
@@ -708,30 +744,98 @@ async function loadModuleOptions() {
   }
   moduleOptions.value = options
 }
-async function doTransfer() {
-  const biz = bizId || targetBiz.value
-  if (!biz || !targetModulePath.value) { ElMessage.warning('请选择目标业务与模块'); return }
-  transferring.value = true
-  try {
-    await transferHostModule(biz, [hostId], [targetModulePath.value], isIncrement.value)
-    ElMessage.success('转移成功')
-    await loadHost()
-  } finally {
-    transferring.value = false
-  }
+async function openEditTopo() {
+  topoTab.value = 'business'
+  topoModule.value = null
+  acrossBiz.value = null
+  acrossModule.value = null
+  editTopoVisible.value = true
+  loadModuleOptions()
+  loadIdleOptions(bizId)
 }
-async function toResource() {
+
+// 老版 gotoTransferPage:跳转移预览页(single=1 标记详情页进入)
+function gotoTransferPage(moduleType, modules) {
+  editTopoVisible.value = false
+  router.push(`/business/${bizId}/host/transfer/${moduleType}?sourceModel=biz&sourceId=${bizId}&targetModules=${modules.join(',')}&resources=${hostId}&single=1`)
+}
+
+// 老版 transferDirectly:已在空闲机池的主机转 idle 免预览
+async function transferDirectlyToIdle(moduleId) {
   transferring.value = true
   try {
-    await transferHostToResource(bizId, [hostId])
-    ElMessage.success('已转移到资源池')
+    await transferExecute(bizId, {
+      bk_host_ids: [hostId],
+      default_internal_module: moduleId,
+      is_remove_from_all: true
+    })
+    ElMessage.success('转移成功')
+    editTopoVisible.value = false
     await loadHost()
+  } catch (e) {
+    ElMessage.error('转移失败: ' + (e?.message || '后端异常'))
   } finally {
     transferring.value = false
   }
 }
 
-watch(targetBiz, loadModuleOptions)
+function confirmEditTopo() {
+  if (topoTab.value === 'business') {
+    if (!topoModule.value) { ElMessage.warning('请选择目标模块'); return }
+    gotoTransferPage('business', [topoModule.value])
+    return
+  }
+  if (topoTab.value === 'idle') {
+    if (!topoModule.value) { ElMessage.warning('请选择空闲模块'); return }
+    if (hostAllIdleSet.value) transferDirectlyToIdle(topoModule.value)
+    else gotoTransferPage('idle', [topoModule.value])
+    return
+  }
+  // 老版 moveHostToOtherBusiness:ONE_TO_ONE,成功后改写路由业务上下文
+  if (!acrossBiz.value || !acrossModule.value) { ElMessage.warning('请选择目标业务与空闲模块'); return }
+  transferring.value = true
+  transferBizHostAcrossBiz(bizId, acrossBiz.value, [hostId], acrossModule.value).then(async () => {
+    ElMessage.success('转移成功')
+    editTopoVisible.value = false
+    // 老版 redirect(reload:false) 语义:同详情路由改写业务上下文,SPA 内刷新数据,不整页刷新
+    const targetBizId = String(acrossBiz.value)
+    if (route.params.bizId !== undefined) {
+      const nextPath = String(route.fullPath).replace(/^(\/business\/)\d+/, `$1${targetBizId}`)
+      window.history.replaceState(window.history.state, '', `#${nextPath}`)
+    } else if (route.query.biz !== undefined) {
+      window.history.replaceState(window.history.state, '', `#${route.path}?biz=${targetBizId}`)
+    }
+    bizStore.select(Number(targetBizId))
+    await loadHost(Number(targetBizId))
+  }).catch((e) => {
+    ElMessage.error('跨业务转移失败: ' + (e?.message || '后端异常'))
+  }).finally(() => {
+    transferring.value = false
+  })
+}
+
+// 老版 handleRemove:跳 type=remove 预览页(移除后主机回资源池)
+function removeFromModule(moduleId) {
+  router.push(`/business/${bizId}/host/transfer/remove/${moduleId}?sourceModel=module&sourceId=${moduleId}&resources=${hostId}`)
+}
+
+// 空闲机池选项(老版 same-default 约束:idle/跨业务目标均为空闲机模块)
+async function loadIdleOptionsFor(bizIdForOptions, target) {
+  if (!bizIdForOptions) { target.value = []; return }
+  try {
+    const idleTopo = await getBizInternalTopo(bizIdForOptions)
+    target.value = idleTopo?.bk_set_id
+      ? [{ value: idleTopo.bk_set_id, label: idleTopo.bk_set_name, children: (idleTopo.module || []).map((m) => ({ value: m.bk_module_id, label: m.bk_module_name })) }]
+      : []
+  } catch { target.value = [] }
+}
+function loadIdleOptions(id) {
+  return loadIdleOptionsFor(id, idleOptions)
+}
+function loadAcrossIdleOptions() {
+  acrossModule.value = null
+  return loadIdleOptionsFor(acrossBiz.value, acrossIdleOptions)
+}
 
 onMounted(async () => {
   loadHost()
