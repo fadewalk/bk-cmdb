@@ -31,7 +31,7 @@
             <span class="tree-node" data-testid="business-topology-node" :data-node-id="data.id" :data-node-type="data.type">
               <i :class="['bk-cmdb-icon', 'node-icon', nodeIconClass(data), { 'node-icon-biz': data.type === 'biz' }]" />
               <span class="node-label">{{ data.label }}</span>
-              <span v-if="data.hostCount != null" class="node-count">{{ data.hostCount }}</span>
+              <span v-if="data[nodeCountKey] != null" class="node-count">{{ data[nodeCountKey] }}</span>
               <el-button v-if="canCreate(data)" link size="small" type="primary" class="node-add"
                 @click.stop="openCreateFromNode(data)">+</el-button>
             </span>
@@ -696,7 +696,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import {
-  getBizTopoTree, getBizInternalTopo, listBizHosts,
+  getBizTopoTree, getBizInternalTopo, getTopoNodeStats, listBizHosts,
   createSet, deleteSet, updateSet, createModule, deleteModule, updateModule,
   transferHostModule, transferHostToResource, transferBizHostAcrossBiz,
   listResourceDirectory, transferExecute,
@@ -1008,7 +1008,7 @@ const filteredTree = computed(() => {
   return filter(treeData.value)
 })
 
-function mapTopoNode(node, parentSetId, moduleCount = {}, setCount = {}) {
+function mapTopoNode(node, parentSetId) {
   const setId = node.bk_obj_id === 'set' ? node.bk_inst_id : parentSetId
   return {
     type: node.bk_obj_id,
@@ -1017,11 +1017,35 @@ function mapTopoNode(node, parentSetId, moduleCount = {}, setCount = {}) {
     moduleId: node.bk_obj_id === 'module' ? node.bk_inst_id : undefined,
     serviceTemplateId: node.service_template_id || undefined,
     label: node.bk_inst_name,
-    hostCount: node.bk_obj_id === 'module'
-      ? (moduleCount[node.bk_inst_id] || 0)
-      : (node.bk_obj_id === 'set' ? (setCount[node.bk_inst_id] || 0) : undefined),
-    children: (node.child || []).map((c) => mapTopoNode(c, setId, moduleCount, setCount))
+    // 老版契约:count 由专项统计接口回填(topoinst_with_statistics 不带 host_count),无值时节点不显示数字
+    children: (node.child || []).map((c) => mapTopoNode(c, setId))
   }
+}
+
+function collectTreeNodes(nodes, out = []) {
+  for (const node of nodes) {
+    out.push(node)
+    if (node.children?.length) collectTreeNodes(node.children, out)
+  }
+  return out
+}
+
+// 老版 setNodeCount:统计接口回填 host_count/service_instance_count(按 1000 切片在 API 层完成);
+// 必须遍历 treeData 代理对象回填,改原始引用不触发响应式
+async function loadTreeNodeCounts() {
+  if (!treeData.value) return
+  const targets = collectTreeNodes(treeData.value)
+  if (!targets.length) return
+  try {
+    const stats = await getTopoNodeStats(bizId.value, targets)
+    const byKey = new Map(stats.map((item) => [`${item.bk_obj_id}-${item.bk_inst_id}`, item]))
+    for (const node of targets) {
+      const hit = byKey.get(node.id)
+      if (!hit) continue
+      node.hostCount = hit.host_count ?? 0
+      node.serviceCount = hit.service_instance_count ?? 0
+    }
+  } catch { /* 统计失败保持无数字,与老版 error 态一致不阻塞树 */ }
 }
 
 async function load() {
@@ -1029,33 +1053,11 @@ async function load() {
   loading.value = true
   currentNode.value = null
   try {
-    const [mainTree, idleTopo, statRes] = await Promise.allSettled([
+    const [mainTree, idleTopo] = await Promise.allSettled([
       getBizTopoTree(bizId.value),
-      getBizInternalTopo(bizId.value),
-      http.post('/findmany/hosts/search/with_biz', {
-        bk_biz_id: bizId.value,
-        condition: [
-          { bk_obj_id: 'biz', fields: [] },
-          { bk_obj_id: 'set', fields: [] },
-          { bk_obj_id: 'module', fields: [] },
-          { bk_obj_id: 'host', fields: [] }
-        ],
-        page: { start: 0, limit: 500 }
-      })
+      getBizInternalTopo(bizId.value)
     ])
-    // 老版树计数为前端统计:按集群/模块归组
-    let moduleCount = {}
-    let setCount = {}
-    let totalStat = 0
-    if (statRes.status === 'fulfilled') {
-      const rows = statRes.value?.info || []
-      totalStat = statRes.value?.count ?? rows.length
-      for (const r of rows) {
-        for (const m of r.module || []) moduleCount[m.bk_module_id] = (moduleCount[m.bk_module_id] || 0) + 1
-        for (const x of r.set || []) setCount[x.bk_set_id] = (setCount[x.bk_set_id] || 0) + 1
-      }
-    }
-    // 对齐老版: 根业务节点 → 空闲机池在前 → 自定义集群
+    // 对齐老版: 根业务节点 → 空闲机池在前 → 自定义集群;count 由统计接口回填
     let idleNode = null
     if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
       const s = idleTopo.value
@@ -1065,35 +1067,32 @@ async function load() {
         setId: s.bk_set_id,
         label: s.bk_set_name,
         isIdle: true,
-        hostCount: (s.module || []).reduce((a, m) => a + (moduleCount[m.bk_module_id] || 0), 0),
         children: (s.module || []).map((m) => ({
           type: 'module',
           id: `module-${m.bk_module_id}`,
           moduleId: m.bk_module_id,
           setId: s.bk_set_id,
           label: m.bk_module_name,
-          isIdle: true,
-          hostCount: moduleCount[m.bk_module_id] || 0
+          isIdle: true
         }))
       }
     }
     const customSets = []
     if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
       for (const bizNode of mainTree.value) {
-        customSets.push(...(bizNode.child || []).map((c) => mapTopoNode(c, undefined, moduleCount, setCount)))
+        customSets.push(...(bizNode.child || []).map((c) => mapTopoNode(c, undefined)))
       }
     }
     const children = [...(idleNode ? [idleNode] : []), ...customSets]
-    const totalHosts = totalStat || children.reduce((a, n) => a + (n.hostCount || 0), 0)
     const bizName = bizStore.bizList.find((b) => b.bk_biz_id === bizId.value)?.bk_biz_name || `业务 ${bizId.value}`
     const nodes = [{
       type: 'biz',
       id: `biz-${bizId.value}`,
       label: bizName,
-      hostCount: totalHosts,
       children
     }]
     treeData.value = nodes
+    loadTreeNodeCounts()
     const restoredNode = findQueryNode(nodes, route.query)
     if (restoredNode) {
       currentNode.value = restoredNode
@@ -1471,6 +1470,8 @@ const transferType = ref('business')
 // 转移/追加共用弹窗标题;此前未声明导致标题恒为"追加主机"且赋值抛错
 const transferMode = ref('move')
 // 老版转移校验:module.default 0=业务模块,>=1=空闲机池;空闲机池名/空闲模块取自树 idle 节点
+// 老版 nodeCountType:hostList/nodeInfo→host_count,serviceInstance→service_instance_count
+const nodeCountKey = computed(() => rightTab.value === 'instance' ? 'serviceCount' : 'hostCount')
 const idleSetName = computed(() => treeData.value[0]?.children?.find((n) => n.isIdle)?.label || '空闲机池')
 const idleSetModuleId = computed(() => {
   const idle = treeData.value[0]?.children?.find((n) => n.isIdle)

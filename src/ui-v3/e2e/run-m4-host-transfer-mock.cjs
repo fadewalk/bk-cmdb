@@ -129,6 +129,11 @@ async function installM4(page, records) {
   await page.route('**/api/v3/find/objectattgroup/object/biz', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([])))
   await page.route('**/api/v3/hosts/favorites/search', (route) => json(route, ok({ count: 0, info: [] })))
+  await page.route(/\/api\/v3\/find\/topoinstnode\/host_serviceinst_count\/2$/, (route) => {
+    const body = route.request().postDataJSON() || {}
+    const rows = (body.condition || []).map(({ bk_obj_id, bk_inst_id }) => ({ bk_obj_id, bk_inst_id, host_count: 0, service_instance_count: 0 }))
+    return json(route, ok(rows))
+  })
   await page.route('**/api/v3/find/objectattr/web', (route) => json(route, ok([])))
 }
 

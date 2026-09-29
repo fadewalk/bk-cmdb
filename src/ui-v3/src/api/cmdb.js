@@ -31,6 +31,16 @@ export const getBizTopoTree = (bizId) =>
 export const getBizInternalTopo = (bizId) =>
   http.get(`/topo/internal/0/${bizId}/with_statistics`)
 
+// 节点主机/服务实例统计(老版 getTopoStatistics:接口上限 1000,按 limit 切片并发,调用方无感知)
+export const getTopoNodeStats = (bizId, nodes) => {
+  const condition = nodes.map((node) => ({ bk_obj_id: node.type, bk_inst_id: node.type === 'biz' ? bizId : (node.moduleId ?? node.setId) }))
+  const slices = []
+  for (let index = 0; index < condition.length; index += 1000) slices.push(condition.slice(index, index + 1000))
+  return Promise.all(slices.map((slice) =>
+    http.post(`/find/topoinstnode/host_serviceinst_count/${bizId}`, { condition: slice })
+  )).then((chunks) => chunks.flat())
+}
+
 // 按服务模板查询已绑定的业务模块
 export const listModulesByServiceTemplate = (bizId, serviceTemplateId, page = { start: 0, limit: 200 }) =>
   http.post(`/module/bk_biz_id/${bizId}/service_template_id/${serviceTemplateId}`, { page })
