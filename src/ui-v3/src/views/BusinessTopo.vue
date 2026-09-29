@@ -50,7 +50,8 @@
         <!-- 工具栏 -->
         <div class="toolbar" v-if="rightTab !== 'node'">
           <template v-if="rightTab === 'host'">
-            <el-button size="small" type="primary" :disabled="!bizId" @click="openCreateSet">新增</el-button>
+            <el-button size="small" type="primary" :disabled="!isNormalModuleNode" data-testid="business-topology-add-host"
+              :title="isNormalModuleNode ? '' : '请先在左侧选择普通模块节点'" @click="openAddHost">新增</el-button>
             <el-button size="small" :disabled="!selectedHosts.length" @click="openTopoBatchEdit">编辑</el-button>
             <el-dropdown trigger="click" @command="onTransferCmd">
               <el-button size="small" :disabled="!selectedHosts.length">转移至<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
@@ -503,6 +504,51 @@
       <template #footer>
         <el-button @click="acrossVisible = false">取消</el-button>
         <el-button type="primary" :loading="acrossSubmitting" @click="submitAcrossTransfer">确认转移</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新增主机(老版 HostSelector:源模块树选主机 → type=add 预览页) -->
+    <el-dialog v-model="addHostVisible" title="新增主机到模块" width="720px" data-testid="business-topology-add-host-dialog">
+      <div class="add-host-body">
+        <div class="add-host-tree" v-loading="addHostLoading">
+          <div class="add-host-pane-title">选择来源模块</div>
+          <el-tree
+            :data="addHostTree"
+            node-key="key"
+            :props="{ label: 'label', children: 'children' }"
+            default-expand-all
+            highlight-current
+            @node-click="loadAddHostRows"
+          >
+            <template #default="{ data }">
+              <span :class="{ 'add-host-module': data.isModule }">{{ data.label }}</span>
+            </template>
+          </el-tree>
+        </div>
+        <div class="add-host-list">
+          <div class="add-host-pane-title">选择主机{{ addHostModule ? `(${addHostModule.label})` : '' }}</div>
+          <el-table
+            :data="addHostRows"
+            v-loading="addHostLoading"
+            size="small"
+            border
+            max-height="320"
+            data-testid="add-host-table"
+            @selection-change="addHostSelected = $event"
+          >
+            <el-table-column type="selection" width="40" />
+            <el-table-column label="内网IP" min-width="130">
+              <template #default="{ row }">{{ row.bk_host_innerip || '--' }}</template>
+            </el-table-column>
+            <el-table-column label="主机名称" min-width="130">
+              <template #default="{ row }">{{ row.bk_host_name || '--' }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="addHostVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!addHostModule" @click="confirmAddHost">确定</el-button>
       </template>
     </el-dialog>
 
@@ -1012,6 +1058,7 @@ async function load() {
           moduleId: m.bk_module_id,
           setId: s.bk_set_id,
           label: m.bk_module_name,
+          isIdle: true,
           hostCount: moduleCount[m.bk_module_id] || 0
         }))
       }
@@ -1412,6 +1459,89 @@ const idleSetModuleId = computed(() => {
 const hostAllIdleSet = (h) => (h.__modules || []).length > 0 && (h.__modules || []).every((m) => Number(m.default) >= 1)
 const hostInIdlePool = (h) => (h.__modules || []).length > 0 && (h.__modules || []).every((m) => Number(m.default) !== 0)
 const selectionIdlePoolGated = computed(() => selectedHosts.value.length > 0 && !selectedHosts.value.every(hostAllIdleSet))
+// 老版 isNormalModuleNode:当前节点为非空闲模块(module.default===0)时才允许新增主机
+const isNormalModuleNode = computed(() => currentNode.value?.type === 'module' && !currentNode.value.isIdle)
+
+// ---------- 新增主机(老版 host-list-options handleAddHost:HostSelector → type=add 预览页) ----------
+const addHostVisible = ref(false)
+const addHostTree = ref([])
+const addHostModule = ref(null)
+const addHostLoading = ref(false)
+const addHostRows = ref([])
+const addHostSelected = ref([])
+
+function openAddHost() {
+  if (!isNormalModuleNode.value) { ElMessage.warning('请先在左侧选择普通模块节点'); return }
+  addHostModule.value = null
+  addHostRows.value = []
+  addHostSelected.value = []
+  addHostVisible.value = true
+  buildAddHostTree()
+}
+
+// 老版 host-selector-new:候选源为业务内全部模块(含空闲机池),选模块列其主机
+async function buildAddHostTree() {
+  addHostLoading.value = true
+  try {
+    const [mainTree, idleTopo] = await Promise.allSettled([getBizTopoTree(bizId.value), getBizInternalTopo(bizId.value)])
+    const tree = []
+    if (mainTree.status === 'fulfilled' && Array.isArray(mainTree.value)) {
+      for (const bizNode of mainTree.value) {
+        for (const s of bizNode.child || []) {
+          tree.push({
+            key: `set-${s.bk_inst_id}`,
+            label: s.bk_inst_name,
+            children: (s.child || []).map((m) => ({ key: `module-${m.bk_inst_id}`, label: m.bk_inst_name, moduleId: m.bk_inst_id, isModule: true }))
+          })
+        }
+      }
+    }
+    if (idleTopo.status === 'fulfilled' && idleTopo.value?.bk_set_id) {
+      const s = idleTopo.value
+      tree.push({
+        key: `set-${s.bk_set_id}`,
+        label: s.bk_set_name,
+        children: (s.module || []).map((m) => ({ key: `module-${m.bk_module_id}`, label: m.bk_module_name, moduleId: m.bk_module_id, isModule: true }))
+      })
+    }
+    addHostTree.value = tree
+  } finally {
+    addHostLoading.value = false
+  }
+}
+
+// 老版 searchHost:with_biz 按所选模块节点条件查其主机
+async function loadAddHostRows(node) {
+  if (!node?.isModule) { addHostModule.value = null; addHostRows.value = []; return }
+  addHostModule.value = node
+  addHostSelected.value = []
+  addHostLoading.value = true
+  try {
+    const data = await http.post('/findmany/hosts/search/with_biz', {
+      bk_biz_id: bizId.value,
+      condition: [
+        { bk_obj_id: 'biz', fields: [] },
+        { bk_obj_id: 'set', fields: [] },
+        { bk_obj_id: 'module', fields: [], condition: [{ field: 'bk_module_id', operator: '$eq', value: node.moduleId }] },
+        { bk_obj_id: 'host', fields: [] }
+      ],
+      page: { start: 0, limit: 200, sort: 'bk_host_innerip' }
+    })
+    addHostRows.value = (data?.info || []).map((h) => h.host || h)
+  } catch {
+    addHostRows.value = []
+  } finally {
+    addHostLoading.value = false
+  }
+}
+
+function confirmAddHost() {
+  if (!addHostSelected.value.length) { ElMessage.warning('请选择要新增的主机'); return }
+  const node = currentNode.value
+  addHostVisible.value = false
+  // 老版 gotoTransferPage 契约:目标模块=当前页面节点,type=add 增量转移
+  router.push(`/business/${bizId.value}/host/transfer/add?sourceModel=module&sourceId=${node.moduleId}&targetModules=${node.moduleId}&resources=${addHostSelected.value.map((h) => h.bk_host_id).join(',')}&node=${node.id}`)
+}
 
 function onTransferCmd(cmd) {
   if (!selectedHosts.value.length) return
@@ -1671,10 +1801,7 @@ async function onInstMore(cmd) {
   await loadInstances()
 }
 
-// ---- 新建集群 / 模块(工具栏 + 右键) ----
-function openCreateSet() {
-  openCreateFromNode({ type: 'biz' })
-}
+// ---- 新建集群 / 模块(右键;老版工具栏"新增"为新增主机入口) ----
 function openCreateFromNode(data) {
   if (data.type === 'biz' || data.type === 'set') {
     nodeDialogMode.value = 'create'
@@ -2194,6 +2321,11 @@ onBeforeUnmount(() => {
   font-size: 12px; color: #EA3636; line-height: 1.8;
   background: #FFF0F0; border: 1px solid #FFD9D9; border-radius: 2px; padding: 6px 10px;
 }
+.add-host-body { display: flex; gap: 14px; }
+.add-host-tree { flex: 0 0 240px; max-height: 360px; overflow: auto; border-right: 1px solid #E7E9EF; padding-right: 10px; }
+.add-host-list { flex: 1; min-width: 0; }
+.add-host-pane-title { font-size: 12px; color: #979BA5; margin-bottom: 6px; }
+.add-host-module { color: #3A84FF; cursor: pointer; }
 .load-error {
   display: flex; align-items: center; justify-content: center; gap: 12px;
   padding: 32px 0; font-size: 12px; color: #EA3636;
