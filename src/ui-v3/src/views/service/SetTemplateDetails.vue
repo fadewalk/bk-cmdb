@@ -1,7 +1,7 @@
 <template>
   <!-- 旧版 set-template/details.vue 复刻:集群模板配置 / 集群模板实例 双 tab,tab 落 query -->
   <div class="details-page">
-    <el-tabs v-model="activeTab" class="details-tabs" @tab-change="onTabChange">
+    <el-tabs v-model="activeTab" class="details-tabs">
       <el-tab-pane name="config">
         <template #label><span>集群模板配置</span></template>
         <div v-loading="loading" class="tab-body">
@@ -22,9 +22,11 @@
                       size="small"
                       maxlength="256"
                       placeholder="请输入模板名称"
+                      :class="{ 'is-name-error': !!nameError }"
                       @keyup.enter="saveName"
                       @blur="saveName"
                     />
+                    <p v-if="nameError" class="form-error">{{ nameError }}</p>
                   </span>
                   <span v-else class="basic-value">{{ templateName }}</span>
                   <i
@@ -179,7 +181,16 @@
               </template>
             </el-table-column>
             <template #empty>
-              <el-empty :image-size="60" description="暂无数据" />
+              <!-- 旧版 cmdb-data-empty:默认态「暂无模板实例，请前往{业务拓扑}添加」,筛选态带清除筛选 -->
+              <div class="instance-empty">
+                <template v-if="hasInstanceFilter">
+                  <p>暂无数据</p>
+                  <el-button link type="primary" @click="clearInstanceFilter">清除筛选</el-button>
+                </template>
+                <template v-else>
+                  <p>暂无模板实例，请前往<a class="empty-link" @click="goBusinessTopo">业务拓扑</a>添加</p>
+                </template>
+              </div>
             </template>
           </el-table>
           <el-pagination
@@ -199,7 +210,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, h, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBizStore } from '../../stores/biz'
@@ -216,11 +227,10 @@ const bizId = computed(() => Number(route.params.bizId) || bizStore.bizId)
 const templateId = computed(() => Number(route.params.templateId))
 
 const activeTab = ref(route.query.tab === 'instance' ? 'instance' : 'config')
-function onTabChange(v) {
-  router.replace({ query: { ...route.query, tab: v } })
-}
-// 切到实例 tab 时拉数据并启动轮询,切回配置 tab 停止
+// 切到实例 tab 时拉数据并启动轮询,切回配置 tab 停止;tab 变化落 query
+// (EP tab-change 仅用户点击触发,程序化切换需 watch 覆盖)
 watch(activeTab, (v) => {
+  if (route.query.tab !== v) router.replace({ query: { ...route.query, tab: v } })
   if (v === 'instance') {
     if (!list.value.length && !instanceLoading.value) reloadPage()
     startPolling()
@@ -251,19 +261,33 @@ const configList = computed(() => attributes.value
   })
   .filter(Boolean))
 
-// 名称行内编辑(旧版:悬停出编辑笔,回车/失焦保存)
+// 名称行内编辑(旧版:悬停出编辑笔,回车/失焦保存;required + utf8 字节长度 256 校验,
+// singlechar 规则后端默认 \S* 恒真,实际生效即前两条)
 const nameInput = ref(null)
 const nameEditing = ref(false)
 const nameDraft = ref('')
+const nameError = ref('')
+function validateNameDraft() {
+  const value = String(nameDraft.value ?? '').trim()
+  if (!value) return '请输入模板名称'
+  if (new TextEncoder().encode(value).length > 256) return '模板名称长度不能超过256个字符'
+  return ''
+}
 function startEditName() {
   nameDraft.value = templateName.value
+  nameError.value = ''
   nameEditing.value = true
   setTimeout(() => nameInput.value?.focus?.(), 50)
 }
 async function saveName() {
   if (!nameEditing.value) return
+  nameError.value = validateNameDraft()
+  if (nameError.value) return
+  if (!nameDraft.value || nameDraft.value === templateName.value) {
+    nameEditing.value = false
+    return
+  }
   nameEditing.value = false
-  if (!nameDraft.value || nameDraft.value === templateName.value) return
   await updateSetTemplate(bizId.value, templateId.value, { name: nameDraft.value })
   templateName.value = nameDraft.value
   refreshNeedSync()
@@ -280,6 +304,21 @@ function cancelEditProperty() {
   editProperty.value = null
   editValue.value = ''
 }
+// 老版契约:保存成功提示内嵌「同步功能」链接,点击切实例 tab
+function showSyncTips() {
+  ElMessage({
+    type: 'success',
+    duration: 5000,
+    message: h('span', { class: 'success-message' }, [
+      '成功更新模板，您可以通过',
+      h('a', {
+        class: 'msg-link',
+        onClick: () => { activeTab.value = 'instance' }
+      }, '同步功能'),
+      '更新服务实例'
+    ])
+  })
+}
 async function saveProperty(property) {
   let value = editValue.value
   if (['int', 'float'].includes(property.bk_property_type)) value = Number(value)
@@ -291,7 +330,7 @@ async function saveProperty(property) {
   const row = attributes.value.find((a) => a.bk_attribute_id === property.id)
   if (row) row.bk_property_value = value
   cancelEditProperty()
-  ElMessage.success('成功更新模板，您可以通过同步功能更新服务实例')
+  showSyncTips()
   refreshNeedSync()
 }
 async function delProperty(property) {
@@ -334,6 +373,17 @@ const statusFilters = [
 ]
 const isSyncing = (status) => ['new', 'waiting', 'executing'].includes(status)
 const isSyncDisabled = (status) => isSyncing(status) || status === 'finished'
+
+// 空态分型(旧版 cmdb-data-empty):有筛选为 search 态(清除筛选),否则引导去业务拓扑
+const hasInstanceFilter = computed(() => statusFilter.value !== 'all' || !!filterName.value.trim())
+function clearInstanceFilter() {
+  statusFilter.value = 'all'
+  filterName.value = ''
+  reload(1)
+}
+function goBusinessTopo() {
+  router.push(`/business/${bizId.value}/index`)
+}
 
 const displayList = computed(() => list.value.map((item) => {
   const setInfo = listWithTopo.value.find((s) => s.bk_set_id === item.bk_set_id)
@@ -583,6 +633,31 @@ onBeforeUnmount(stopPolling)
 }
 .name-form {
   width: 300px;
+}
+.form-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #EA3636;
+  line-height: 16px;
+}
+.is-name-error :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #EA3636 inset;
+}
+/* 成功提示内嵌链接(旧版 process-success-message) */
+:global(.success-message .msg-link) {
+  color: #3A84FF;
+  cursor: pointer;
+  margin: 0 2px;
+}
+.instance-empty {
+  padding: 16px 0;
+  font-size: 12px;
+  color: #63656E;
+}
+.instance-empty .empty-link {
+  color: #3A84FF;
+  cursor: pointer;
+  margin: 0 2px;
 }
 .prop-form {
   width: 260px;

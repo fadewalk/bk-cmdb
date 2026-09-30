@@ -128,6 +128,7 @@ import {
   diffSetTemplateWithInstances, getSetTemplateRemovedModuleStatus,
   syncSetTemplateToInstances, getTopoPath, searchModelAttributes
 } from '../../api/cmdb'
+import { formatPropertyValueDisplay } from '../../utils/property-display'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,10 +162,9 @@ const denySync = computed(() => diffList.value.some((item) => item.denySync))
 function isPropChanged(attr) {
   return JSON.stringify(attr.inst_value) !== JSON.stringify(attr.template_value)
 }
+// 老版契约:属性对比走 cmdb-property-value 类型化渲染(enum→name、bool→true/false、date/time 格式化)
 function displayValue(value, property) {
-  if (value === null || value === undefined || value === '') return '--'
-  if (property?.bk_property_type === 'enum' && typeof value === 'string') return value
-  return String(value)
+  return formatPropertyValueDisplay(property, value)
 }
 function diffLabel(type) {
   return { add: '新增', remove: '删除', changed: '变更' }[type] || ''

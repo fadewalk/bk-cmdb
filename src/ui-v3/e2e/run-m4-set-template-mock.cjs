@@ -168,6 +168,7 @@ async function installMocks(page, records) {
   // 实例 tab
   await page.route('**/api/v3/findmany/topo/set_template_sync_status/bk_biz_id/2', (route) => {
     records.syncStatusBodies.push(route.request().postDataJSON() || {})
+    if (records.emptyInstance) return json(route, ok({ count: 0, info: [] }))
     return json(route, ok({ count: SET_ROWS.length, info: SET_ROWS }))
   })
   await page.route('**/api/v3/findmany/topo/set_template/1/bk_biz_id/2/sets/web', (route) => json(route, ok(SETS_TOPO)))
@@ -375,7 +376,9 @@ async function run() {
     const storedMap = await page.evaluate(() => JSON.parse(sessionStorage.getItem('setSyncIdMap') || '{}'))
     assert(JSON.stringify(storedMap['2_1']) === '[32]', `sessionStorage setSyncIdMap 不符: ${JSON.stringify(storedMap)}`)
     await page.locator('.title').waitFor()
-    assert((await page.locator('.title').innerText()).includes('请确认实例更改信息：'), '单个同步标题不符')
+    // 初始化异步完成前 title 会先渲染批量 0 态,等待单个标题出现
+    await page.waitForFunction(() => document.body.innerText.includes('请确认实例更改信息：'), null, { timeout: 6000 })
+      .catch(() => { throw new Error(`单个同步标题不符: ${(page.locator('.title').innerText().catch(() => '')).slice(0, 60)}`) })
     assert(await page.locator('.set-head').count() === 0, '单个同步不应渲染折叠头')
     // 被移除模块含主机提示可跳转
     await page.locator('.remove-tip').waitFor()
@@ -424,6 +427,63 @@ async function run() {
     await page.keyboard.press('Enter')
     await waitForRecord(() => hashQuery(page).get('searchName') === 'A', '搜索未落 URL')
     checks.push('set template list sorts/searches through URL with server request')
+
+    // 11. 详情属性保存成功提示内嵌「同步功能」链接,点击切实例 tab
+    await page.goto(`${BASE}/#/business/2/set/template/details/1`, { waitUntil: 'load' })
+    await page.locator('.grid-item').filter({ hasText: '集群描述' }).waitFor()
+    const propArea = page.locator('.grid-item').filter({ hasText: '集群描述' })
+    await propArea.hover()
+    await propArea.locator('.property-edit-button').first().click()
+    await propArea.locator('input').fill('hello-x')
+    await propArea.getByRole('button', { name: '保存' }).click()
+    await page.waitForFunction(() => document.body.innerText.includes('成功更新模板，您可以通过'), null, { timeout: 6000 })
+      .catch(() => { throw new Error('属性保存成功提示未出现') })
+    const msgLink = page.locator('.el-message').getByText('同步功能')
+    assert(await msgLink.count() === 1, '成功提示缺同步功能链接')
+    await msgLink.click()
+    await page.waitForFunction(() => window.location.hash.includes('tab=instance'), null, { timeout: 6000 })
+      .catch(() => { throw new Error(`同步功能未切实例 tab: ${page.url()}`) })
+    checks.push('property save tips embeds sync link switching to instance tab')
+
+    // 12. 名称行内编辑校验:必填/utf8 字节超长报错并停留编辑态,合法值保存
+    await page.goto(`${BASE}/#/business/2/set/template/details/1`, { waitUntil: 'load' })
+    await page.locator('.grid-item').filter({ hasText: '模板名称' }).waitFor()
+    const nameArea = page.locator('.grid-item').filter({ hasText: '模板名称' })
+    await nameArea.hover()
+    await nameArea.locator('.property-edit-button').first().click()
+    await nameArea.locator('input').fill('')
+    await nameArea.locator('input').blur()
+    await page.waitForFunction(() => document.body.innerText.includes('请输入模板名称'), null, { timeout: 5000 })
+      .catch(() => { throw new Error('名称必填校验未生效') })
+    await nameArea.locator('input').fill('集'.repeat(130))
+    await nameArea.locator('input').blur()
+    await page.waitForFunction(() => document.body.innerText.includes('长度不能超过256'), null, { timeout: 5000 })
+      .catch(() => { throw new Error('名称长度校验未生效') })
+    await nameArea.locator('input').fill('集群模板B')
+    await nameArea.locator('input').blur()
+    await page.waitForFunction(() => {
+      const item = document.querySelector('.grid-item')
+      return item && item.innerText.includes('集群模板B')
+    }, null, { timeout: 5000 })
+      .catch(() => { throw new Error('合法名称未保存回显') })
+    checks.push('inline name edit validates required and byte length before save')
+
+    // 13. 实例空态分型:筛选态带清除筛选,默认态引导业务拓扑
+    records.emptyInstance = true
+    await page.goto(`${BASE}/#/business/2/set/template/details/1?tab=instance`, { waitUntil: 'load' })
+    await page.waitForFunction(() => document.body.innerText.includes('暂无模板实例，请前往'), null, { timeout: 6000 })
+      .catch(() => { throw new Error('默认空态未引导业务拓扑') })
+    await page.getByPlaceholder('请输入集群名称搜索').fill('nomatch')
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => document.body.innerText.includes('清除筛选'), null, { timeout: 6000 })
+      .catch(() => { throw new Error('筛选空态未带清除筛选') })
+    await page.locator('.instance-empty').getByRole('button', { name: '清除筛选' }).click()
+    await page.waitForFunction(() => document.body.innerText.includes('暂无模板实例，请前往'), null, { timeout: 6000 })
+      .catch(() => { throw new Error('清除筛选未回到默认空态') })
+    await page.locator('.instance-empty .empty-link').click()
+    await page.waitForFunction(() => window.location.hash.includes('/business/2/index'), null, { timeout: 6000 })
+      .catch(() => { throw new Error(`业务拓扑跳转失败: ${page.url()}`) })
+    checks.push('instance empty state splits default/search with business topo link')
 
     await page.screenshot({ path: `${SHOTS}/m4-i-set-template.png`, timeout: 20000, animations: 'disabled' })
     const realErrors = records.errors.filter((entry) => !/favicon|ResizeObserver/.test(entry))
