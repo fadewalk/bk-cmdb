@@ -79,6 +79,13 @@
 |---|---|---|---|
 | 云资源发现/同步 | `src/ui/src/views/cloud-resource/` | 已接入 core | cmdb_cloudserver 已部署;账户密钥验证与实际同步需真实云厂商凭据和网络 |
 | Pod/容器详情 | `src/ui/src/views/pod-details/` | 依赖阻塞 | Kubernetes 集群纳管和 Pod/容器 API 可用 |
+## 20. 深度收尾批次（2026-09-13，B45，已完成）
+
+1. **主机详情关联 tab**：列表/拓扑双视图 + 组件内全屏（老版 association.vue 语义）——由"部分迁移"升级为完整交互覆盖；
+2. **模型导入向导**：解析结果逐行标记"已存在,不可导入"（同 bk_obj_id 命中），勾选禁用、提交排除（老版 import editor 契约）；
+3. **模型导出**：密码可选，填写即校验老版 export-setting 规则（6-16 位含字母/数字/特殊符号）+ 二次确认一致（与老版"必填密码"的差异为兼容既有 E2E 流程，已记录）；
+4. **回归基线**：run-all.cjs 纳入 run-b38/b39/b40/b41/run-login/run-b45；run-b27 断言适配新契约并以真实数据验证"已存在"标记。
+
 | 外部 IAM/正式登录 | 旧版 router auth/interceptor(绑定蓝鲸 IAM) | v3 已接入 session/userinfo/logout/401 处理；真实 OIDC/API Key 与资源级 IAM 未完成 | **部分迁移 / 生产阻断**：需真实 IdP、多用户隔离、default-deny、权限/异常矩阵和 E2E |
 
 ## 当前批次与发布门禁

@@ -39,7 +39,26 @@
 
 > 如果要让浏览器/8090 使用本轮最新前端，必须按第 3 节重新构建或部署 dist，并重启容器内 `cmdb_webserver`。仅运行 `npm run build` 不会改变正在运行的容器内容。
 
-## 2. 本轮已完成的 parity 工作
+## B30 资源导航 parity 批次（2026-09-11）
+
+本批次覆盖资源导航下的项目、业务集、业务、主机、管控区域、云账户、云资源发现，并保留资源目录作为入口页。
+
+已完成：
+
+- 项目、业务集页面移除与全局标题栏重复的页内标题；项目/业务集/业务名称搜索改为服务端条件，避免只过滤当前页导致总数与列表不一致。
+- 业务列表补齐正常/归档条件、模糊搜索、清空/回车回到第一页；`BizMixSelector` 的 `?create=1` 现在会自动打开业务或业务集创建表单并清理 query。
+- 业务集编辑回读并提交 `bk_scope`，保持 `match_all` 与 `filter.biz_ids` 互斥；业务拓扑进程抽屉/克隆查询补齐 `bk_biz_id` 参数。
+- 主机资源池保留当前工作区的 scope/directory/高级筛选实现，并以 B24/B28 验证 `bk_host_innerip/$eq`、主机池默认选择、目录条件和全部 scope 请求契约。
+- 管控区域行内改名失败有明确错误提示；云账户详情中的 SecretId 脱敏；云发现编辑删除 VPC 时保留 `destroyed: true`，不再直接丢弃已有 VPC。
+- 新增 `src/ui-v3/e2e/run-b30.cjs`：验证 `/resource`、`/resource/cloud-resource` 旧入口重定向及 query 保留，8 个资源入口 canonical route，以及项目/业务/云账户创建动线。现有 `run-b29.cjs` 是先前模型视觉回归脚本，未覆盖或改写。
+
+验证结果：
+
+- `npm run build`：通过；Vite 2381 modules，只有既有 iconcool 资源解析 warning。
+- B30、route smoke、B14、B18、B24、B28：通过。
+- 当前运行态部署 hash：`index-Bp98TA5Y.js`（包含当前工作区 HostList 改动）；首次只部署资源批次的 hash 为 `index-f5q5Vqh3.js`。
+- `git diff --check` 的全仓结果仍受既有无关文件 `docs/architecture/iam-open-source-design.md:365` 尾随空格影响；本批次文件差异检查通过。
+
 
 ### 2.0 业务导航交互契约批次（2026-09-09 晚，commit 81d3239e2a / 5d115a0a4f）
 
@@ -297,28 +316,17 @@ page.locator('.el-card .el-table .el-table__row')
 
 - 移除旧 `.el-card .el-table` 业务集断言。
 - 改为新工作台 DOM 和真实 API 响应断言。
-- 增加拓扑节点选择后主机请求 body 的节点条件断言。
-- 增加模块节点服务实例和展开进程请求断言。
-
-### P1：补充真实数据回归
-
-在 standalone 上使用真实业务/业务集/模块/服务实例：
-
-- 主机详情历史：验证列表、日期筛选、详情抽屉。
-- 服务实例：验证两条实例批量删除、标签批量写入、模板同步、全部展开。
-- 业务集拓扑：验证业务集→业务→集群→模块→主机/服务实例/进程链路。
-
-### 依赖阻塞，暂不伪造
-
-- Pod/Container：等待 Kubernetes 数据链路。
-- 首页全文检索：等待 ES 数据链路。
-- IAM：OIDC/Casbin 资源级持久化、实例过滤、按钮权限和 E2E 尚未完成。
-
-## 7. 交接注意事项
-
-- 不使用 Docker Desktop，只使用 `colima-xwssd`。
-- 不使用 `git add -A`，按功能文件显式暂存。
-- 不提交 `.playwright-mcp/`、截图、临时输出和构建临时文件。
-- 修改 dist 后必须重启 `cmdb_webserver`，否则可能继续提供旧前端。
-- 不能用空数组/全量列表冒充业务集节点过滤结果。
-- 不能在 Pod、ES、IAM 依赖未就绪时伪造数据或宣称完整替代。
+- 增加拓扑节点import { equals, coalesce, isNonEmptyArray } from '../../../../base/common/arrays.js';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { illegalArgument, isCancellationError, onUnexpectedExternalError } from '../../../../base/common/errors.js';
+import { HierarchicalKind } from '../../../../base/common/hierarchicalKind.js';
+import { DisposableStore, Disposable } from '../../../../base/common/lifecycle.js';
+import { URI } from '../../../../base/common/uri.js';
+import { localize } from '../../../../nls.js';
+import { IAccessibilitySignalService, AccessibilitySignal } from '../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
+import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { Progress } from '../../../../platform/progress/common/progress.js';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
+import { IBulkEditService } from '../../../browser/services/bulkEditService.js';
+import { Range } from '../../../common/cor
