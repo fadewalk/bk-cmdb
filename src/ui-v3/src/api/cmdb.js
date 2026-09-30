@@ -689,8 +689,9 @@ export const getFieldTemplateSyncStatus = (data) =>
   http.post('/find/field_template/sync/status', data)
 
 // ---------- 服务模板 ----------
-export const searchServiceTemplates = (bizId, page) =>
-  http.post('/findmany/proc/service_template', { bk_biz_id: bizId, page })
+// 老版 getServices 契约:service_category_id(无筛选显式传 0)+ search 名称随体携带
+export const searchServiceTemplates = (bizId, page, extra = {}) =>
+  http.post('/findmany/proc/service_template', { bk_biz_id: bizId, page, service_category_id: extra.service_category_id ?? 0, search: extra.search || '' })
 export const getServiceTemplateDetail = (templateId) =>
   http.get(`/find/proc/service_template/${templateId}/detail`)
 export const getServiceTemplateAllInfo = (bizId, templateId) =>

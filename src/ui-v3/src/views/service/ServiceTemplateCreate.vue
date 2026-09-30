@@ -145,7 +145,7 @@
         <i class="success-icon bk-cmdb-icon icon-cc-check">✓</i>
         <h3 class="success-title">创建成功</h3>
         <p class="success-next">
-          服务模板创建成功，您可以在<el-button link type="primary" @click="goSetTemplate">集群模板</el-button>、<el-button link type="primary" @click="goBusinessTopo">业务拓扑</el-button>中使用该服务模板
+          服务模板创建成功，您可以在<el-button link type="primary" @click="goSetTemplate">集群模板</el-button>中应用，或用于<el-button link type="primary" @click="goBusinessTopo">业务拓扑</el-button>中创建模块
         </p>
         <div class="success-btns">
           <el-button type="primary" @click="continueCreate">继续创建</el-button>
@@ -342,6 +342,7 @@ function buildProperty(form) {
 }
 
 const successVisible = ref(false)
+const createdTemplateId = ref(null)
 
 async function submit() {
   if (!form.value.name) {
@@ -357,7 +358,7 @@ async function submit() {
   if (!processList.value.length) {
     try {
       await ElMessageBox.confirm(
-        editId.value ? '服务模板创建没进程提示' : '服务模板尚未添加进程，没有进程的服务模板无法创建服务实例',
+        '当前模板没有设定进程信息，是否确认？',
         '确认提交',
         { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
       )
@@ -382,14 +383,15 @@ async function submit() {
       ElMessage.success('保存成功')
       router.push(`/business/${bizId.value}/service/template/details/${editId.value}`)
     } else {
-      // 旧版 all_info 接口:一次创建模板+进程+属性
-      await createServiceTemplateAllInfo({
+      // 旧版 all_info 接口:一次创建模板+进程+属性;记录新 id 供「关闭」跳详情
+      const created = await createServiceTemplateAllInfo({
         bk_biz_id: bizId.value,
         name: form.value.name,
         service_category_id: form.value.secCategory,
         processes: processList.value.map((p) => ({ property: buildProperty(p) })),
         attributes: propertyRows.value.map((r) => ({ bk_attribute_id: r.id, bk_property_value: r.value || null }))
       })
+      createdTemplateId.value = created?.id ?? null
       successVisible.value = true
     }
   } catch (e) {
@@ -421,7 +423,9 @@ function continueCreate() {
 
 function closeSuccess() {
   successVisible.value = false
-  backToList()
+  // 老版契约:创建成功「关闭」跳新模板详情页;无 id(异常)时兜底回列表
+  if (createdTemplateId.value) router.push(`/business/${bizId.value}/service/template/details/${createdTemplateId.value}`)
+  else backToList()
 }
 
 function goSetTemplate() {

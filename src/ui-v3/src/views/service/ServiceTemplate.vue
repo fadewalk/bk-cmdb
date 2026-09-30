@@ -13,7 +13,7 @@
           clearable
           filterable
           style="width: 184px; margin-right: 10px"
-          @change="applyTemplateFilter"
+          @change="onSvcSearch"
         >
           <el-option v-for="c in mainCategories" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
@@ -23,7 +23,7 @@
           clearable
           filterable
           style="width: 184px; margin-right: 10px"
-          @change="applyTemplateFilter"
+          @change="onSvcSearch"
         >
           <el-option v-for="c in subCategories" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
@@ -42,13 +42,14 @@
         v-loading="tplLoading"
         row-class-name="clickable-row"
         @row-click="(row) => goTemplateDetails(row)"
+        @sort-change="onSvcSortChange"
       >
-        <el-table-column prop="id" label="ID" width="90" sortable>
+        <el-table-column prop="id" label="ID" width="90" sortable="custom">
           <template #default="{ row }">
             <span :class="['tpl-id', { 'need-sync': svcSyncIds.has(row.id) }]">{{ row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="模板名称" min-width="180" show-overflow-tooltip sortable />
+        <el-table-column prop="name" label="模板名称" min-width="180" show-overflow-tooltip sortable="custom" />
         <el-table-column label="服务分类" width="180">
           <template #default="{ row }">{{ categoryName(row.service_category_id) }}</template>
         </el-table-column>
@@ -61,10 +62,10 @@
         <el-table-column label="已应用模块数" width="120">
           <template #default="{ row }">{{ row.module_count ?? 0 }}</template>
         </el-table-column>
-        <el-table-column prop="modifier" label="修改人" width="110" sortable>
+        <el-table-column prop="modifier" label="修改人" width="110" sortable="custom">
           <template #default="{ row }">{{ row.modifier || row.creator || '-' }}</template>
         </el-table-column>
-        <el-table-column label="修改时间" width="160" sortable prop="last_time">
+        <el-table-column label="修改时间" width="160" sortable="custom" prop="last_time">
           <template #default="{ row }">{{ formatTime(row.last_time, 'YYYY-MM-DD HH:mm') }}</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -72,7 +73,7 @@
             <el-button link type="primary" @click.stop="openEditTpl(row)">编辑</el-button>
             <el-button link type="primary" @click.stop="goCreate(row.id)">克隆</el-button>
             <!-- 旧版契约:已应用到模块(module_count>0)时删除置灰不可点,tooltip 不可删除 -->
-            <el-tooltip v-if="(row.module_count ?? 0) > 0" content="不可删除" placement="top">
+            <el-tooltip v-if="(row.module_count ?? 0) > 0" content="模板已被应用不能删除，如需删除，请先清空模板下的实例" placement="top">
               <el-button link disabled>删除</el-button>
             </el-tooltip>
             <el-button v-else link type="danger" @click.stop="removeTpl(row)">删除</el-button>
@@ -84,6 +85,21 @@
           </el-empty>
         </template>
       </el-table>
+      <div class="table-footer">
+        <span>共计{{ templates.length }}条</span>
+        <div class="spacer" />
+        <el-pagination
+          data-testid="svc-tpl-pagination"
+          v-model:current-page="svcPage"
+          :page-size="svcLimit"
+          :total="templates.length"
+          :page-sizes="[20, 50, 100]"
+          layout="sizes, prev, pager, next"
+          small
+          @current-change="onSvcPageChange"
+          @size-change="onSvcLimitChange"
+        />
+      </div>
     </template>
 
     <!-- 集群模板(旧版独立页:新建在左,名称搜索在右) -->
@@ -350,25 +366,13 @@ function openEditTpl(row) {
   router.push(`/business/${bizId.value}/service/template/edit/${row.id}`)
 }
 
-async function cloneTpl(row) {
-  saving.value = true
-  try {
-    await http.post('/create/proc/service_template', {
-      bk_biz_id: bizId.value,
-      name: `${row.name}-copy`,
-      service_category_id: row.service_category_id || 0
-    })
-    ElMessage.success('克隆成功')
-    loadTemplates()
-  } finally { saving.value = false }
-}
-
 // 服务分类(仅作为服务/集群模板表单下拉数据源;UI 已迁移到独立 /business/service-category 页)
 
 async function removeTpl(row) {
-  await ElMessageBox.confirm(`确定删除服务模板「${row.name}」?`, '删除确认', { type: 'warning' })
+  // 老版 $bkInfo 契约:仅标题「确认删除模板」
+  await ElMessageBox.confirm('', '确认删除模板', { type: 'warning' })
   await http.delete('/delete/proc/service_template', { data: { bk_biz_id: bizId.value, service_template_id: row.id } })
-  ElMessage.success('已删除')
+  ElMessage.success('删除成功')
   loadTemplates()
 }
 
@@ -474,9 +478,14 @@ const subCategories = computed(() => {
   if (!filterMainCate.value) return categories.value.filter((c) => !c.isRoot)
   return categories.value.filter((c) => !c.isRoot && c.category?.bk_parent_id === filterMainCate.value)
 })
+// 老版契约:选一级分类时把一级 id 传后端(后端按一级聚合解析);前端兜底按其下二级分类集合匹配
+const mainCateLeafIds = computed(() => {
+  if (!filterMainCate.value) return null
+  return new Set(subCategories.value.map((c) => c.id))
+})
 const filteredTemplates = computed(() => {
   let arr = templates.value
-  if (filterMainCate.value) arr = arr.filter((t) => t.service_category_id === filterMainCate.value)
+  if (filterMainCate.value) arr = arr.filter((t) => mainCateLeafIds.value.has(t.service_category_id))
   if (filterSubCate.value) arr = arr.filter((t) => t.service_category_id === filterSubCate.value)
   if (filterName.value.trim()) {
     const k = filterName.value.trim().toLowerCase()
@@ -514,10 +523,66 @@ async function saveTpl() {
   }
 }
 
+// 老版列表契约:分页/排序/搜索写 URL query 并驱动服务端请求(sort 默认 -id,搜索仅 Enter 触发)
+const svcPage = ref(Number(route.query.current) || 1)
+const svcLimit = ref(Number(route.query.limit) || 20)
+const svcSort = ref(String(route.query.sort || '-id'))
+if (route.query.name) filterName.value = String(route.query.name)
+if (route.query.mainClassification && Number.isFinite(Number(route.query.mainClassification))) filterMainCate.value = Number(route.query.mainClassification)
+if (route.query.secondaryClassification && Number.isFinite(Number(route.query.secondaryClassification))) filterSubCate.value = Number(route.query.secondaryClassification)
+
+function syncSvcQuery() {
+  const query = { ...route.query }
+  query.current = String(svcPage.value)
+  query.limit = String(svcLimit.value)
+  query.sort = svcSort.value
+  if (filterName.value.trim()) query.name = filterName.value.trim()
+  else delete query.name
+  if (filterMainCate.value) query.mainClassification = String(filterMainCate.value)
+  else delete query.mainClassification
+  if (filterSubCate.value) query.secondaryClassification = String(filterSubCate.value)
+  else delete query.secondaryClassification
+  query._t = String(Date.now())
+  router.replace({ query }).catch(() => {})
+}
+
+function onSvcSortChange({ prop, order }) {
+  if (!order) { svcSort.value = '-id' }
+  else svcSort.value = order === 'ascending' ? String(prop) : `-${prop}`
+  svcPage.value = 1
+  syncSvcQuery()
+  loadTemplates()
+}
+
+function onSvcSearch() {
+  svcPage.value = 1
+  syncSvcQuery()
+  loadTemplates()
+}
+
+function onSvcPageChange(page) {
+  svcPage.value = Number(page) || 1
+  syncSvcQuery()
+  loadTemplates()
+}
+
+function onSvcLimitChange(limit) {
+  svcLimit.value = Number(limit) || 20
+  svcPage.value = 1
+  syncSvcQuery()
+  loadTemplates()
+}
+
 async function loadTemplates() {
   tplLoading.value = true
   try {
-    const data = await searchServiceTemplates(bizId.value, { start: 0, limit: 200 })
+    // 老版 getServices 契约:无筛选也显式传 service_category_id: 0
+    const categoryId = filterSubCate.value || filterMainCate.value || 0
+    const data = await searchServiceTemplates(bizId.value, {
+      start: (svcPage.value - 1) * svcLimit.value,
+      limit: svcLimit.value,
+      sort: svcSort.value
+    }, { service_category_id: categoryId, search: filterName.value.trim() })
     templates.value = data?.info || []
   } finally { tplLoading.value = false }
 }
