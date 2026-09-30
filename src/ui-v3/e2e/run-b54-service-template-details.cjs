@@ -76,13 +76,13 @@ async function main() {
 
     // M4-K 起入口为「新建进程」,表单按模型属性标签定位
     await page.getByRole('button', { name: '新建进程' }).click()
-    const processDialog = page.locator('.el-dialog:visible')
-    const itemInput = (label) => processDialog.locator('.el-form-item').filter({ hasText: label }).locator('input').first()
+    const processDialog = page.locator('.el-drawer:visible')
+    const itemInput = (label) => processDialog.locator('.pf-item').filter({ hasText: label }).locator('input').first()
     await itemInput('进程名').fill('b54-api')
     await itemInput('启动用户').fill('root')
     await itemInput('工作路径').fill('/opt/b54-api')
     await processDialog.getByPlaceholder('请输入端口').fill('9090')
-    await processDialog.getByRole('button', { name: '保存' }).click()
+    await processDialog.getByRole('button', { name: '提交' }).click()
     await page.waitForTimeout(600)
     const createBody = state.processCreates[0]
     assert(createBody?.bk_biz_id === 99 && createBody?.service_template_id === 72, '进程创建基础 payload 不符')

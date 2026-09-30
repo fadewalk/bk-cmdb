@@ -121,7 +121,8 @@ async function installM4Preview(page, records) {
 }
 
 async function fillProcessDialog(page, name, port) {
-  const dialog = page.locator('.el-dialog').filter({ hasText: '添加进程' }).or(page.locator('.el-dialog').filter({ hasText: '编辑进程' }))
+  // M4-M 起进程表单为右侧抽屉
+  const dialog = page.locator('.el-drawer').filter({ hasText: '添加进程' }).or(page.locator('.el-drawer').filter({ hasText: '编辑进程' }))
   await dialog.waitFor()
   await dialog.getByPlaceholder('如 java / nginx').fill(name)
   await dialog.getByPlaceholder('如 8080,多个用逗号分隔').fill(port)
@@ -154,7 +155,7 @@ async function run() {
     await entry.getByRole('button', { name: '编辑' }).click()
     await fillProcessDialog(page, 'python', '9090')
     const entryText = await entry.innerText().catch(() => '(entry gone)')
-    const dialogCount = await page.locator('.el-dialog:visible').count()
+    const dialogCount = await page.locator('.el-dialog:visible, .el-drawer:visible').count()
     assert(entryText.includes('python'), `编辑后进程行未更新为 python; entry=${entryText.slice(0, 300)}; visibleDialogs=${dialogCount}; errors=${JSON.stringify(records.errors.slice(-3))}`)
     await applyTab.click()
     assert(await page.locator('[data-testid="transfer-apply-panel"]').isVisible(), '属性自动应用面板未显示')

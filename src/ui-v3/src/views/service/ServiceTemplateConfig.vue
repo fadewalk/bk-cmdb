@@ -123,6 +123,7 @@
       mode="template"
       :form="processForm"
       :attrs="processAttrs"
+      :groups="processGroups"
       :saving="saving"
       :editing-existing="!!processEditing && !processViewing"
       :info-mode="processViewing"
@@ -137,7 +138,7 @@ import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
-import { getServiceTemplateAllInfo, searchModelAttributes, searchServiceCategories, searchProcTemplates, createProcTemplate, updateProcTemplate, deleteProcTemplate, updateServiceTemplateProperty, deleteServiceTemplateProperty, updateServiceTemplate } from '../../api/cmdb'
+import { getServiceTemplateAllInfo, searchModelAttributes, searchModelPropertyGroups, searchServiceCategories, searchProcTemplates, createProcTemplate, updateProcTemplate, deleteProcTemplate, updateServiceTemplateProperty, deleteServiceTemplateProperty, updateServiceTemplate } from '../../api/cmdb'
 import { formatPropertyValueDisplay, PROCESS_BIND_IP_OPTIONS } from '../../utils/property-display'
 
 const props = defineProps({ bizId: { type: Number, required: true }, templateId: { type: Number, required: true } })
@@ -145,7 +146,7 @@ const emit = defineEmits(['sync-change', 'active-change'])
 const router = useRouter()
 const loading = ref(true); const saving = ref(false); const error = ref('')
 const info = ref({ name: '', service_category_id: 0, attributes: [], processes: [] })
-const categories = ref([]); const moduleAttrs = ref([]); const processAttrs = ref([]); const processRows = ref([])
+const categories = ref([]); const moduleAttrs = ref([]); const processAttrs = ref([]); const processGroups = ref([]); const processRows = ref([])
 const editingId = ref(null); const editingValue = ref('')
 const processDialog = ref(false); const processForm = ref({}); const processEditing = ref(null); const processViewing = ref(false)
 
@@ -316,14 +317,16 @@ function processFormFromRow(row) {
 async function load() {
   loading.value = true; error.value = ''
   try {
-    const [detail, attrs, procAttrs, categoryData, processes] = await Promise.all([
+    const [detail, attrs, procAttrs, procGroups, categoryData, processes] = await Promise.all([
       getServiceTemplateAllInfo(props.bizId, props.templateId),
       searchModelAttributes('module', props.bizId),
       searchModelAttributes('process', props.bizId),
+      searchModelPropertyGroups('process', props.bizId).catch(() => []),
       searchServiceCategories(props.bizId),
       searchProcTemplates(props.bizId, { service_template_id: props.templateId, page: { start: 0, limit: 100 } })
     ])
     info.value = detail || info.value; moduleAttrs.value = attrs || []; processAttrs.value = procAttrs || []
+    processGroups.value = procGroups || []
     categories.value = categoryData?.info || categoryData || []; processRows.value = (processes?.info || []).map(flattenProcess)
   } catch (e) { error.value = e?.message || '服务模板详情加载失败' } finally { loading.value = false }
 }

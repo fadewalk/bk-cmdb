@@ -37,12 +37,12 @@ async function waitForRecord(predicate, message, timeout = 6000) {
 
 // 进程模型属性(bind_info option 列:ip/port/protocol/enable;protocol 枚举含 v4 1/2 与 v6 3/4)
 const PROCESS_ATTRS = [
-  { id: 701, bk_property_id: 'bk_func_name', bk_property_name: '功能名称', bk_property_type: 'singlechar', isrequired: true, bk_property_index: 1, editable: true },
-  { id: 702, bk_property_id: 'bk_process_name', bk_property_name: '进程别名', bk_property_type: 'singlechar', bk_property_index: 2, editable: true },
-  { id: 703, bk_property_id: 'user', bk_property_name: '启动用户', bk_property_type: 'singlechar', bk_property_index: 3, editable: true },
-  { id: 704, bk_property_id: 'work_path', bk_property_name: '工作路径', bk_property_type: 'singlechar', bk_property_index: 4, editable: true },
-  { id: 705, bk_property_id: 'bk_start_param_regex', bk_property_name: '启动参数匹配规则', bk_property_type: 'singlechar', bk_property_index: 5, editable: true },
-  { id: 706, bk_property_id: 'bind_info', bk_property_name: '端口绑定', bk_property_type: 'table', bk_property_index: 6, option: [
+  { id: 701, bk_property_id: 'bk_func_name', bk_property_name: '功能名称', bk_property_type: 'singlechar', isrequired: true, bk_property_index: 1, editable: true, bk_property_group: 'basic' },
+  { id: 702, bk_property_id: 'bk_process_name', bk_property_name: '进程别名', bk_property_type: 'singlechar', bk_property_index: 2, editable: true, bk_property_group: 'basic' },
+  { id: 703, bk_property_id: 'user', bk_property_name: '启动用户', bk_property_type: 'singlechar', bk_property_index: 3, editable: true, bk_property_group: 'manage' },
+  { id: 704, bk_property_id: 'work_path', bk_property_name: '工作路径', bk_property_type: 'singlechar', bk_property_index: 4, editable: true, bk_property_group: 'manage' },
+  { id: 705, bk_property_id: 'bk_start_param_regex', bk_property_name: '启动参数匹配规则', bk_property_type: 'singlechar', bk_property_index: 5, editable: true, bk_property_group: 'basic' },
+  { id: 706, bk_property_id: 'bind_info', bk_property_name: '端口绑定', bk_property_type: 'table', bk_property_index: 6, bk_property_group: 'bind', option: [
     { bk_property_id: 'ip', bk_property_name: '监听IP', bk_property_type: 'enum' },
     { bk_property_id: 'port', bk_property_name: '端口', bk_property_type: 'int' },
     { bk_property_id: 'protocol', bk_property_name: '协议', bk_property_type: 'enum', option: [{ id: '1', name: 'TCP' }, { id: '2', name: 'UDP' }, { id: '3', name: 'TCP6' }, { id: '4', name: 'UDP6' }] },
@@ -107,6 +107,11 @@ async function installMocks(page, records) {
   await page.route('**/api/v3/find/classificationobject', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/object', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattr/web', (route) => json(route, ok([])))
+  await page.route('**/api/v3/find/objectattgroup/object/process', (route) => json(route, ok([
+    { bk_group_id: 'basic', bk_group_name: '基础信息', bk_group_index: 0, is_collapse: false },
+    { bk_group_id: 'bind', bk_group_name: '监听信息', bk_group_index: 1, is_collapse: false },
+    { bk_group_id: 'manage', bk_group_name: '进程管理信息', bk_group_index: 2, is_collapse: true }
+  ])))
   await page.route('**/api/v3/find/objectattr', (route) => {
     const body = route.request().postDataJSON() || {}
     if (body?.bk_obj_id === 'module') return json(route, ok(MODULE_ATTRS))
@@ -178,11 +183,11 @@ async function run() {
 
     // 2. 查看态:仅「关闭」按钮
     await page.locator('.el-table__row').first().getByRole('button', { name: '查看' }).click()
-    const viewDlg = page.locator('.el-dialog').filter({ hasText: 'svc-web' })
+    const viewDlg = page.locator('.el-drawer').filter({ hasText: 'svc-web' })
     await viewDlg.waitFor()
-    await viewDlg.locator('.el-dialog__footer').waitFor()
+    await viewDlg.locator('.el-drawer__footer').waitFor()
     // EP 头部 X 按钮的 aria-label 在 zh-CN 也是「关闭」,断言限定 footer
-    assert(await viewDlg.locator('.el-dialog__footer').getByRole('button', { name: '关闭' }).count() === 1, '查看态缺关闭按钮')
+    assert(await viewDlg.locator('.el-drawer__footer').getByRole('button', { name: '关闭' }).count() === 1, '查看态缺关闭按钮')
     assert(await viewDlg.getByRole('button', { name: '保存' }).count() === 0, '查看态不应有保存按钮')
     await viewDlg.getByRole('button', { name: '关闭', exact: true }).click()
     await page.waitForTimeout(400)
@@ -190,12 +195,12 @@ async function run() {
 
     // 3. 新建进程:字段默认全锁(创建模式),bk_func_name 必填校验,bind_info ip 枚举含 IPv6
     await page.getByRole('button', { name: '新建进程' }).click()
-    const createDlg = page.locator('.el-dialog').filter({ hasText: '添加进程' })
+    const createDlg = page.locator('.el-drawer').filter({ hasText: '添加进程' })
     await createDlg.waitFor()
     const lockCount = await createDlg.locator('.property-lock').count()
     assert(lockCount > 0, '新建进程未渲染锁控件')
-    // 直接提交触发必填校验
-    await createDlg.getByRole('button', { name: '保存' }).click()
+    // 直接提交触发必填校验(老版 create 为提交按钮)
+    await createDlg.getByRole('button', { name: '提交' }).click()
     await page.waitForFunction(() => document.body.innerText.includes('请输入功能名称'), null, { timeout: 5000 })
       .catch(() => { throw new Error('bk_func_name 必填校验未生效') })
     // bind_info ip 下拉含 IPv6 枚举
@@ -213,9 +218,9 @@ async function run() {
     checks.push('create form defaults locked, validates func name, ipv6 enum and protocol linkage')
 
     // 4. 创建提交 payload:全字段 as_default_value=true,bk_process_name 跟随
-    await createDlg.locator('.el-form-item').filter({ hasText: '功能名称' }).locator('input').fill('nginx')
+    await createDlg.locator('.pf-item').filter({ hasText: '功能名称' }).locator('input').fill('nginx')
     await createDlg.locator('.el-table__row').first().getByPlaceholder('请输入端口').fill('80')
-    await createDlg.getByRole('button', { name: '保存' }).click()
+    await createDlg.getByRole('button', { name: '提交' }).click()
     await waitForRecord(() => records.createBodies.length === 1, '创建进程请求未发出')
     const spec = records.createBodies[0]?.processes?.[0]?.spec || {}
     assert(spec.bk_func_name?.value === 'nginx' && spec.bk_func_name?.as_default_value === true, `bk_func_name 契约不符: ${JSON.stringify(spec.bk_func_name)}`)
@@ -232,15 +237,17 @@ async function run() {
     const procSection = page.locator('.detail-section').filter({ hasText: '服务进程' })
     const editBtn = procSection.locator('.el-table__row').first().getByRole('button', { name: '编辑' })
     await editBtn.click()
-    const editDlg = page.locator('.el-dialog').filter({ hasText: 'svc-web' })
+    const editDlg = page.locator('.el-drawer').filter({ hasText: 'svc-web' })
     await editDlg.waitFor()
     await page.waitForTimeout(400)
-    const funcInput = editDlg.locator('.el-form-item').filter({ hasText: '功能名称' }).locator('input')
+    const funcInput = editDlg.locator('.pf-item').filter({ hasText: '功能名称' }).locator('input')
     assert(await funcInput.isDisabled(), '编辑态 bk_func_name 未禁改')
     const saveBtn = editDlg.getByRole('button', { name: '确定' })
     assert(await saveBtn.isDisabled(), '编辑态未变更时确定按钮未禁用')
-    // user 字段(初始解锁)改值
-    const userItem = editDlg.locator('.el-form-item').filter({ hasText: '启动用户' })
+    // user 字段在「进程管理信息」组(is_collapse 默认折叠),先展开
+    await editDlg.locator('.pf-group-header').filter({ hasText: '进程管理信息' }).click()
+    await page.waitForTimeout(300)
+    const userItem = editDlg.locator('.pf-item').filter({ hasText: '启动用户' })
     await userItem.locator('input').fill('www')
     await page.waitForTimeout(300)
     assert(await saveBtn.isEnabled(), '变更后确定按钮仍禁用')
