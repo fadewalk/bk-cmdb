@@ -22,3 +22,6 @@ pre-*-bkcodeai
 src/ui-v3/node_modules/
 src/ui-v3/dist/
 screenshots/
+
+# playwright-mcp session logs
+.playwright-mcp/
