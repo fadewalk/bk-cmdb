@@ -169,11 +169,12 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
       const delBtn1 = instRows.nth(1).locator('button:has-text("删除")')
       if (!(await delBtn1.isEnabled())) ok('含主机集群删除禁用')
       else fail('含主机删除禁用', '仍可点')
-      // 去同步 → diff 页带 sets
+      // 去同步 → diff 页(M4-I 起 sessionStorage setSyncIdMap 传参,URL 不带 sets)
       await row0.locator('button:has-text("去同步")').click()
       await page.waitForTimeout(1200)
-      if (/set\/sync\/1\?sets=31/.test(page.url())) ok(`去同步进差异页: ${page.url()}`)
-      else fail('去同步路由', page.url())
+      const syncMap = await page.evaluate(() => JSON.parse(sessionStorage.getItem('setSyncIdMap') || '{}'))
+      if (/set\/sync\/1$/.test(new URL(page.url()).hash.replace(/#/, '').split('?')[0]) && !page.url().includes('sets=') && (syncMap['2_1'] || []).includes(31)) ok(`去同步进差异页(sessionStorage 传参): ${page.url()}`)
+      else fail('去同步路由', `${page.url()} map=${JSON.stringify(syncMap)}`)
     } else fail('实例 mock 行', `期望 2 行,实际 ${await instRows.count()}`)
 
     // 重试契约(重新进入实例 tab,mock failure 行)

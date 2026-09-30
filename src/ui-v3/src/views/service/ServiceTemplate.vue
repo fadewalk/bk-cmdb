@@ -1,6 +1,8 @@
 <template>
   <div class="page-card">
-    <p v-show="tipsVisible" class="page-tips">{{ pageTips }}<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipsVisible = false" /></p>
+    <p v-show="tipsVisible && tab === 'template'" class="page-tips">{{ pageTips }}<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipsVisible = false" /></p>
+    <!-- 集群模板顶部提示(旧版 cmdb-tips tips-key=showSetTips 持久化,链接可点) -->
+    <p v-show="tab === 'settpl' && showSetTips" class="page-tips">集群模板可以定义业务通用的集群结构，用于<a class="tips-link" @click="goBusinessTopo">业务拓扑</a>中快速部署和维护集群。此功能依赖已经存在<a class="tips-link" @click="goServiceTemplatePage">服务模板</a>。<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="closeSetTips" /></p>
 
     <!-- 服务模板(旧版独立页:新建在左,分类/名称筛选在右,无页内 tab) -->
     <template v-if="tab === 'template' && bizId">
@@ -113,7 +115,7 @@
           clearable
           style="width: 210px"
           suffix-icon="Search"
-          @input="applyTemplateFilter"
+          @keyup.enter="applyTemplateFilter"
           @clear="applyTemplateFilter"
         />
       </div>
@@ -122,20 +124,21 @@
         v-loading="setLoading"
         row-class-name="clickable-row"
         @row-click="goSetDetails"
+        @sort-change="onSetSortChange"
       >
-        <el-table-column prop="id" label="ID" width="90" sortable>
+        <el-table-column prop="id" label="ID" width="90" sortable="custom">
           <template #default="{ row }">
             <span :class="['tpl-id', { 'need-sync': setSyncIds.has(row.id) }]">{{ row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip sortable />
+        <el-table-column prop="name" label="模板名称" min-width="200" show-overflow-tooltip sortable="custom" />
         <el-table-column prop="set_instance_count" label="应用数量" width="110" sortable>
           <template #default="{ row }">{{ row.set_instance_count ?? 0 }}</template>
         </el-table-column>
-        <el-table-column prop="modifier" label="修改人" width="130" sortable>
+        <el-table-column prop="modifier" label="修改人" width="130" sortable="custom">
           <template #default="{ row }">{{ row.modifier || row.creator || '--' }}</template>
         </el-table-column>
-        <el-table-column label="修改时间" width="170" sortable prop="last_time">
+        <el-table-column label="修改时间" width="170" sortable="custom" prop="last_time">
           <template #default="{ row }">{{ formatTime(row.last_time, 'YYYY-MM-DD HH:mm') || '--' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="130" fixed="right">
@@ -472,7 +475,11 @@ const leafCategories = computed(() => flatCategories.value.filter((c) => c.isLea
 // 过滤:一级分类 / 二级分类 / 名称
 const filterMainCate = ref(null)
 const filterSubCate = ref(null)
-const filterName = ref('')
+const filterName = ref(String(route.query.searchName || ''))
+// 集群模板列表服务端排序(旧版契约:sort 落 URL,默认 -last_time)
+const SET_TPL_SORTABLE = ['id', 'name', 'modifier', 'last_time']
+const setSort = ref(SET_TPL_SORTABLE.includes(route.query.sort) ? route.query.sort : '-last_time')
+const showSetTips = ref(!localStorage.getItem('showSetTips'))
 const mainCategories = computed(() => categories.value.filter((c) => c.isRoot))
 const subCategories = computed(() => {
   if (!filterMainCate.value) return categories.value.filter((c) => !c.isRoot)
@@ -501,7 +508,29 @@ const filteredSetTemplates = computed(() => {
   }
   return arr
 })
-function applyTemplateFilter() { /* computed 自动 */ }
+function applyTemplateFilter() { writeSetQuery() }
+
+// 集群模板列表契约:sort/searchName 落 URL;排序后清空搜索;应用数量列本地排序跳过
+function onSetSortChange(sort) {
+  if (sort.prop === 'set_instance_count') return
+  setSort.value = sort.order === 'ascending' ? sort.prop : sort.order === 'descending' ? `-${sort.prop}` : '-last_time'
+  filterName.value = ''
+  writeSetQuery()
+  loadSetTemplates()
+}
+function writeSetQuery() {
+  router.replace({ query: { ...route.query, sort: setSort.value, searchName: filterName.value } })
+}
+function closeSetTips() {
+  localStorage.setItem('showSetTips', 'closed')
+  showSetTips.value = false
+}
+function goBusinessTopo() {
+  router.push(`/business/${bizId.value}/index`)
+}
+function goServiceTemplatePage() {
+  router.push(`/business/${bizId.value}/service/template`)
+}
 
 async function saveTpl() {
   if (!tplForm.value.name) {
@@ -648,18 +677,21 @@ async function openSetTplSync(row) {
   }
 }
 
-// 老版契约:选择集群后进入差异确认页(set/sync/:setTemplateId)
+// 老版契约:同步集合经 sessionStorage setSyncIdMap 传递(key `${biz}_${templateId}`),不落 URL
 function goSetSyncDiff() {
   if (!syncTarget.value || !syncSetIds.value.length) return
+  sessionStorage.setItem('setSyncIdMap', JSON.stringify({
+    [`${bizId.value}_${syncTarget.value.id}`]: syncSetIds.value
+  }))
   setSyncDialog.value = false
-  router.push(`/business/${bizId.value}/set/sync/${syncTarget.value.id}?sets=${syncSetIds.value.join(',')}`)
+  router.push(`/business/${bizId.value}/set/sync/${syncTarget.value.id}`)
 }
 
 async function loadSetTemplates() {
   setLoading.value = true
   try {
-    // 旧版契约:列表项为 {set_instance_count, set_template:{...}} 嵌套形态,需展平;默认服务端按 -last_time 排序
-    const data = await searchSetTemplates(bizId.value, { start: 0, limit: 200, sort: '-last_time' })
+    // 旧版契约:列表项为 {set_instance_count, set_template:{...}} 嵌套形态,需展平;服务端按 setSort 排序
+    const data = await searchSetTemplates(bizId.value, { start: 0, limit: 200, sort: setSort.value })
     setTemplates.value = (data?.info || []).map((item) => ({
       set_instance_count: item.set_instance_count,
       ...item.set_template
@@ -936,6 +968,14 @@ watch(tplDetailTab, (v) => { if (v === 'instance') loadTplModules() })
 }
 .tips-close:hover {
   color: #3A84FF;
+}
+/* 顶部提示条链接(旧版 tips-link) */
+.tips-link {
+  color: #3a84ff;
+  cursor: pointer;
+}
+.tips-link:hover {
+  text-decoration: underline;
 }
 </style>
 

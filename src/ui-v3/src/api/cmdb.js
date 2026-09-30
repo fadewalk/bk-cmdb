@@ -624,6 +624,23 @@ export const getSetTemplateRemovedModuleStatus = (bizId, templateId, data) =>
 // 模板关联的集群实例列表(web)
 export const searchSetTemplateSets = (bizId, templateId, data = {}) =>
   http.post(`/findmany/topo/set_template/${templateId}/bk_biz_id/${bizId}/sets/web`, data)
+// 集群模板全量创建/更新(老版 service/set-template 组合契约,attributes 可为空数组)
+export const createSetTemplateAllInfo = (bizId, data) =>
+  http.post('/create/topo/set_template/all_info', { bk_biz_id: bizId, ...data })
+export const updateSetTemplateAllInfo = (bizId, templateId, data) =>
+  http.put('/update/topo/set_template/all_info', { id: templateId, bk_biz_id: bizId, ...data })
+// 模板全量详情(老版 getFullOne:含属性设置与服务拓扑)
+export const getSetTemplateFullInfo = (bizId, templateId) =>
+  http.post('/find/topo/set_template/all_info', { bk_biz_id: bizId, id: templateId })
+// 模板绑定的服务模板下主机数(老版 rollReq 100 分批,响应 [{id, count}])
+export const countSetTemplateSvcTemplateHosts = (bizId, templateId, ids) =>
+  http.post(`/count/set_template/${templateId}/service_template/hosts`, { ids })
+// 服务分类(无数量版,老版 service-template-selector 契约)
+export const searchServiceCategoriesPlain = (bizId) =>
+  http.post('/findmany/proc/service_category', { bk_biz_id: bizId })
+// 模型字段分组(老版 propertyGroupService 契约)
+export const searchModelPropertyGroups = (objId, bizId) =>
+  http.post(`/find/objectattgroup/object/${objId}`, { bk_biz_id: bizId })
 
 // ---------- 业务集 ----------
 // 业务集列表及其专用拓扑契约

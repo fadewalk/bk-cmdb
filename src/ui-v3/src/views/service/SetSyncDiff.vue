@@ -3,8 +3,9 @@
   <div class="set-sync-page" v-loading="pageLoading">
     <div class="sync-head">
       <p class="title">
-        <template v-if="diffList.length === 1">请确认单个实例更改信息</template>
-        <template v-else>请确认 <b>{{ diffList.length }}</b> 个实例更改信息</template>
+        <!-- 旧版 i18n:单个「请确认实例更改信息：」/多个「请确认以下{count}个实例更改信息：」 -->
+        <template v-if="diffList.length === 1">请确认实例更改信息：</template>
+        <template v-else>请确认以下 <b>{{ diffList.length }}</b> 个实例更改信息：</template>
       </p>
       <div class="type-legend">
         <span class="legend-item"><i class="dot changed" />变更</span>
@@ -18,15 +19,16 @@
       </el-alert>
       <div class="sync-main">
       <div v-for="diff in diffList" :key="diff.setId" class="set-container">
-        <div class="set-head" @click="toggleSet(diff)">
+        <!-- 旧版契约:单个同步不渲染折叠头(无展开/移除操作) -->
+        <div v-if="diffList.length > 1" class="set-head" @click="toggleSet(diff)">
           <i :class="['bk-cmdb-icon icon-cc-triangle set-arrow', { collapsed: !setGroup[diff.setId]?.expanded }]" />
           <span class="topopath">{{ setGroup[diff.setId]?.topoPath || `Set #${diff.setId}` }}</span>
           <span v-if="diff.denySync" class="deny-sync"><i class="deny-icon">!</i>不可同步</span>
           <el-tooltip content="本次不同步" placement="top">
-            <i class="bk-cmdb-icon icon-cc-close remove-btn" @click.stop="removeSet(diff)" />
+            <i class="remove-btn" @click.stop="removeSet(diff)">×</i>
           </el-tooltip>
         </div>
-        <div v-show="setGroup[diff.setId]?.expanded" class="set-body" v-loading="setGroup[diff.setId]?.loading">
+        <div v-show="diffList.length === 1 || setGroup[diff.setId]?.expanded" class="set-body" v-loading="setGroup[diff.setId]?.loading">
           <!-- 属性变更 -->
           <div v-if="setGroup[diff.setId]?.propertyDiff?.length" class="diff-section">
             <div class="section-title">属性变更</div>
@@ -84,7 +86,8 @@
                     <span class="node-name">{{ node.bk_module_name }}</span>
                     <span class="diff-tag" :class="node.diff_type">{{ diffLabel(node.diff_type) }}</span>
                     <div v-if="node.diff_type === 'remove' && hasHost(node.bk_module_id, diff.setId)" class="remove-tip">
-                      存在主机，不可删除模块
+                      <!-- 旧版 i18n「存在主机不可同步提示」:不可同步，模块存在主机，{跳转查看} 可点 -->
+                      不可同步，模块存在主机，<a class="view-btn" @click.stop="goModuleTopo(node.bk_module_id)">跳转查看</a>
                     </div>
                   </div>
                 </div>
@@ -103,7 +106,11 @@
 
     <div class="sync-footer">
       <el-alert v-if="syncError" class="sync-submit-error" type="error" :closable="false" show-icon>{{ syncError }}</el-alert>
-      <el-tooltip :content="denySync ? '请先删除不可同步的实例' : ''" :disabled="!denySync" placement="top">
+      <el-tooltip
+        :content="diffList.length === 1 ? '不可同步' : '请先删除不可同步的实例'"
+        :disabled="!denySync"
+        placement="top"
+      >
         <span>
           <el-button type="primary" :loading="syncing" :disabled="denySync || !diffList.length" @click="confirmSync">确认同步</el-button>
         </span>
@@ -128,8 +135,18 @@ const router = useRouter()
 const bizId = computed(() => Number(route.params.bizId))
 const setTemplateId = computed(() => Number(route.params.setTemplateId))
 
-// 老版批次选择页经 sessionStorage setSyncIdMap 传递集群,此处用 sets query 承接(更可深链)
-const setIds = computed(() => String(route.query.sets || '').split(',').map(Number).filter(Boolean))
+// 旧版契约:同步集合经 store/sessionStorage setSyncIdMap 传递(key `${biz}_${templateId}`);
+// ?sets= 保留作深链兼容
+const setIds = computed(() => {
+  const fromQuery = String(route.query.sets || '').split(',').map(Number).filter(Boolean)
+  if (fromQuery.length) return fromQuery
+  try {
+    const map = JSON.parse(sessionStorage.getItem('setSyncIdMap') || '{}')
+    return (map[`${bizId.value}_${setTemplateId.value}`] || []).map(Number).filter(Boolean)
+  } catch {
+    return []
+  }
+})
 
 const pageLoading = ref(false)
 const syncing = ref(false)
@@ -169,6 +186,11 @@ function removeSet(diff) {
   diffList.value = diffList.value.filter((item) => item.setId !== diff.setId)
 }
 
+// 旧版 module-difference 跳转查看:跳业务拓扑定位到模块节点
+function goModuleTopo(moduleId) {
+  router.push(`/business/${bizId.value}/index?node=module-${moduleId}`)
+}
+
 async function loadDiff(setId) {
   const group = setGroup[setId]
   group.loading = true
@@ -193,7 +215,7 @@ async function confirmSync() {
   syncError.value = ''
   try {
     await syncSetTemplateToInstances(bizId.value, setTemplateId.value, { bk_set_ids: diffList.value.map((item) => item.setId) })
-    ElMessage.success('提交同步成功')
+    ElMessage.success('提交同步成功，请等待执行完成')
     router.push(`/business/${bizId.value}/set/template?action=details&templateId=${setTemplateId.value}&tab=instance`)
   } catch (e) {
     syncError.value = e?.message || '同步提交失败'
@@ -201,6 +223,12 @@ async function confirmSync() {
 }
 
 function goBack() {
+  // 旧版 handleGoback:带 moduleId 时回业务拓扑对应集群节点
+  const moduleId = Number(route.params.moduleId)
+  if (moduleId) {
+    router.push(`/business/${bizId.value}/index?node=set-${moduleId}`)
+    return
+  }
   router.push(`/business/${bizId.value}/set/template?action=details&templateId=${setTemplateId.value}&tab=instance`)
 }
 
@@ -304,7 +332,14 @@ onMounted(async () => {
   border-radius: 50%;
 }
 .remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   margin-left: auto;
+  font-size: 18px;
+  font-style: normal;
   color: #979BA5;
   cursor: pointer;
 }
@@ -352,6 +387,7 @@ onMounted(async () => {
 .diff-tag.remove { color: #FF5656; }
 .diff-tag.changed { color: #FF9C01; }
 .remove-tip { color: #FF5656; font-size: 12px; margin-left: 8px; }
+.remove-tip .view-btn { color: #3A84FF; cursor: pointer; }
 .no-diff { color: #979BA5; font-size: 12px; padding: 8px 0; }
 .sync-footer {
   position: sticky;

@@ -129,9 +129,12 @@
             :data="displayList"
             v-loading="instanceLoading"
             row-class-name="clickable-row"
+            row-key="bk_set_id"
+            @sort-change="onInstanceSortChange"
             @selection-change="(rows) => (checkedIds = rows.map((r) => r.bk_set_id))"
           >
-            <el-table-column type="selection" width="50" :selectable="(row) => !isSyncDisabled(row.status)" />
+            <!-- 旧版契约:轮询刷新后恢复勾选(reserve-selection 按 row-key 保留) -->
+            <el-table-column type="selection" width="50" reserve-selection :selectable="(row) => !isSyncDisabled(row.status)" />
             <el-table-column label="集群名称" prop="bk_set_name" min-width="160" show-overflow-tooltip />
             <el-table-column label="拓扑路径" min-width="200" show-overflow-tooltip>
               <template #default="{ row }">
@@ -150,7 +153,7 @@
                 <span v-else>--</span>
               </template>
             </el-table-column>
-            <el-table-column label="上次同步时间" width="170">
+            <el-table-column label="上次同步时间" prop="last_time" sortable="custom" width="170">
               <template #default="{ row }">{{ row.last_time ? formatTime(row.last_time) : '--' }}</template>
             </el-table-column>
             <el-table-column label="同步人" width="110">
@@ -168,7 +171,7 @@
                     <el-button v-else link type="primary" :disabled="isSyncDisabled(row.status)" @click="goSync(row)">去同步</el-button>
                   </span>
                 </el-tooltip>
-                <el-tooltip content="目标包含主机, 不允许删除" :disabled="!row.host_count" placement="top">
+                <el-tooltip content="目标包含主机，不允许删除" :disabled="!row.host_count" placement="top">
                   <span>
                     <el-button link type="danger" :disabled="!!row.host_count" @click="removeSet(row)">删除</el-button>
                   </span>
@@ -313,7 +316,14 @@ const checkedIds = ref([])
 const statusFilter = ref('all')
 const filterName = ref('')
 const pagination = reactive({ current: 1, limit: 20, count: 0 })
+// 旧版契约:上次同步时间列服务端排序,默认 last_time
+const listSort = ref('last_time')
 let pollTimer = null
+
+function onInstanceSortChange(sort) {
+  listSort.value = sort.order === 'ascending' ? sort.prop : sort.order === 'descending' ? `-${sort.prop}` : 'last_time'
+  reload(1)
+}
 
 const statusFilters = [
   { id: 'all', name: '全部' },
@@ -358,7 +368,7 @@ async function reloadPage() {
   try {
     const params = {
       set_template_id: templateId.value,
-      page: { start: pagination.limit * (pagination.current - 1), limit: pagination.limit, sort: 'last_time' }
+      page: { start: pagination.limit * (pagination.current - 1), limit: pagination.limit, sort: listSort.value }
     }
     if (statusFilter.value !== 'all') params.status = statusFilter.value.split(',')
     if (filterName.value.trim()) params.search = filterName.value.trim()
@@ -402,22 +412,45 @@ async function loadFailInfo() {
   } catch { failInfoMap.value = {} }
 }
 
-// 旧版 Polling:存在同步中实例时每 5s 刷新状态
+// 旧版 Polling:存在同步中实例时每 5s 走 updateStatusData 契约刷新状态
+// (page 重置 0 起并带 bk_set_ids;勾选由 reserve-selection 按 row-key 保留)
+async function pollUpdate() {
+  try {
+    const params = {
+      set_template_id: templateId.value,
+      page: { start: 0, limit: pagination.limit, sort: listSort.value },
+      bk_set_ids: list.value.map((i) => i.bk_set_id)
+    }
+    if (statusFilter.value !== 'all') params.status = statusFilter.value.split(',')
+    if (filterName.value.trim()) params.search = filterName.value.trim()
+    const data = await http.post(`/findmany/topo/set_template_sync_status/bk_biz_id/${bizId.value}`, params)
+    list.value = (data?.info || []).map((item) => ({ ...item, bk_set_id: item.bk_inst_id }))
+    loadFailInfo()
+  } catch { /* 轮询容忍失败 */ }
+  refreshNeedSync()
+}
+
 function startPolling() {
   stopPolling()
   pollTimer = setInterval(() => {
-    if (list.value.some((i) => isSyncing(i.status))) reloadPage()
+    if (list.value.some((i) => isSyncing(i.status))) pollUpdate()
   }, 5000)
 }
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
+// 旧版契约:同步集合经 sessionStorage setSyncIdMap 传递(key `${biz}_${templateId}`),不落 URL
+function writeSyncIdMap(setIds) {
+  sessionStorage.setItem('setSyncIdMap', JSON.stringify({ [`${bizId.value}_${templateId.value}`]: setIds }))
+}
 function goBatchSync() {
-  router.push(`/business/${bizId.value}/set/sync/${templateId.value}?sets=${checkedIds.value.join(',')}`)
+  writeSyncIdMap([...checkedIds.value])
+  router.push(`/business/${bizId.value}/set/sync/${templateId.value}`)
 }
 function goSync(row) {
-  router.push(`/business/${bizId.value}/set/sync/${templateId.value}?sets=${row.bk_set_id}`)
+  writeSyncIdMap([row.bk_set_id])
+  router.push(`/business/${bizId.value}/set/sync/${templateId.value}`)
 }
 function goTopo(row) {
   router.push(`/business/${bizId.value}/index?node=set-${row.bk_set_id}`)

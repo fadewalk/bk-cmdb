@@ -22,7 +22,7 @@
         @clear="reload(1)"
       />
     </div>
-    <el-table :data="displayList" v-loading="loading">
+    <el-table :data="displayList" v-loading="loading" @sort-change="onHistorySortChange">
       <el-table-column label="集群名称" prop="bk_set_name" min-width="160" show-overflow-tooltip />
       <el-table-column label="拓扑路径" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">{{ topoPath(row) }}</template>
@@ -36,7 +36,7 @@
           <span v-else>--</span>
         </template>
       </el-table-column>
-      <el-table-column label="同步时间" prop="last_time" width="170">
+      <el-table-column label="同步时间" prop="last_time" sortable="custom" width="170">
         <template #default="{ row }">{{ row.last_time ? formatTime(row.last_time) : '--' }}</template>
       </el-table-column>
       <el-table-column label="同步人" prop="creator" width="110">
@@ -78,6 +78,13 @@ const list = ref([])
 const listWithTopo = ref([])
 const templateName = ref('')
 const pagination = reactive({ current: 1, limit: 20, count: 0 })
+// 旧版契约:同步时间列服务端排序,默认 last_time
+const listSort = ref('last_time')
+
+function onHistorySortChange(sort) {
+  listSort.value = sort.order === 'ascending' ? sort.prop : sort.order === 'descending' ? `-${sort.prop}` : 'last_time'
+  reload(1)
+}
 
 const setsId = computed(() => [...new Set(list.value.map((item) => item.bk_inst_id))])
 const displayList = computed(() => list.value.map((item) => {
@@ -105,7 +112,7 @@ async function reloadPage() {
     const params = {
       set_template_id: templateId.value,
       search: searchName.value,
-      page: { start: pagination.limit * (pagination.current - 1), limit: pagination.limit, sort: 'last_time' }
+      page: { start: pagination.limit * (pagination.current - 1), limit: pagination.limit, sort: listSort.value }
     }
     if (searchDate.value?.length) {
       // 旧版契约:日期范围扩展为全天边界(开始日 00:00:00 / 结束日 23:59:59)
