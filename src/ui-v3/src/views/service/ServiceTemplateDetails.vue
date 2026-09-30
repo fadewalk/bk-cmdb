@@ -3,10 +3,10 @@
       <el-alert v-if="syncStatusError" class="sync-status-error" type="error" :closable="false" show-icon>
         {{ syncStatusError }} <el-button link type="primary" @click="refreshNeedSync">重试</el-button>
       </el-alert>
-      <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tabs v-model="activeTab">
       <el-tab-pane name="config">
         <template #label>配置</template>
-        <ServiceTemplateConfig :biz-id="bizId" :template-id="templateId" @sync-change="refreshNeedSync" />
+        <ServiceTemplateConfig :biz-id="bizId" :template-id="templateId" @sync-change="refreshNeedSync" @active-change="onConfigActiveChange" />
       </el-tab-pane>
       <el-tab-pane name="instance">
         <template #label><span class="tab-label"><i v-if="needSync" class="tab-dot" />实例</span></template>
@@ -33,8 +33,9 @@ const activeTab = ref(route.query.tab === 'instance' ? 'instance' : 'config')
 const needSync = ref(false)
 const syncStatusError = ref('')
 
-function onTabChange(tab) {
-  router.replace({ query: { ...route.query, tab } })
+// tab 变化落 query(EP tab-change 程序化切换不 emit,统一走 watch)
+function onConfigActiveChange(tab) {
+  activeTab.value = tab
 }
 async function refreshNeedSync() {
   syncStatusError.value = ''
@@ -47,6 +48,9 @@ async function refreshNeedSync() {
   }
 }
 watch(() => route.query.tab, (tab) => { if (tab === 'config' || tab === 'instance') activeTab.value = tab })
+watch(activeTab, (tab) => {
+  if (route.query.tab !== tab) router.replace({ query: { ...route.query, tab } })
+})
 onMounted(async () => { await bizStore.ensureLoaded(); await refreshNeedSync() })
 </script>
 

@@ -2,6 +2,18 @@
 // 用于同步差异/详情等只读展示场景的类型化取值
 import { formatTime } from './format-time'
 
+// 老版 process-bind-ip 字典:ip 枚举 1-8(进程绑定信息展示/表单共用)
+export const PROCESS_BIND_IP_OPTIONS = {
+  1: '127.0.0.1',
+  2: '0.0.0.0',
+  3: '第一内网IP',
+  4: '第一外网IP',
+  5: '::1',
+  6: '::',
+  7: '第一内网IPv6',
+  8: '第一外网IPv6'
+}
+
 export function formatPropertyValueDisplay(property, value) {
   const type = property?.bk_property_type
   const options = Array.isArray(property?.option) ? property.option : []
