@@ -32,7 +32,7 @@ process.CMDB_CONFIG = config
 const dev = {
   // custom config
   config: Object.assign({}, config, {
-    API_URL: JSON.stringify('http://{host}:{port}/proxy/'),
+    API_URL: JSON.stringify('http://localhost:8091/proxy/'),
     API_VERSION: JSON.stringify('v3'),
     API_LOGIN: JSON.stringify(''),
     AGENT_URL: JSON.stringify(''),
@@ -50,6 +50,7 @@ const dev = {
     PUBLIC_PATH: JSON.stringify('/'),
     ENABLE_NOTIFICATION: JSON.stringify(false),
     BK_REPO_URL: JSON.stringify(''),
+    SHARED_RES_URL: JSON.stringify(''),
   }),
 
   // Paths
@@ -60,7 +61,7 @@ const dev = {
       context: ['/proxy'],
       logLevel: 'info',
       changeOrigin: true,
-      target: 'http://{webserver地址}/',
+      target: 'http://localhost:8090/',
       pathRewrite: {
         '^/proxy': ''
       }
