@@ -148,7 +148,11 @@ func (s *Service) IAMPolicyReload(c *gin.Context) {
 	if !s.iamAdmin(c) {
 		return
 	}
-	// The first implementation is in-memory. Reload is intentionally idempotent
-	// and acts as a health/compatibility endpoint until a persistent repository is added.
+	// With a persistent store this re-applies Mongo policies; the in-memory
+	// implementation reloads nothing and stays an idempotent health endpoint.
+	if err := s.Policy.Reload(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"reloaded": true})
 }

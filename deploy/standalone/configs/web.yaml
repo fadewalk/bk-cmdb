@@ -58,6 +58,9 @@ webServer:
     enabled: false
     bootstrapUsers:
       - admin
+    # 策略持久化(开启授权后建议配置):空=仅进程内存,重启回退 bootstrap 种子
+    # mongoUri: mongodb://cmdb:cmdb1234@mongodb:27017/cmdb?authSource=cmdb
+    # collection: cc_Policy
   changelogPath:
     ch: /data/cmdb/changelog_user/ch
     en: /data/cmdb/changelog_user/en

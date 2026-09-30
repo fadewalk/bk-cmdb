@@ -83,7 +83,17 @@ func (s *Service) WebService() *gin.Engine {
 	ws.Use(middleware.StandaloneAPIKeyProxy(s.Discovery()))
 	ws.Use(middleware.ValidLogin(*s.Config, s.Discovery(), s.ApiCli))
 	if s.Config.Authorization.Enabled {
-		policy, err := authorization.New(s.Config.Authorization)
+		var store authorization.PolicyStore
+		if s.Config.Authorization.MongoURI != "" {
+			// Explicitly configured persistence must not silently degrade to
+			// memory: fail startup so the operator fixes the configuration.
+			mongoStore, err := authorization.NewMongoStore(s.Config.Authorization.MongoURI, s.Config.Authorization.Collection)
+			if err != nil {
+				blog.Fatalf("initialize standalone authorization policy store failed: %v", err)
+			}
+			store = mongoStore
+		}
+		policy, err := authorization.New(s.Config.Authorization, store)
 		if err != nil {
 			blog.Fatalf("initialize standalone authorization failed: %v", err)
 		}

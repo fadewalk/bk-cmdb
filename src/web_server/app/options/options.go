@@ -119,6 +119,11 @@ type OIDC struct {
 type Authorization struct {
 	Enabled        bool     `mapstructure:"enabled" json:"enabled"`
 	BootstrapUsers []string `mapstructure:"bootstrapUsers" json:"bootstrapUsers"`
+	// MongoURI enables persistent policies (cc_Policy collection) when set,
+	// e.g. mongodb://user:pass@host:27017/cmdb. Empty keeps policies in
+	// process memory: they reset to the bootstrap seed on restart.
+	MongoURI   string `mapstructure:"mongoUri" json:"mongoUri"`
+	Collection string `mapstructure:"collection" json:"collection"`
 }
 
 // AppInfo TODO

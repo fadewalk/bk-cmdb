@@ -28,11 +28,40 @@ m = (g(r.sub, p.sub, r.dom) || g(r.sub, p.sub, "*")) && (r.dom == p.dom || p.dom
 
 // Authorizer is the standalone edge policy evaluator. It is intentionally
 // independent from the legacy BlueKing IAM client and disabled by default.
+// With a PolicyStore attached, mutations persist and Reload re-reads the store;
+// without one, policies live in process memory and reset to the bootstrap seed
+// on restart.
 type Authorizer struct {
 	enforcer *casbin.Enforcer
+	store    PolicyStore
+	cfg      options.Authorization
 }
 
-func New(cfg options.Authorization) (*Authorizer, error) {
+// seed applies the built-in admin rules and bootstrap user bindings. They are
+// re-applied on every start/reload so a broken policy store can never lock the
+// bootstrap administrator out.
+func seed(e *casbin.Enforcer, cfg options.Authorization) error {
+	if _, err := e.AddPolicy("admin", "*", "*", "*", "allow"); err != nil {
+		return err
+	}
+	if _, err := e.AddGroupingPolicy("admin", "admin", "*"); err != nil {
+		return err
+	}
+	for _, user := range cfg.BootstrapUsers {
+		if strings.TrimSpace(user) == "" {
+			continue
+		}
+		if _, err := e.AddGroupingPolicy(user, "admin", "*"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// New builds the authorizer. Passing a store enables persistence: policies are
+// loaded from the store on start (bootstrap rules always stay) and every
+// mutation is written back.
+func New(cfg options.Authorization, store ...PolicyStore) (*Authorizer, error) {
 	m, err := model.NewModelFromString(modelText)
 	if err != nil {
 		return nil, err
@@ -41,21 +70,68 @@ func New(cfg options.Authorization) (*Authorizer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := e.AddPolicy("admin", "*", "*", "*", "allow"); err != nil {
+	if err := seed(e, cfg); err != nil {
 		return nil, err
 	}
-	if _, err := e.AddGroupingPolicy("admin", "admin", "*"); err != nil {
-		return nil, err
-	}
-	for _, user := range cfg.BootstrapUsers {
-		if strings.TrimSpace(user) == "" {
-			continue
-		}
-		if _, err := e.AddGroupingPolicy(user, "admin", "*"); err != nil {
+	a := &Authorizer{enforcer: e, cfg: cfg}
+	if len(store) > 0 && store[0] != nil {
+		a.store = store[0]
+		if err := a.reloadFromStore(); err != nil {
 			return nil, err
 		}
 	}
-	return &Authorizer{enforcer: e}, nil
+	return a, nil
+}
+
+func (a *Authorizer) reloadFromStore() error {
+	policies, groupings, err := a.store.Load()
+	if err != nil {
+		return err
+	}
+	m, err := model.NewModelFromString(modelText)
+	if err != nil {
+		return err
+	}
+	e, err := casbin.NewEnforcer(m)
+	if err != nil {
+		return err
+	}
+	if err := seed(e, a.cfg); err != nil {
+		return err
+	}
+	for _, policy := range policies {
+		if _, err := e.AddPolicy(policy); err != nil {
+			return fmt.Errorf("apply persisted policy %v failed: %w", policy, err)
+		}
+	}
+	for _, grouping := range groupings {
+		if _, err := e.AddGroupingPolicy(grouping); err != nil {
+			return fmt.Errorf("apply persisted grouping %v failed: %w", grouping, err)
+		}
+	}
+	a.enforcer = e
+	return a.save()
+}
+
+// Reload re-applies persisted policies from the store. It is a no-op without a
+// store (the in-memory implementation has nothing to reload from).
+func (a *Authorizer) Reload() error {
+	if a == nil || a.store == nil {
+		return nil
+	}
+	return a.reloadFromStore()
+}
+
+func (a *Authorizer) save() error {
+	policies, err := a.enforcer.GetPolicy()
+	if err != nil {
+		return err
+	}
+	groupings, err := a.enforcer.GetGroupingPolicy()
+	if err != nil {
+		return err
+	}
+	return a.store.Save(policies, groupings)
 }
 
 func (a *Authorizer) Enforce(subject, domain, object, action string) (bool, error) {
@@ -76,14 +152,32 @@ func (a *Authorizer) AddPolicy(policy []string) (bool, error) {
 	if a == nil || a.enforcer == nil || len(policy) != 5 {
 		return false, fmt.Errorf("policy must contain 5 fields")
 	}
-	return a.enforcer.AddPolicy(policy)
+	added, err := a.enforcer.AddPolicy(policy)
+	if err == nil && added {
+		if saveErr := a.persist(func() error {
+			_, rbErr := a.enforcer.RemovePolicy(policy)
+			return rbErr
+		}); saveErr != nil {
+			return false, saveErr
+		}
+	}
+	return added, err
 }
 
 func (a *Authorizer) RemovePolicy(policy []string) (bool, error) {
 	if a == nil || a.enforcer == nil || len(policy) != 5 {
 		return false, fmt.Errorf("policy must contain 5 fields")
 	}
-	return a.enforcer.RemovePolicy(policy)
+	removed, err := a.enforcer.RemovePolicy(policy)
+	if err == nil && removed {
+		if saveErr := a.persist(func() error {
+			_, rbErr := a.enforcer.AddPolicy(policy)
+			return rbErr
+		}); saveErr != nil {
+			return false, saveErr
+		}
+	}
+	return removed, err
 }
 
 func (a *Authorizer) Groupings() ([][]string, error) {
@@ -97,14 +191,48 @@ func (a *Authorizer) AddGrouping(subject, role, domain string) (bool, error) {
 	if a == nil || a.enforcer == nil || subject == "" || role == "" {
 		return false, fmt.Errorf("subject and role are required")
 	}
-	return a.enforcer.AddGroupingPolicy(subject, role, domain)
+	added, err := a.enforcer.AddGroupingPolicy(subject, role, domain)
+	if err == nil && added {
+		if saveErr := a.persist(func() error {
+			_, rbErr := a.enforcer.RemoveGroupingPolicy(subject, role, domain)
+			return rbErr
+		}); saveErr != nil {
+			return false, saveErr
+		}
+	}
+	return added, err
 }
 
 func (a *Authorizer) RemoveGrouping(subject, role, domain string) (bool, error) {
 	if a == nil || a.enforcer == nil || subject == "" || role == "" {
 		return false, fmt.Errorf("subject and role are required")
 	}
-	return a.enforcer.RemoveGroupingPolicy(subject, role, domain)
+	removed, err := a.enforcer.RemoveGroupingPolicy(subject, role, domain)
+	if err == nil && removed {
+		if saveErr := a.persist(func() error {
+			_, rbErr := a.enforcer.AddGroupingPolicy(subject, role, domain)
+			return rbErr
+		}); saveErr != nil {
+			return false, saveErr
+		}
+	}
+	return removed, err
+}
+
+// persist saves the full policy set through the store when one is attached;
+// on persist failure the rollback undoes the in-memory change so memory and
+// store never diverge.
+func (a *Authorizer) persist(rollback func() error) error {
+	if a.store == nil {
+		return nil
+	}
+	if err := a.save(); err != nil {
+		if rbErr := rollback(); rbErr != nil {
+			return fmt.Errorf("persist policy failed: %v (rollback failed: %v)", err, rbErr)
+		}
+		return fmt.Errorf("persist policy failed: %w", err)
+	}
+	return nil
 }
 
 func Subject(c *gin.Context) string { return subject(c) }
