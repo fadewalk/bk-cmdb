@@ -69,6 +69,12 @@ const PREVIEW_PLANS = {
   }]
 }
 
+// 部署态 8090 上 hash 差异 goto 为同文档导航(组件不重挂),统一 goto+reload 保证深链重解析
+async function gotoReload(page, url, options) {
+  await page.goto(url, options)
+  await page.reload({ waitUntil: 'load' }).catch(() => {})
+}
+
 function makeRecords() {
   return { previewBodies: [], executeBodies: [], errors: [] }
 }
@@ -136,7 +142,7 @@ async function run() {
   const checks = []
   try {
     // 1. 模板实例:预览渲染模板进程行 + unconfirmed 红标
-    await page.goto(`${BASE}/#/business/2/host/transfer/business?resources=101&targetModules=22`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/host/transfer/business?resources=101&targetModules=22`, { waitUntil: 'load' })
     const entry = page.locator('[data-testid="transfer-create-entry"]').first()
     await entry.waitFor()
     assert((await entry.textContent()).includes('java'), '模板进程行未渲染 bk_func_name=java')
@@ -169,7 +175,7 @@ async function run() {
     checks.push('edited template process posts updated; conflict rule defaults to first rule')
 
     // 3. 更新选项=否:changed false 且不带 final_rules
-    await page.goto(`${BASE}/#/business/2/host/transfer/business?resources=101&targetModules=22`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/host/transfer/business?resources=101&targetModules=22`, { waitUntil: 'load' })
     await page.locator('.tab-head li').filter({ hasText: '属性自动应用' }).click()
     await page.locator('[data-testid="transfer-apply-panel"]').getByText('否将保留主机原有配置').click()
     await page.getByRole('button', { name: '确认转移' }).click()
@@ -179,7 +185,7 @@ async function run() {
     checks.push('keep-host-option posts changed:false without final_rules')
 
     // 4. 无模板实例:添加进程 → created 带 processes;无 apply tab 时不带 host_apply_trans_rule
-    await page.goto(`${BASE}/#/business/2/host/transfer/business?resources=105&targetModules=23`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/host/transfer/business?resources=105&targetModules=23`, { waitUntil: 'load' })
     const plainEntry = page.locator('[data-testid="transfer-create-entry"]').first()
     await plainEntry.waitFor()
     assert((await plainEntry.textContent()).includes('(未添加进程)'), '无模板实例未显示空进程提示')

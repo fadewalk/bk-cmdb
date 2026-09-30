@@ -81,7 +81,7 @@
             <el-tooltip v-if="row.module_count" content="模板已被应用不能删除，如需删除，请先清空模板下的实例" placement="top">
               <el-button link disabled>删除</el-button>
             </el-tooltip>
-            <el-button v-else link type="danger" @click.stop="removeTpl(row)">删除</el-button>
+            <el-button v-else link @click.stop="removeTpl(row)">删除</el-button>
           </template>
         </el-table-column>
         <template #empty>
@@ -154,7 +154,7 @@
             <el-tooltip v-if="(row.set_instance_count ?? 0) > 0" content="不可删除" placement="top">
               <el-button link disabled>删除</el-button>
             </el-tooltip>
-            <el-button v-else link type="danger" @click.stop="removeSetTpl(row)">删除</el-button>
+            <el-button v-else link @click.stop="removeSetTpl(row)">删除</el-button>
           </template>
         </el-table-column>
         <template #empty>

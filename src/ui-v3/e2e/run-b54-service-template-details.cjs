@@ -36,7 +36,12 @@ async function main() {
       { id: 701, bk_property_id: 'bk_func_name', bk_property_name: '进程名', bk_property_type: 'singlechar' },
       { id: 702, bk_property_id: 'user', bk_property_name: '启动用户', bk_property_type: 'singlechar' },
       { id: 703, bk_property_id: 'work_path', bk_property_name: '工作路径', bk_property_type: 'singlechar' },
-      { id: 704, bk_property_id: 'bind_info', bk_property_name: '端口绑定', bk_property_type: 'object' }
+      { id: 704, bk_property_id: 'bind_info', bk_property_name: '端口绑定', bk_property_type: 'object', option: [
+        { bk_property_id: 'ip', bk_property_name: '监听IP', bk_property_type: 'enum' },
+        { bk_property_id: 'port', bk_property_name: '端口', bk_property_type: 'int' },
+        { bk_property_id: 'protocol', bk_property_name: '协议', bk_property_type: 'enum', option: [{ id: '1', name: 'TCP' }, { id: '2', name: 'UDP' }] },
+        { bk_property_id: 'enable', bk_property_name: '启用', bk_property_type: 'bool' }
+      ] }
     ]))
   })
   await page.route('**/api/v3/findmany/proc/service_category', (route) => json(route, envelope(true, [{ id: 500, name: '基础', bk_parent_id: 0 }, { id: 501, name: '服务', bk_parent_id: 500 }])))
@@ -66,16 +71,17 @@ async function main() {
     await attrRow.getByRole('button', { name: '保存' }).click()
     await page.waitForTimeout(500)
     assert(state.propertyUpdates[0]?.id === 72 && state.propertyUpdates[0]?.bk_biz_id === 99, '属性更新基础 payload 不符')
-    assert(state.propertyUpdates[0]?.attributes?.[0]?.bk_attribute_id === 601 && state.propertyUpdates[0]?.attributes?.[0]?.bk_property_value === '8', '属性更新 payload 不符')
+    assert(state.propertyUpdates[0]?.attributes?.[0]?.bk_attribute_id === 601 && state.propertyUpdates[0]?.attributes?.[0]?.bk_property_value === 8, '属性更新 payload 不符')
     ok('配置属性增量更新契约')
 
-    await page.getByRole('button', { name: '新增进程模板' }).click()
+    // M4-K 起入口为「新建进程」,表单按模型属性标签定位
+    await page.getByRole('button', { name: '新建进程' }).click()
     const processDialog = page.locator('.el-dialog:visible')
-    await processDialog.getByRole('textbox').first().fill('b54-api')
-    await processDialog.getByRole('textbox').nth(1).fill('root')
-    await processDialog.getByRole('textbox').nth(2).fill('/opt/b54-api')
-    const portInput = processDialog.getByPlaceholder('如 8080')
-    if (await portInput.count()) await portInput.fill('9090')
+    const itemInput = (label) => processDialog.locator('.el-form-item').filter({ hasText: label }).locator('input').first()
+    await itemInput('进程名').fill('b54-api')
+    await itemInput('启动用户').fill('root')
+    await itemInput('工作路径').fill('/opt/b54-api')
+    await processDialog.getByPlaceholder('请输入端口').fill('9090')
     await processDialog.getByRole('button', { name: '保存' }).click()
     await page.waitForTimeout(600)
     const createBody = state.processCreates[0]

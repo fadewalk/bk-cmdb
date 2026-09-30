@@ -43,6 +43,12 @@ const CATEGORIES = [
   { id: 12, name: 'Job', bk_parent_id: 1 }
 ]
 
+// 部署态 8090 上 hash 差异 goto 为同文档导航(组件不重挂),统一 goto+reload 保证深链重解析
+async function gotoReload(page, url, options) {
+  await page.goto(url, options)
+  await page.reload({ waitUntil: 'load' }).catch(() => {})
+}
+
 function makeRecords() {
   return { listBodies: [], deleteBodies: [], errors: [] }
 }
@@ -118,7 +124,7 @@ async function run() {
   const checks = []
   try {
     // 1. 一级分类筛选 bug 修复:一级 Web 服务(其下二级 11/12)应筛出两行(旧实现精确匹配必为空)
-    await page.goto(`${BASE}/#/business/2/service/template?mainClassification=1`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template?mainClassification=1`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     assert(await page.locator('.el-table__row').count() === 2, `一级分类筛选行数异常: ${await page.locator('.el-table__row').count()}`)
     // tooltip 为 hover 懒挂载:悬停已应用行(web-tpl)的删除按钮后断言老版译文
@@ -130,7 +136,7 @@ async function run() {
     checks.push('main category filter matches leaf set with legacy tooltip copy')
 
     // 2. 深链 name+sort:请求带 search/sort/limit,URL 保留
-    await page.goto(`${BASE}/#/business/2/service/template?name=job&sort=name&current=1&limit=50`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template?name=job&sort=name&current=1&limit=50`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     await waitForRecord(() => {
       const body = records.listBodies.at(-1) || {}
@@ -141,7 +147,7 @@ async function run() {
     checks.push('deep link name/sort/limit drives server request and stays in URL')
 
     // 3. 排序点击:ID 列升序 → page.sort=id 并回写 URL
-    await page.goto(`${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     const callsBeforeSort = records.listBodies.length
     await page.locator('.el-table__header th').filter({ hasText: 'ID' }).click()
@@ -155,7 +161,7 @@ async function run() {
     checks.push('header sort posts page.sort and syncs URL')
 
     // 4. 删除契约:确认框标题「确认删除模板」,成功「删除成功」
-    await page.goto(`${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     const deleteBtn = page.locator('.el-table__row').filter({ hasText: 'job-tpl' }).getByRole('button', { name: '删除' })
     await deleteBtn.click()
@@ -169,7 +175,7 @@ async function run() {
     checks.push('delete posts payload with legacy confirm title')
 
     // 5. 创建页:无进程确认文案逐字;成功弹窗记录新 id 且「关闭」跳详情
-    await page.goto(`${BASE}/#/business/2/service/template/create`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template/create`, { waitUntil: 'load' })
     await page.locator('body').waitFor()
     await page.waitForTimeout(600)
     const nameInput = page.getByPlaceholder('模板名称将作为实例化后的模块名')
@@ -198,7 +204,7 @@ async function run() {
     checks.push('create posts all_info, records new id, and close redirects to detail')
 
     // 6. 顶部提示逐字+链接+持久化(旧版 cmdb-tips tips-key=serviceTemplateTips)
-    await page.goto(`${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     const tips = page.locator('.page-tips').filter({ hasText: '服务模板可以预定义' })
     assert(await tips.isVisible(), '顶部提示未显示')
@@ -222,7 +228,7 @@ async function run() {
     checks.push('count_info failure renders -- placeholders')
 
     // 8. 空态分型:筛选态带清除筛选,点击后恢复并清空 query
-    await page.goto(`${BASE}/#/business/2/service/template?name=zzznonexistent`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/service/template?name=zzznonexistent`, { waitUntil: 'load' })
     await page.waitForTimeout(800)
     const clearBtn = page.locator('.el-table__empty-block').getByRole('button', { name: '清除筛选' })
     await clearBtn.waitFor()

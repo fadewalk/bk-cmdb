@@ -76,15 +76,22 @@ async function main() {
     // 这样创建页明确走基础 createSetTemplate contract，而非 all_info 组合写入。
     const serviceDropdown = page.locator('.topo-add')
     await serviceDropdown.click()
-    const serviceOption = page.getByText(`b49-service-template-${stamp}（#${serviceTemplateId}）`, { exact: true })
+    // M4-I 起选择器条目仅显示模板名(不带 #id)
+    const serviceOption = page.getByText(`b49-service-template-${stamp}`, { exact: true })
     await serviceOption.waitFor({ state: 'visible', timeout: 10000 })
     await serviceOption.click({ force: true })
+    // M4-I 起选择器为弹窗,需点确定回填拓扑
+    const svcDlg = page.locator('.el-dialog').filter({ hasText: '添加服务模板' })
+    await svcDlg.getByRole('button', { name: '确定' }).click()
+    await page.waitForTimeout(600)
     await page.locator('.create-footer button:has-text("提交")').click()
     await page.waitForTimeout(1200)
 
-    assert(createPayloads.length === 1, `createSetTemplate 请求次数不符: ${createPayloads.length}; all_info=${JSON.stringify(allInfoCreates)}`)
-    assert(createPayloads[0]?.name === templateName, `创建 name 不符: ${JSON.stringify(createPayloads)}`)
-    assert(JSON.stringify(createPayloads[0]?.service_template_ids || []).length > 2, `创建 service_template_ids 缺失: ${JSON.stringify(createPayloads)}`)
+    // M4-I 契约:创建统一走 all_info 组合端点(无属性时 attributes 为空数组),不再拆基础 create
+    assert(allInfoCreates.length === 1, `all_info 创建请求次数不符: ${allInfoCreates.length}; basic=${JSON.stringify(createPayloads)}`)
+    assert(Array.isArray(allInfoCreates[0]?.attributes) && allInfoCreates[0].attributes.length === 0, `all_info attributes 契约不符: ${JSON.stringify(allInfoCreates[0])}`)
+    assert(allInfoCreates[0]?.name === templateName, `创建 name 不符: ${JSON.stringify(allInfoCreates)}`)
+    assert((allInfoCreates[0]?.service_template_ids || []).includes(serviceTemplateId), `创建 service_template_ids 缺失: ${JSON.stringify(allInfoCreates)}`)
     assert(page.url().includes('/business/2/set/template'), `创建后未返回集群模板列表: ${page.url()}`)
     console.log(`✓ createSetTemplate POST payload: ${JSON.stringify(createPayloads[0])}`)
 

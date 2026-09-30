@@ -55,7 +55,7 @@ async function main() {
   })))
   await page.route('**/api/v3/findmany/proc/service_template/count_info/**', (route, req) => {
     state.countInfoRequests.push(req.postDataJSON())
-    return routeJson(route, envelope(true, [{ service_template_id: 71, process_template_count: 1, module_count: 2 }]))
+    return routeJson(route, envelope(true, [{ service_template_id: 71, process_template_count: 1, module_count: 2 }, { service_template_id: 72, process_template_count: 0, module_count: 0 }]))
   })
   await page.route('**/api/v3/findmany/proc/service_template/sync_status/**', (route) => routeJson(route, envelope(true, { service_templates: [] })))
   await page.route('**/api/v3/findmany/proc/service_category', (route) => routeJson(route, envelope(true, [

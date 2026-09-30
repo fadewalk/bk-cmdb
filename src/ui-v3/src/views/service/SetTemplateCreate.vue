@@ -763,8 +763,9 @@ function goTopoByKeyword(tpl) {
 }
 
 // ---------- 编辑态数据加载 + 脏门控(老版 isEqual 快照) ----------
-let formDataCopy = null
-let originalServiceIds = []
+// ref:保存成功后刷新快照需触发 isFormChanged 重算(普通变量不被 computed 追踪)
+const formDataCopy = ref(null)
+const originalServiceIds = ref([])
 
 const isFormChanged = computed(() => {
   if (!isEdit.value) return true
@@ -772,10 +773,10 @@ const isFormChanged = computed(() => {
     templateName: form.value.name,
     propertyConfig: { ...propertyConfig }
   }
-  if (!isDeepEqual(formDataCopy, current)) return true
+  if (!isDeepEqual(formDataCopy.value, current)) return true
   const serviceIds = form.value.serviceTemplates.map((t) => t.id)
-  if (serviceIds.length !== originalServiceIds.length) return true
-  return serviceIds.some((id, index) => id !== originalServiceIds[index])
+  if (serviceIds.length !== originalServiceIds.value.length) return true
+  return serviceIds.some((id, index) => id !== originalServiceIds.value[index])
 })
 
 // 老版 cmdb-leave-confirm:有未保存变更时离开需确认
@@ -823,13 +824,13 @@ onMounted(async () => {
       form.value.name = data?.name || ''
       // 旧版 template-tree:服务模板节点来自 service_templates 接口(含名称),而非全量列表映射
       form.value.serviceTemplates = serviceList || []
-      originalServiceIds = form.value.serviceTemplates.map((t) => t.id)
+      originalServiceIds.value = form.value.serviceTemplates.map((t) => t.id)
       selectedProperties.value = (data?.attributes || [])
         .map((a) => setAttrs.value.find((prop) => prop.id === a.bk_attribute_id))
         .filter(Boolean)
       ;(data?.attributes || []).forEach((a) => { propertyConfig[a.bk_attribute_id] = a.bk_property_value })
       // 老版快照:用于 isEqual 脏检测,未变更禁用提交
-      formDataCopy = {
+      formDataCopy.value = {
         templateName: form.value.name,
         propertyConfig: JSON.parse(JSON.stringify(propertyConfig))
       }
@@ -882,6 +883,12 @@ async function submit() {
     }
     if (isEdit.value) {
       await updateSetTemplateAllInfo(bizId.value, templateId.value, payload)
+      // 旧版契约:保存成功后 leaveConfirm 不再拦截(快照对齐已保存状态)
+      formDataCopy.value = {
+        templateName: form.value.name,
+        propertyConfig: JSON.parse(JSON.stringify(propertyConfig))
+      }
+      originalServiceIds.value = form.value.serviceTemplates.map((t) => t.id)
       needSync.value = !!(await searchSetTemplateStatus(bizId.value, {
         set_template_ids: [templateId.value]
       }).catch(() => []))?.[0]?.need_sync

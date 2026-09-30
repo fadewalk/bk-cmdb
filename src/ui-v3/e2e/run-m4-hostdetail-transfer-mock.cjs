@@ -43,6 +43,12 @@ const DETAIL_ROWS = [
   { host: { bk_host_id: 104, bk_host_innerip: '10.0.0.4', bk_host_name: 'idle-host' }, biz: [{ bk_biz_id: 2, bk_biz_name: 'Mock Business', default: 0 }], set: [{ bk_set_id: 1, bk_set_name: '空闲机池' }], module: [{ bk_module_id: 2, bk_module_name: '空闲机模块', default: 1 }] }
 ]
 
+// 部署态 8090 上 hash 差异 goto 为同文档导航(组件不重挂),统一 goto+reload 保证深链重解析
+async function gotoReload(page, url, options) {
+  await page.goto(url, options)
+  await page.reload({ waitUntil: 'load' }).catch(() => {})
+}
+
 function makeRecords() {
   return { previewBodies: [], executeBodies: [], acrossBodies: [], errors: [] }
 }
@@ -124,7 +130,7 @@ async function run() {
   const checks = []
   try {
     // 1. 业务主机详情转移 tab:老版结构(归属行+移除+修改归属),不再出现追加模式/直转资源池
-    await page.goto(`${BASE}/#/business/2/host/103?tab=transfer`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/host/103?tab=transfer`, { waitUntil: 'load' })
     try {
       await page.locator('.module-row').filter({ hasText: 'Web Module' }).waitFor({ timeout: 8000 })
     } catch (error) {
@@ -152,7 +158,7 @@ async function run() {
     checks.push('business tab redirects to transfer preview page with single=1')
 
     // 3. 空闲机主机:修改归属→idle 直转(default_internal_module),且跨业务 tab 可见
-    await page.goto(`${BASE}/#/business/2/host/104?tab=transfer`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/host/104?tab=transfer`, { waitUntil: 'load' })
     await page.locator('.module-row').filter({ hasText: '空闲机模块' }).waitFor()
     await page.getByRole('button', { name: '修改归属' }).click()
     await dialog.waitFor()
@@ -191,7 +197,7 @@ async function run() {
     checks.push('across posts ONE_TO_ONE payload and rewrites route biz context')
 
     // 5. 从该模块移除:跳 type=remove 预览页(sourceId 即移除模块)
-    await page.goto(`${BASE}/#/business/2/host/103?tab=transfer`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/host/103?tab=transfer`, { waitUntil: 'load' })
     try {
       await page.locator('.module-row').filter({ hasText: 'Web Module' }).waitFor({ timeout: 8000 })
     } catch (error) {

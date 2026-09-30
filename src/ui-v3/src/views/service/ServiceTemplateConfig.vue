@@ -111,7 +111,7 @@
           <template #default="{ row }">
             <el-button link type="primary" @click="openViewProcess(row)">查看</el-button>
             <el-button link type="primary" @click="openEditProcess(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeProcess(row)">删除</el-button>
+            <el-button link @click="removeProcess(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

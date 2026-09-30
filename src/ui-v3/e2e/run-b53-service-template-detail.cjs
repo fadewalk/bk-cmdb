@@ -82,7 +82,11 @@ async function main() {
     assert(detailText.includes('服务进程'), '默认配置 tab 未显示')
     assert(detailText.includes('b53-web'), 'property.bk_func_name 未展平渲染')
     assert(detailText.includes('8080'), 'property.bind_info.port 未展平渲染')
-    assert(detailText.includes('/opt/b53'), 'property.work_path 未展平渲染')
+    // M4-K 契约:进程表为 legacy 4 列(功能名称/进程别名/启动参数匹配规则/绑定信息),work_path 不再展示
+    for (const col of ['功能名称', '进程别名', '启动参数匹配规则', '绑定信息']) {
+      assert(detailText.includes(col), `进程表缺 legacy 列: ${col}`)
+    }
+    assert(detailText.includes('查看') && detailText.includes('编辑') && detailText.includes('删除'), '进程操作列缺 查看/编辑/删除')
     const realErrors = errors.filter((item) => !/favicon|ResizeObserver/.test(item))
     assert(!realErrors.length, realErrors.join(' | '))
     ok('详情深链 → 进程模板请求 → property 展平渲染')

@@ -86,6 +86,12 @@ const DIFF_BY_SET = {
   }
 }
 
+// 部署态 8090 上 hash 差异 goto 为同文档导航(组件不重挂),统一 goto+reload 保证深链重解析
+async function gotoReload(page, url, options) {
+  await page.goto(url, options)
+  await page.reload({ waitUntil: 'load' }).catch(() => {})
+}
+
 function makeRecords() {
   return {
     errors: [],
@@ -207,7 +213,7 @@ async function run() {
   const checks = []
   try {
     // 1. 属性弹窗 + 类型化控件 + 提交保留 0/false(旧值 r.value||null 会打成 null)
-    await page.goto(`${BASE}/#/business/2/set/template/create`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template/create`, { waitUntil: 'load' })
     await page.locator('body').waitFor()
     await page.waitForTimeout(500)
     await page.getByRole('button', { name: '添加属性字段' }).click()
@@ -262,7 +268,7 @@ async function run() {
     checks.push('create success dialog offers create-set/return-list with legacy copy')
 
     // 4. 无属性创建走 all_info 且 attributes 为空数组
-    await page.goto(`${BASE}/#/business/2/set/template/create`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template/create`, { waitUntil: 'load' })
     await page.waitForTimeout(500)
     await page.locator('.name-input input').fill('tpl-empty')
     await page.getByRole('button', { name: '提交' }).click()
@@ -280,7 +286,7 @@ async function run() {
     checks.push('create without properties posts all_info with empty attributes array')
 
     // 5. 编辑态:主机数守卫 + 查看详情 + 脏门控/离开确认(经列表页真实路由进入)
-    await page.goto(`${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     await page.locator('.el-table__row').filter({ hasText: '集群模板A' }).getByRole('button', { name: '编辑' }).click()
     await page.waitForFunction(() => window.location.hash.includes('/set/template/edit/1'), null, { timeout: 8000 })
@@ -302,7 +308,7 @@ async function run() {
     checks.push('edit tree guards host-bound template and jumps topo with keyword')
 
     // 重新进入编辑页(查看详情)
-    await page.goto(`${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     await page.locator('.el-table__row').filter({ hasText: '集群模板A' }).getByRole('button', { name: '编辑' }).click()
     await page.waitForFunction(() => window.location.hash.includes('/set/template/edit/1'), null, { timeout: 8000 })
@@ -335,7 +341,7 @@ async function run() {
     await page.waitForFunction(() => !window.location.hash.includes('/edit/1'), null, { timeout: 8000 })
       .catch(() => { throw new Error(`离开未返回: ${page.url()}`) })
     // 二次进入验证「取消」留在编辑页(真实路由)
-    await page.goto(`${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     await page.locator('.el-table__row').filter({ hasText: '集群模板A' }).getByRole('button', { name: '编辑' }).click()
     await page.waitForFunction(() => window.location.hash.includes('/set/template/edit/1'), null, { timeout: 8000 })
@@ -349,7 +355,7 @@ async function run() {
     checks.push('edit dirty gating toggles save and leave confirm blocks navigation')
 
     // 6. 实例 tab:服务端排序 + 轮询 updateStatusData 契约 + 勾选保留
-    await page.goto(`${BASE}/#/business/2/set/template/details/1?tab=instance`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template/details/1?tab=instance`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     const sortCalls = records.syncStatusBodies.length
     await page.locator('.el-table__header th').filter({ hasText: '上次同步时间' }).click()
@@ -390,7 +396,7 @@ async function run() {
     checks.push('single sync reads sessionStorage map, hides collapse head, links module topo')
 
     // 8. 批量同步:多标题 + 移除后转单个 + 确认同步成功文案
-    await page.goto(`${BASE}/#/business/2/set/sync/1?sets=31,32`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/sync/1?sets=31,32`, { waitUntil: 'load' })
     await page.locator('.title').waitFor()
     await page.waitForTimeout(600)
     assert((await page.locator('.title').innerText()).includes('请确认以下 2 个实例更改信息：'), '批量同步标题不符')
@@ -408,7 +414,7 @@ async function run() {
     checks.push('batch sync title/mode switch and sync submit copy aligned')
 
     // 9. 同步历史:同步时间列服务端排序
-    await page.goto(`${BASE}/#/business/2/set/instance/history/1`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/instance/history/1`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     await page.locator('.el-table__header th').filter({ hasText: '同步时间' }).click()
     await page.locator('.el-table__header th').filter({ hasText: '同步时间' }).click()
@@ -417,7 +423,7 @@ async function run() {
     checks.push('sync history sorts last_time server-side')
 
     // 10. 集群模板列表:排序/搜索落 URL,应用数量列跳过服务端排序
-    await page.goto(`${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template`, { waitUntil: 'load' })
     await page.locator('.el-table__row').first().waitFor()
     await page.locator('.el-table__header th').filter({ hasText: '修改时间' }).click()
     await page.locator('.el-table__header th').filter({ hasText: '修改时间' }).click()
@@ -429,7 +435,7 @@ async function run() {
     checks.push('set template list sorts/searches through URL with server request')
 
     // 11. 详情属性保存成功提示内嵌「同步功能」链接,点击切实例 tab
-    await page.goto(`${BASE}/#/business/2/set/template/details/1`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template/details/1`, { waitUntil: 'load' })
     await page.locator('.grid-item').filter({ hasText: '集群描述' }).waitFor()
     const propArea = page.locator('.grid-item').filter({ hasText: '集群描述' })
     await propArea.hover()
@@ -446,7 +452,7 @@ async function run() {
     checks.push('property save tips embeds sync link switching to instance tab')
 
     // 12. 名称行内编辑校验:必填/utf8 字节超长报错并停留编辑态,合法值保存
-    await page.goto(`${BASE}/#/business/2/set/template/details/1`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template/details/1`, { waitUntil: 'load' })
     await page.locator('.grid-item').filter({ hasText: '模板名称' }).waitFor()
     const nameArea = page.locator('.grid-item').filter({ hasText: '模板名称' })
     await nameArea.hover()
@@ -470,7 +476,7 @@ async function run() {
 
     // 13. 实例空态分型:筛选态带清除筛选,默认态引导业务拓扑
     records.emptyInstance = true
-    await page.goto(`${BASE}/#/business/2/set/template/details/1?tab=instance`, { waitUntil: 'load' })
+    await gotoReload(page, `${BASE}/#/business/2/set/template/details/1?tab=instance`, { waitUntil: 'load' })
     await page.waitForFunction(() => document.body.innerText.includes('暂无模板实例，请前往'), null, { timeout: 6000 })
       .catch(() => { throw new Error('默认空态未引导业务拓扑') })
     await page.getByPlaceholder('请输入集群名称搜索').fill('nomatch')
