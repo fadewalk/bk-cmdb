@@ -18,7 +18,7 @@
           data-testid="business-topology-tree"
           :data="filteredTree"
           :props="{ label: 'label', children: 'children' }"
-          default-expand-all
+          :default-expanded-keys="defaultExpandedKeys"
           node-key="id"
           :current-node-key="currentKey"
           highlight-current
@@ -995,6 +995,30 @@ function cloudName(id) {
   return n ? `${n}[${id}]` : '--'
 }
 
+// 老版树默认仅展开根节点;关键词过滤时展开全部命中路径;深链/选中节点的祖先链
+// 保持展开(topo_path 恢复语义),目标节点自身不展开(子级保持收起)
+const defaultExpandedKeys = computed(() => {
+  const tree = filteredTree.value
+  if (!tree.length) return []
+  if (keyword.value) {
+    const ids = []
+    const walk = (nodes) => {
+      for (const node of nodes) {
+        ids.push(node.id)
+        if (node.children?.length) walk(node.children)
+      }
+    }
+    walk(tree)
+    return ids
+  }
+  const keys = [tree[0].id]
+  if (currentKey.value && currentKey.value !== tree[0].id) {
+    const found = findTreePath(tree, currentKey.value)
+    if (found) keys.push(...found.ancestors.filter((id) => id !== tree[0].id))
+  }
+  return keys
+})
+
 const filteredTree = computed(() => {
   if (!keyword.value) return treeData.value
   const kw = keyword.value.toLowerCase()
@@ -1117,6 +1141,18 @@ function findTreeNode(list, id) {
     if (node.id === id) return node
     const hit = node.children?.length ? findTreeNode(node.children, id) : null
     if (hit) return hit
+  }
+  return null
+}
+
+// 返回节点及其祖先 id 链(不含根);找不到返回 null
+function findTreePath(list, id, trail = []) {
+  for (const node of list) {
+    if (node.id === id) return { node, ancestors: trail }
+    if (node.children?.length) {
+      const hit = findTreePath(node.children, id, [...trail, node.id])
+      if (hit) return hit
+    }
   }
   return null
 }

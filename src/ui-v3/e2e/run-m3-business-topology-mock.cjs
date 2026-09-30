@@ -186,6 +186,20 @@ async function run() {
     assert(hashQuery(page).get('view') === 'process', '刷新后未保留服务实例 view')
     checks.push('refresh restores keyword, node, tab, and service view')
 
+    // 旧版树默认仅展开根节点;关键词过滤展开全部命中
+    // (hash 差异 goto 为同文档导航,组件不重挂会残留上一用例的展开态,必须 goto+reload)
+    await page.goto(`${BASE}/#/business/2/index`, { waitUntil: 'load' })
+    await page.reload({ waitUntil: 'load' }).catch(() => {})
+    await page.locator('[data-testid="business-topology-tree"]').waitFor()
+    assert(await page.locator('[data-node-id="biz-2"]').count() === 1, '默认视图根节点未渲染')
+    assert(await page.locator('[data-node-id="set-10"]').count() === 1, '默认视图根节点未展开(一级集群不可见)')
+    assert(await page.locator('[data-node-id="module-21"]').count() === 0, '默认视图不应展开二级模块(旧版仅根展开)')
+    await page.getByTestId('business-topology-keyword').fill('Database')
+    await page.waitForTimeout(300)
+    assert(await page.locator('[data-node-id="module-22"]').count() === 1, '关键词过滤未展开命中路径')
+    await page.getByTestId('business-topology-keyword').fill('')
+    checks.push('tree default expand level and keyword expand')
+
     await page.goto(`${BASE}/#/business/2/index?keyword=Database&node=module-22&tab=hostList&page=3&limit=10`, { waitUntil: 'load' })
     await page.locator('[data-testid="business-topology-host-pagination"] .el-pager li.is-active').waitFor()
     assert((await page.locator('[data-testid="business-topology-host-pagination"] .el-pager li.is-active').textContent()).trim() === '3', 'query.page 未恢复到主机分页')

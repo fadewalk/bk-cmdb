@@ -439,6 +439,8 @@ const allClassifications = computed(() => rawGroups.value
     ...cls,
     models: (cls.bk_objects || [])
       .filter((m) => !m.bk_ishidden)
+      // 旧版契约:store 层按 obj_sort_number 升序(object-model-classify.js),视图层再停用置后(稳定排序)
+      .sort((a, b) => (a.obj_sort_number || 0) - (b.obj_sort_number || 0))
       .sort((a, b) => (a.bk_ispaused ? 1 : 0) - (b.bk_ispaused ? 1 : 0))
   })))
 

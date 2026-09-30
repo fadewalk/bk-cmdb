@@ -79,6 +79,31 @@ function makeState() {
             bk_ishidden: false,
             ispre: false,
             bk_ispaused: false,
+            obj_sort_number: 2,
+            bk_supplier_account: '0'
+          },
+          {
+            id: 104,
+            bk_classification_id: 'network',
+            bk_obj_id: 'switch',
+            bk_obj_name: '交换机',
+            bk_obj_icon: 'icon-cc-switch',
+            bk_ishidden: false,
+            ispre: false,
+            bk_ispaused: false,
+            obj_sort_number: 1,
+            bk_supplier_account: '0'
+          },
+          {
+            id: 105,
+            bk_classification_id: 'network',
+            bk_obj_id: 'firewall',
+            bk_obj_name: '防火墙',
+            bk_obj_icon: 'icon-cc-firewall',
+            bk_ishidden: false,
+            ispre: false,
+            bk_ispaused: false,
+            obj_sort_number: 3,
             bk_supplier_account: '0'
           }
         ]
@@ -305,8 +330,13 @@ async function main() {
     await page.waitForTimeout(700)
     assert(await page.locator('.model-management').isVisible(), '模型管理页面未渲染')
     assert(await page.locator('.group-item[data-group-id="infra"]').isVisible(), '基础设施分类缺失')
-    assert((await page.locator('.model-item').count()) === 3, '模型卡片数量不符合 fixture')
-    console.log('✓ M1 列表/分类/模型卡片渲染')
+    assert((await page.locator('.model-item').count()) === 5, '模型卡片数量不符合 fixture')
+    // 旧版契约:分组内卡片按 obj_sort_number 升序(store object-model-classify.js),fixture 乱序注入
+    const cardOrder = await page.locator('.group-item[data-group-id="network"] .model-item').evaluateAll(
+      (nodes) => nodes.map((node) => node.dataset.modelId)
+    )
+    assert(cardOrder.join(',') === 'switch,router,firewall', `网络组卡片顺序应按 obj_sort_number 排列,实际 ${cardOrder.join(',')}`)
+    console.log('✓ M1 列表/分类/模型卡片渲染(obj_sort_number 排序)')
 
     await page.locator('.model-item[data-model-id="server"]').hover()
     await page.waitForTimeout(250)
