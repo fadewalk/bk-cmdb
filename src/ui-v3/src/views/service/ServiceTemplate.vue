@@ -1,6 +1,7 @@
 <template>
   <div class="page-card">
-    <p v-show="tipsVisible && tab === 'template'" class="page-tips">{{ pageTips }}<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="tipsVisible = false" /></p>
+    <!-- 旧版 i18n 逐字:「服务模板可以预定义业务通用的服务，用于{业务拓扑}中批量部署和变更服务实例。」tips-key 持久化 -->
+    <p v-show="tipsVisible && tab === 'template'" class="page-tips">服务模板可以预定义业务通用的服务，用于<a class="tips-link" @click="goBusinessTopo">业务拓扑</a>中批量部署和变更服务实例。<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="closeSvcTips" /></p>
     <!-- 集群模板顶部提示(旧版 cmdb-tips tips-key=showSetTips 持久化,链接可点) -->
     <p v-show="tab === 'settpl' && showSetTips" class="page-tips">集群模板可以定义业务通用的集群结构，用于<a class="tips-link" @click="goBusinessTopo">业务拓扑</a>中快速部署和维护集群。此功能依赖已经存在<a class="tips-link" @click="goServiceTemplatePage">服务模板</a>。<i class="bk-cmdb-icon icon-cc-tips-close tips-close" @click="closeSetTips" /></p>
 
@@ -24,6 +25,7 @@
           placeholder="所有二级分类"
           clearable
           filterable
+          :no-data-text="filterMainCate ? '没有二级分类' : '请选择一级分类'"
           style="width: 184px; margin-right: 10px"
           @change="onSvcSearch"
         >
@@ -57,7 +59,8 @@
         </el-table-column>
         <el-table-column label="进程数量" width="130">
           <template #default="{ row }">
-            <span v-if="(row.process_count ?? 0) > 0">{{ row.process_count }}</span>
+            <span v-if="row.process_count === '--'">--</span>
+            <span v-else-if="(row.process_count ?? 0) > 0">{{ row.process_count }}</span>
             <span v-else class="unset-text">{{ row.process_count ?? 0 }}（未配置）</span>
           </template>
         </el-table-column>
@@ -74,8 +77,8 @@
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="openEditTpl(row)">编辑</el-button>
             <el-button link type="primary" @click.stop="goCreate(row.id)">克隆</el-button>
-            <!-- 旧版契约:已应用到模块(module_count>0)时删除置灰不可点,tooltip 不可删除 -->
-            <el-tooltip v-if="(row.module_count ?? 0) > 0" content="模板已被应用不能删除，如需删除，请先清空模板下的实例" placement="top">
+            <!-- 旧版契约:module_count truthy(含未知'--')即删除置灰,tooltip 不可删除 -->
+            <el-tooltip v-if="row.module_count" content="模板已被应用不能删除，如需删除，请先清空模板下的实例" placement="top">
               <el-button link disabled>删除</el-button>
             </el-tooltip>
             <el-button v-else link type="danger" @click.stop="removeTpl(row)">删除</el-button>
@@ -83,7 +86,10 @@
         </el-table-column>
         <template #empty>
           <el-empty :image-size="60" description="暂无数据">
-            <div class="empty-sub">您还未创建服务模板，<el-button link type="primary" @click="goCreate">立即创建</el-button></div>
+            <div v-if="hasSvcFilter" class="empty-sub">
+              暂无数据，<el-button link type="primary" @click="clearSvcFilter">清除筛选</el-button>
+            </div>
+            <div v-else class="empty-sub">您还未创建服务模板，<el-button link type="primary" @click="goCreate">立即创建</el-button></div>
           </el-empty>
         </template>
       </el-table>
@@ -298,7 +304,19 @@ const bizId = computed(() => bizStore.bizId)
 const bizList = computed(() => bizStore.bizList)
 
 const tab = ref(route.meta.tab || 'template')
-const tipsVisible = ref(true)
+const tipsVisible = ref(!localStorage.getItem('serviceTemplateTips'))
+function closeSvcTips() {
+  localStorage.setItem('serviceTemplateTips', 'closed')
+  tipsVisible.value = false
+}
+// 服务模板列表筛选态(旧版 stuff.type search/default 分型)
+const hasSvcFilter = computed(() => tab.value === 'template' && !!(filterMainCate.value || filterSubCate.value || filterName.value.trim()))
+function clearSvcFilter() {
+  filterMainCate.value = null
+  filterSubCate.value = null
+  filterName.value = ''
+  onSvcSearch()
+}
 const pageTips = computed(() => tab.value === 'settpl'
   ? '集群模板可以定义业务通用的集群结构，用于业务拓扑中快速部署和维护集群。此功能依赖已经存在服务模板。'
   : '服务模板可以定义业务通用的服务，用于业务拓扑中批量部署和变更服务实例。')
@@ -712,6 +730,11 @@ async function loadTemplateCounts() {
   const data = await http.post(`/findmany/proc/service_template/count_info/biz/${bizId.value}`, {
     service_template_ids: templates.value.map((r) => r.id)
   }).catch(() => [])
+  if (!Array.isArray(data)) {
+    // 旧版契约:count 接口失败置 '--'
+    templates.value.forEach((row) => { row.process_count = '--'; row.module_count = '--' })
+    return
+  }
   const byId = new Set()
   for (const item of data || []) {
     byId.add(item.service_template_id)
@@ -721,6 +744,10 @@ async function loadTemplateCounts() {
       row.module_count = item.module_count ?? 0
     }
   }
+  // 旧版契约:响应中缺失的模板置 '--'
+  templates.value.forEach((row) => {
+    if (!byId.has(row.id)) { row.process_count = '--'; row.module_count = '--' }
+  })
 }
 
 // 列表待同步红点(旧版契约: svc sync_status/biz + set_template_sync_status)

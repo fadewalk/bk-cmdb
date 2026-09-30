@@ -73,7 +73,10 @@ async function installM4SvcTpl(page, records) {
   await page.route('**/api/v3/findmany/proc/service_category', (route) => json(route, ok({ count: CATEGORIES.length, info: CATEGORIES })))
   await page.route('**/api/v3/findmany/proc/service_category/with_statistics', (route) => json(route, ok({ count: CATEGORIES.length, info: CATEGORIES })))
   await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([])))
-  await page.route('**/api/v3/findmany/proc/service_template/count_info/**', (route) => json(route, ok([])))
+  await page.route('**/api/v3/findmany/proc/service_template/count_info/**', (route) => json(route, ok([
+    { service_template_id: 11, process_template_count: 2, module_count: 1 },
+    { service_template_id: 12, process_template_count: 1, module_count: 0 }
+  ])))
   await page.route('**/api/v3/findmany/proc/service_template', async (route) => {
     const body = route.request().postDataJSON() || {}
     records.listBodies.push(body)
@@ -194,8 +197,42 @@ async function run() {
       .catch(() => { throw new Error(`「关闭」未跳新模板详情: ${page.url()}`) })
     checks.push('create posts all_info, records new id, and close redirects to detail')
 
+    // 6. 顶部提示逐字+链接+持久化(旧版 cmdb-tips tips-key=serviceTemplateTips)
+    await page.goto(`${BASE}/#/business/2/service/template`, { waitUntil: 'load' })
+    await page.locator('.el-table__row').first().waitFor()
+    const tips = page.locator('.page-tips').filter({ hasText: '服务模板可以预定义' })
+    assert(await tips.isVisible(), '顶部提示未显示')
+    const tipsText = await tips.innerText()
+    assert(tipsText.includes('服务模板可以预定义业务通用的服务') && tipsText.includes('业务拓扑'), `提示文案不符: ${tipsText.slice(0, 80)}`)
+    await tips.locator('.tips-close').click()
+    await page.waitForTimeout(300)
+    const stored = await page.evaluate(() => localStorage.getItem('serviceTemplateTips'))
+    assert(stored === 'closed', `提示关闭未持久化: ${stored}`)
+    await page.reload({ waitUntil: 'load' })
+    await page.locator('.el-table__row').first().waitFor()
+    assert(!(await page.locator('.page-tips').isVisible().catch(() => false)), '关闭后提示仍显示')
+    checks.push('svc tips legacy copy with topo link and tips-key persistence')
+
+    // 7. count_info 缺失/失败置 '--'
+    await page.route('**/api/v3/findmany/proc/service_template/count_info/**', (route) => route.abort())
+    await page.reload({ waitUntil: 'load' })
+    await page.locator('.el-table__row').first().waitFor()
+    await page.waitForFunction(() => document.body.innerText.includes('--'), null, { timeout: 6000 })
+      .catch(() => { throw new Error('count 失败未置 --') })
+    checks.push('count_info failure renders -- placeholders')
+
+    // 8. 空态分型:筛选态带清除筛选,点击后恢复并清空 query
+    await page.goto(`${BASE}/#/business/2/service/template?name=zzznonexistent`, { waitUntil: 'load' })
+    await page.waitForTimeout(800)
+    const clearBtn = page.locator('.el-table__empty-block').getByRole('button', { name: '清除筛选' })
+    await clearBtn.waitFor()
+    await clearBtn.click()
+    await page.locator('.el-table__row').first().waitFor()
+    checks.push('svc list search empty state offers clear filter and restores rows')
+
     await page.screenshot({ path: `${SHOTS}/m4-h-svc-template.png`, timeout: 20000, animations: 'disabled' })
-    const realErrors = records.errors.filter((entry) => !/favicon|ResizeObserver/.test(entry))
+    // count_info abort(check 7)的 net::ERR_FAILED 为预期资源错误
+    const realErrors = records.errors.filter((entry) => !/favicon|ResizeObserver|ERR_FAILED/.test(entry))
     assert(realErrors.length === 0, `页面产生运行时错误: ${realErrors.slice(0, 3).join(' | ')}`)
   } finally {
     await context.close()
