@@ -753,8 +753,9 @@ export const executeDynamicGroup = (bizId, id, page) =>
   http.post(`/dynamicgroup/data/${bizId}/${id}`, { page })
 
 // ---------- 版本日志 ----------
-export const getChangelogList = (params = {}) => http.post('/findmany/changelog', params)
-export const getChangelogDetail = (version) => http.post('/find/changelog/detail', { version })
+// web_server 根路径接口(不在 /api/v3 下;老版契约 window.API_HOST + findmany/changelog)
+export const getChangelogList = (params = {}) => http.post('/findmany/changelog', params, { baseURL: '' })
+export const getChangelogDetail = (version) => http.post('/find/changelog/detail', { version }, { baseURL: '' })
 
 // ---------- 操作审计 ----------
 export const getAuditDict = () => http.get('/find/audit_dict')
