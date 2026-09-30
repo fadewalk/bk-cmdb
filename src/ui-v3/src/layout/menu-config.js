@@ -59,7 +59,8 @@ export const MENUS = [
     name: '平台管理',
     icon: 'icon-cc-nav-platform',
     children: [
-      { id: 'global-config', name: '全局配置', icon: 'icon-cc-setting', path: '/platform/global-config' }
+      { id: 'global-config', name: '全局配置', icon: 'icon-cc-setting', path: '/platform/global-config' },
+      { id: 'iam', name: '权限管理', icon: 'icon-cc-lock', path: '/platform/iam' }
     ]
   }
 ]

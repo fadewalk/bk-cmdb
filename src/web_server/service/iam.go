@@ -17,6 +17,17 @@ func (s *Service) iamEnabled(c *gin.Context) bool {
 	return true
 }
 
+// IAMStatus is the unconditional capability probe for the UI: always 200 so
+// permission discovery never pollutes the console with resource 404s.
+func (s *Service) IAMStatus(c *gin.Context) {
+	enabled := s.Config != nil && s.Config.Authorization.Enabled && s.Policy != nil
+	status := gin.H{"enabled": enabled}
+	if enabled {
+		status["subject"] = authorization.Subject(c)
+	}
+	c.JSON(http.StatusOK, status)
+}
+
 func (s *Service) iamAdmin(c *gin.Context) bool {
 	if !s.iamEnabled(c) {
 		return false
@@ -44,6 +55,38 @@ func (s *Service) IAMPermissions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"subject": authorization.Subject(c), "policies": policies, "groupings": groupings})
+}
+
+// iamVerifyRequest is a single edge permission question in the same key space
+// as the path normalizer (object/action/domain), e.g. biz/create/2.
+type iamVerifyRequest struct {
+	Object string `json:"object"`
+	Action string `json:"action"`
+	Domain string `json:"domain"`
+}
+
+// IAMVerify answers "may the CURRENT subject do object/action in domain".
+// Unlike the admin endpoints it is available to every authenticated user:
+// the UI needs it to render its own permission states.
+func (s *Service) IAMVerify(c *gin.Context) {
+	if !s.iamEnabled(c) {
+		return
+	}
+	var req iamVerifyRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Object) == "" || strings.TrimSpace(req.Action) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "object and action are required"})
+		return
+	}
+	domain := strings.TrimSpace(req.Domain)
+	if domain == "" {
+		domain = "*"
+	}
+	allowed, err := s.Policy.Enforce(authorization.Subject(c), domain, req.Object, req.Action)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"subject": authorization.Subject(c), "allowed": allowed})
 }
 
 func (s *Service) IAMPolicies(c *gin.Context) {

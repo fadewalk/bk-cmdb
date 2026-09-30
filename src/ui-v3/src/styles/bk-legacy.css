@@ -224,3 +224,6 @@
 /* ---- 列表工具栏右侧属性配置齿轮(老版 icon-cc-setting) ---- */
 .legacy-toolbar-gear { cursor: pointer; color: #63656e; font-size: 16px; }
 .legacy-toolbar-gear:hover { color: #3a84ff; }
+
+/* ---- v-perm 无权限灰置(老版 cmdb-auth 语义) ---- */
+.perm-denied { opacity: .5; cursor: not-allowed !important; }

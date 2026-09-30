@@ -12,6 +12,7 @@ import App from './App.vue'
 import router from './router'
 import { useSessionStore } from './stores/session'
 import { usePermissionStore } from './stores/permission'
+import permDirective from './directives/perm'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -19,6 +20,7 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
+app.directive('perm', permDirective)
 
 const sessionStore = useSessionStore(pinia)
 const permissionStore = usePermissionStore(pinia)

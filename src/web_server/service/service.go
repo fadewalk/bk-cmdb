@@ -180,6 +180,8 @@ func (s *Service) initService(ws *gin.Engine) {
 	// get current login user info
 	ws.GET("/userinfo", s.UserInfo)
 	ws.GET("/iam/me/permissions", s.IAMPermissions)
+	ws.GET("/iam/status", s.IAMStatus)
+	ws.POST("/iam/verify", s.IAMVerify)
 	ws.GET("/iam/policies", s.IAMPolicies)
 	ws.POST("/iam/policies", s.IAMAddPolicy)
 	ws.DELETE("/iam/policies", s.IAMRemovePolicy)

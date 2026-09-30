@@ -142,6 +142,7 @@ const router = createRouter({
 
         // 平台管理
         { path: 'platform/global-config', name: 'GlobalConfig', component: () => import('../views/platform/GlobalConfig.vue'), meta: { title: '全局配置', auth: { resource_type: 'configAdmin', action: 'update' } } },
+        { path: 'platform/iam', name: 'IamManage', component: () => import('../views/platform/IamManage.vue'), meta: { title: '权限管理' } },
         { path: 'platform/version-log', name: 'VersionLogLegacyPlatform', redirect: '/version-log', meta: { title: '版本日志' } },
         { path: 'version-log', name: 'VersionLog', component: () => import('../views/platform/VersionLog.vue'), meta: { title: '版本日志' } },
         { path: 'platform-management/version-log', name: 'VersionLogLegacy', redirect: '/version-log', meta: { title: '版本日志' } },
