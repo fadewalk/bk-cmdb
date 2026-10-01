@@ -1,5 +1,9 @@
 # 新前端替代老前端切换指南(ui-v3)
 
+> **文档定位（2026-09-11）**：本文是构建、部署、hash 验证和回滚操作指南，不是当前迁移状态权威表。批次和能力状态以 [`docs/architecture/frontend-migration-matrix.md`](../docs/architecture/frontend-migration-matrix.md) 为准；架构、安全、可靠性和行业对标见 [`docs/architecture/README.md`](../docs/architecture/README.md)。本文早期 B1-B12 的“完成/未实现”列表可能已过时，不能据此宣称旧前端已全量退役。
+>
+> **切换完成（2026-10-01）**：`deploy/standalone/Dockerfile` 的 ui-builder 已构建 `src/ui-v3` 并作为唯一前端产物进入镜像（无老 UI 构建阶段）；本文 §2/§4/§9 为历史口径，以迁移矩阵与记忆索引为准。老前端 `src/ui` 冻结保留（仅 8091 本地对照用途，`builder/serve.js` 手动拉起），不再进入任何部署产物。
+
 ## 1. 概述
 
 新前端 `src/ui-v3/` 使用 Vue 3 + Element Plus + Vite + Pinia 实现,完全替代老前端 `src/ui/` 的 Vue 2 + bk-magic-vue + Webpack 栈。
