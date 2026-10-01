@@ -48,6 +48,17 @@ function fail(label, e) { console.error(`✗ ${label}: ${e?.message || e}`); pro
     })
     if (userinfo.result !== true || !userinfo.data?.username) throw new Error(`登录会话未生效: ${JSON.stringify(userinfo).slice(0, 120)}`)
     ok(`内置账号登录生效,c_url 回跳成功,会话用户=${userinfo.data.username}`)
+
+    // === 4. 退出登录契约:logoutURL 必须同源相对(standalone 无蓝鲸 9999 登录服务) ===
+    const logout = await page.evaluate(async () => {
+      const r = await fetch('/logout', { method: 'POST', credentials: 'include' })
+      return r.json()
+    })
+    const logoutURL = logout?.data?.url || ''
+    if (!logoutURL.startsWith('/')) throw new Error(`logoutURL 应为同源相对路径(不得指向蓝鲸 9999),实际 ${logoutURL}`)
+    await page.goto(`http://localhost:8090${logoutURL}`, { waitUntil: 'load' })
+    if (!await page.locator('#username').count()) throw new Error(`logoutURL 未落到登录页: ${page.url()}`)
+    ok(`退出登录落到本机登录页(${logoutURL.slice(0, 40)}...)`)
   } catch (e) {
     fail('内置账号登录契约', e)
   } finally {

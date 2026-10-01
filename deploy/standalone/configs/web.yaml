@@ -26,7 +26,8 @@ webServer:
     userInfo: admin:admin
   site:
     domainUrl: http://localhost:8090
-    bkLoginUrl: http://127.0.0.1:9999/login/?app_id=%s&c_url=%s
+    # 独立部署无蓝鲸登录服务(9999):退出登录落到本机 login.html(相对路径按访问 origin 解析)
+    bkLoginUrl: /login/?app_id=%s&c_url=%s
     appCode: cc
     checkUrl: http://127.0.0.1:9999/login/accounts/get_user/?bk_token=
     resourcesPath: /tmp/
