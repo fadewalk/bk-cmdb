@@ -128,7 +128,10 @@ async function installM3(page, state, records, options = {}) {
     }
     return json(route, ok({ count: M3_INSTANCE_ROWS.length, info: clone(M3_INSTANCE_ROWS) }))
   })
-  await page.route('**/api/v3/count/service_instance/processes', async (route) => {
+  await page.route('**/count/service_instance/processes', async (route) => {
+    // web_server 根路径契约红线:走 /api/v3 会落代理→apiserver 500
+    const { pathname } = new URL(route.request().url())
+    if (pathname.startsWith('/api/')) throw new Error(`进程数统计误走 /api/v3: ${route.request().url()}`)
     const body = route.request().postDataJSON() || {}
     records.processCountQueries.push(body)
     return json(route, ok((body.ids || []).map((id) => ({ id, count: id === 501 ? 3 : 0 }))))

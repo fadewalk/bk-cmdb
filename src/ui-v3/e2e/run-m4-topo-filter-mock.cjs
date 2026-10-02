@@ -114,7 +114,7 @@ async function installM4Filter(page, records) {
   })
   await page.route('**/api/v3/findmany/proc/service_instance/labels/aggregation', (route) => json(route, ok({})))
   await page.route('**/api/v3/findmany/proc/service_instance', (route) => json(route, ok({ count: 0, info: [] })))
-  await page.route('**/api/v3/count/service_instance/processes', (route) => json(route, ok([])))
+  await page.route('**/count/service_instance/processes', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattgroup/object/biz', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([])))
 }

@@ -81,9 +81,9 @@ export const searchProcessInstances = (bizId, serviceInstanceId, page) =>
   http.post('/findmany/proc/process_instance', {
     bk_biz_id: bizId, service_instance_id: serviceInstanceId, page
   })
-// 实例进程数统计(老版 roll 请求,前端按 100 条分批)
+// 实例进程数统计(老版 roll 请求,前端按 100 条分批;web_server 根路径接口,不在 /api/v3 下)
 export const countInstanceProcesses = (ids) =>
-  http.post('/count/service_instance/processes', { ids })
+  http.post('/count/service_instance/processes', { ids }, { baseURL: '' })
 
 // 模块下未绑定服务实例的主机
 export const listHostsWithNoSvcInst = (bizId, moduleId) =>
@@ -632,9 +632,9 @@ export const updateSetTemplateAllInfo = (bizId, templateId, data) =>
 // 模板全量详情(老版 getFullOne:含属性设置与服务拓扑)
 export const getSetTemplateFullInfo = (bizId, templateId) =>
   http.post('/find/topo/set_template/all_info', { bk_biz_id: bizId, id: templateId })
-// 模板绑定的服务模板下主机数(老版 rollReq 100 分批,响应 [{id, count}])
+// 模板绑定的服务模板下主机数(老版 rollReq 100 分批,响应 [{id, count}];web_server 根路径接口)
 export const countSetTemplateSvcTemplateHosts = (bizId, templateId, ids) =>
-  http.post(`/count/set_template/${templateId}/service_template/hosts`, { ids })
+  http.post(`/count/set_template/${templateId}/service_template/hosts`, { ids }, { baseURL: '' })
 // 服务分类(无数量版,老版 service-template-selector 契约)
 export const searchServiceCategoriesPlain = (bizId) =>
   http.post('/findmany/proc/service_category', { bk_biz_id: bizId })

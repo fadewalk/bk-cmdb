@@ -90,7 +90,7 @@ async function installM4Stats(page, records) {
   await page.route('**/api/v3/findmany/hosts/search/with_biz', (route) => json(route, ok({ count: 0, info: [] })))
   await page.route('**/api/v3/findmany/proc/service_instance/labels/aggregation', (route) => json(route, ok({})))
   await page.route('**/api/v3/findmany/proc/service_instance', (route) => json(route, ok({ count: 0, info: [] })))
-  await page.route('**/api/v3/count/service_instance/processes', (route) => json(route, ok([])))
+  await page.route('**/count/service_instance/processes', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattgroup/object/biz', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([])))
 }
@@ -109,7 +109,8 @@ async function run() {
 
   const checks = []
   try {
-    await page.goto(`${BASE}/#/business/2/index`, { waitUntil: 'load' })
+    // W1 后树默认仅展开根:深链 node=module-21 验证祖先链展开(老版 topo_path 语义)
+    await page.goto(`${BASE}/#/business/2/index?node=module-21&tab=hostList`, { waitUntil: 'load' })
     await page.locator('[data-node-id="module-21"]').waitFor()
 
     // 1. 统计请求:condition 含全部树节点(biz/set/module),按 {bk_obj_id,bk_inst_id} 形态

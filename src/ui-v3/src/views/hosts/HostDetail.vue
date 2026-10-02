@@ -23,7 +23,20 @@
           </template>
         </div>
         <el-card v-if="!editing" shadow="never">
-          <el-descriptions :column="2" border size="small" class="attrs">
+          <!-- 老版契约:字段按分组(bk_group_name)呈现,组内按 bk_property_index、
+               组间按 bk_group_index(业务自定义组靠后),标签用 bk_property_name;
+               元数据加载失败时回退原始键平铺,页面不破 -->
+          <template v-if="groupedProps.length">
+            <div v-for="group in groupedProps" :key="group.bk_group_id" class="prop-group">
+              <h3 class="group-name">{{ group.bk_group_name }}</h3>
+              <el-descriptions :column="2" border size="small" class="attrs">
+                <el-descriptions-item v-for="prop in group.properties" :key="prop.bk_property_id" :label="prop.bk_property_name">
+                  {{ displayHostValue(host?.[prop.bk_property_id]) }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </div>
+          </template>
+          <el-descriptions v-else :column="2" border size="small" class="attrs">
             <el-descriptions-item v-for="(v, k) in hostAttrs" :key="k" :label="String(k)">
               {{ v === null || v === '' ? '-' : v }}
             </el-descriptions-item>
@@ -298,7 +311,7 @@ import ProcessFormDialog from '../../components/ProcessFormDialog.vue'
 import { popNavHistory } from '../../utils/nav-history'
 import NewAssociation from './NewAssociation.vue'
 import {
-  http, searchBusiness, searchModelAttributes, getInstTopo, searchInstAssociations,
+  http, searchBusiness, searchModelAttributes, searchFieldGroups, getInstTopo, searchInstAssociations,
   searchObjectAssociations, searchMainlineModels,
   searchBizHostDetail, searchResourceHostDetail, searchNoAuthHostDetail,
   getBizTopoTree, getBizInternalTopo, transferExecute, transferBizHostAcrossBiz,
@@ -436,6 +449,48 @@ const hostAttrs = computed(() => {
   }
   return out
 })
+
+// ---------- 主机属性分组呈现(老版 host-details/property.vue + host-details store 契约) ----------
+const hostPropList = ref([])
+const hostPropGroups = ref([])
+const hostPropMetaLoaded = ref(false)
+
+function displayHostValue(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  return value
+}
+
+const groupedProps = computed(() => {
+  if (!hostPropMetaLoaded.value || !hostPropGroups.value.length) return []
+  const isBizCustom = (group) => group.bk_supplier_account !== '0'
+  const groups = hostPropGroups.value
+    .map((group) => ({
+      ...group,
+      properties: hostPropList.value
+        .filter((prop) => prop.bk_property_group === group.bk_group_id)
+        .sort((a, b) => (a.bk_property_index || 0) - (b.bk_property_index || 0))
+    }))
+    .filter((group) => group.properties.length)
+    .sort((a, b) => {
+      const customPrev = isBizCustom(a)
+      const customNext = isBizCustom(b)
+      if (customPrev === customNext) return (a.bk_group_index || 0) - (b.bk_group_index || 0)
+      return customPrev ? 1 : -1
+    })
+  return groups
+})
+
+// 元数据随页加载;失败静默回退平铺(编辑态自行重拉,不受影响)
+async function loadPropertyMeta() {
+  try {
+    const [props, groups] = await Promise.all([searchModelAttributes('host'), searchFieldGroups('host')])
+    hostPropList.value = props || []
+    hostPropGroups.value = groups || []
+    hostPropMetaLoaded.value = true
+  } catch { /* 回退平铺 */ }
+}
 
 async function loadHistory() {
   if (!hostId) return
@@ -840,6 +895,7 @@ function loadAcrossIdleOptions() {
 onMounted(async () => {
   loadHost()
   loadBizList()
+  loadPropertyMeta()
   if (bizId) loadModuleOptions()
   if (tab.value === 'history') loadHistory()
 })
@@ -850,6 +906,9 @@ onMounted(async () => {
 .history-json { max-height: 420px; overflow: auto; padding: 12px; background: #f5f7fa; color: #303133; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .attrs { max-height: 60vh; overflow: auto; }
+.prop-group { margin-bottom: 18px; }
+.prop-group:last-child { margin-bottom: 0; }
+.group-name { margin: 0 0 8px; color: #313238; font-size: 14px; font-weight: 600; }
 .edit-form { padding: 8px 0; }
 .card-head { display: flex; align-items: center; gap: 10px; }
 .hint { color: #979ba5; font-size: 12px; margin-left: 10px; }

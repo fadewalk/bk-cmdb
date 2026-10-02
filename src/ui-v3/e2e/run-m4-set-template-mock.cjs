@@ -166,7 +166,7 @@ async function installMocks(page, records) {
   await page.route('**/api/v3/find/topo/set_template/1/bk_biz_id/2', (route) => json(route, ok({ name: '集群模板A' })))
   await page.route('**/api/v3/findmany/topo/set_template/1/bk_biz_id/2/service_templates', (route) => json(route, ok(SVC_TPLS)))
   // 服务模板下主机数(rollReq 契约:响应 [{id,count}])
-  await page.route('**/api/v3/count/set_template/1/service_template/hosts', (route) => {
+  await page.route('**/count/set_template/1/service_template/hosts', (route) => {
     records.hostCountBodies.push(route.request().postDataJSON() || {})
     return json(route, ok(HOST_COUNTS))
   })

@@ -74,6 +74,17 @@ async function installM4Detail(page, records) {
     { bk_biz_id: 3, bk_biz_name: 'Target Business' }
   ] })))
   await page.route('**/api/v3/findmany/hosts/search/with_biz', (route) => json(route, ok({ count: DETAIL_ROWS.length, info: DETAIL_ROWS })))
+  // 主机属性分组呈现契约(老版 host-details/property.vue)
+  await page.route('**/api/v3/find/objectattr', (route) => json(route, ok([
+    { bk_property_id: 'bk_host_innerip', bk_property_name: '内网IP', bk_property_group: 'default', bk_property_index: 1 },
+    { bk_property_id: 'bk_host_name', bk_property_name: '主机名称', bk_property_group: 'default', bk_property_index: 2 },
+    { bk_property_id: 'bk_os_name', bk_property_name: '操作系统类型', bk_property_group: 'more', bk_property_index: 1 },
+    { bk_property_id: 'bk_host_id', bk_property_name: '主机ID', bk_property_group: 'default', bk_property_index: 3 }
+  ])))
+  await page.route('**/api/v3/find/objectattgroup/object/host', (route) => json(route, ok([
+    { bk_group_id: 'more', bk_group_name: '更多信息', bk_group_index: 2, bk_supplier_account: '0' },
+    { bk_group_id: 'default', bk_group_name: '基础信息', bk_group_index: 1, bk_supplier_account: '0' }
+  ])))
   await page.route('**/api/v3/find/classificationobject', (route) => json(route, ok([])))
   await page.route('**/api/v3/find/object', (route) => json(route, ok([])))
   await page.route('**/api/v3/findmany/biz_set', (route) => json(route, ok({ count: 0, info: [] })))
@@ -141,6 +152,7 @@ async function run() {
     assert(await page.getByRole('button', { name: '修改归属' }).isVisible(), '修改归属按钮缺失')
     assert(await page.getByRole('button', { name: '转移到资源池' }).count() === 0, '老版详情页不应有直接转移到资源池按钮')
     checks.push('legacy transfer tab structure with per-module remove')
+
 
     // 2. 修改归属→业务模块:gotoTransferPage 契约(single=1)
     await page.getByRole('button', { name: '修改归属' }).click()
@@ -214,6 +226,18 @@ async function run() {
     }, `remove 预览 payload 不符合契约: ${JSON.stringify(records.previewBodies.at(-1))}`)
     checks.push('per-module remove redirects to remove-type transfer preview')
     await page.screenshot({ path: `${SHOTS}/m4-c-hostdetail-transfer.png` })
+
+    // 末段:属性 tab 老版契约——按分组呈现,中文 bk_property_name,组序按 bk_group_index
+    await gotoReload(page, `${BASE}/#/business/2/host/103?tab=property`, { waitUntil: 'load' })
+    await page.locator('.group-name').first().waitFor({ timeout: 8000 })
+    const groupNames = await page.locator('.group-name').allInnerTexts()
+    assert(groupNames.join(',') === '基础信息,更多信息', `分组顺序应为 基础信息,更多信息(组 fixtures 乱序注入),实际 ${groupNames.join(',')}`)
+    assert(await page.locator('.prop-group').first().getByText('内网IP').count() === 1, '属性标签未用中文 bk_property_name')
+    assert(await page.getByText('10.0.0.3').count() >= 1, '属性值未按 property 渲染')
+    const propCardText = await page.locator('.prop-group').first().innerText()
+    assert(!propCardText.includes('bk_host_innerip'), '属性标签仍暴露英文标识')
+    checks.push('property tab grouped Chinese labels with legacy group order')
+    await page.screenshot({ path: `${SHOTS}/m4-c-hostdetail-property.png` })
 
     const realErrors = records.errors.filter((entry) => !/favicon|ResizeObserver/.test(entry))
     assert(realErrors.length === 0, `页面产生运行时错误: ${realErrors.slice(0, 3).join(' | ')}`)
