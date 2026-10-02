@@ -26,6 +26,7 @@ import (
 	"configcenter/src/common/blog"
 	httpheader "configcenter/src/common/http/header"
 	"configcenter/src/common/metadata"
+	"configcenter/src/web_server/middleware/authorization"
 	"configcenter/src/web_server/middleware/user"
 
 	"github.com/gin-contrib/sessions"
@@ -115,6 +116,13 @@ func (s *Service) LoginUser(c *gin.Context) {
 			}
 			userManger := user.NewUser(*s.Config, s.Engine, s.CacheCli, s.ApiCli)
 			userManger.LoginUser(c)
+			// 基线读角色绑定:开启独立授权后,登录用户即可读 UI 必需的资源族;
+			// 写操作仍需审批或创建者自动授权
+			if s.Policy != nil {
+				if _, err := s.Policy.AddGrouping(userName, authorization.BaselineUserRole, "*"); err != nil {
+					blog.Warnf("bind baseline user role failed, user: %s, err: %v, rid: %s", userName, err, rid)
+				}
+			}
 			redirectURL := s.parseRedirectURL(c.Query("c_url"), rid)
 			c.Redirect(302, redirectURL)
 			return

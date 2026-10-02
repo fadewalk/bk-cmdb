@@ -4,14 +4,20 @@ import { http } from '../api/cmdb'
 
 let loadPromise = null
 
-// meta.auth 老键空间(resource_type/action)→ 归一器键空间(object/action);
-// verifyResource 与站内申请共用,新增映射在此处补
+// meta.auth 老键空间(resource_type/action)→ 边缘归一器键空间(object/action);
+// 必须镜像 web_server PermissionForPath 的映射——审批写出的策略要与边缘
+// 实际执行的对象一致,否则审批通过也过不了边缘。边缘 403 事件携带的
+// {object,action,domain} 已是边缘键空间,直接透传。
 function normalizeAuthDecl(resource) {
   if (!resource) return null
+  if (resource.object && resource.action) {
+    return { object: resource.object, action: resource.action, domain: resource.domain || '*' }
+  }
   if (resource.resource_type === 'configAdmin') return { object: 'iam', action: 'admin' }
-  const objectMap = { cloud_area: 'cloud' }
+  const objectMap = { host: 'host', cloud_area: 'instance', model: 'instance' }
+  const object = objectMap[resource.resource_type]
+    || (String(resource.resource_type || '').startsWith('comobj_') ? 'search' : resource.resource_type)
   const actionMap = { find: 'read' }
-  const object = objectMap[resource.resource_type] || resource.resource_type
   const action = actionMap[resource.action] || resource.action
   if (!object || !action) return null
   return { object, action }

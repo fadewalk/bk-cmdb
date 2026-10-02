@@ -85,8 +85,9 @@ func (s *Service) WebService() *gin.Engine {
 	ws.Use(s.CreatorAutoGrant())
 	// Machine clients can authenticate with the standalone API key without a browser session.
 	// When no key is configured, the existing browser session/skip-login flow is unchanged.
+	// Machine clients can authenticate with the standalone API key without a browser session.
+	// When no key is configured, the existing browser session/skip-login flow is unchanged.
 	ws.Use(middleware.StandaloneAPIKeyProxy(s.Discovery()))
-	ws.Use(middleware.ValidLogin(*s.Config, s.Discovery(), s.ApiCli))
 	if s.Config.Authorization.Enabled {
 		var store authorization.PolicyStore
 		var mongoStore *authorization.MongoStore
@@ -106,8 +107,13 @@ func (s *Service) WebService() *gin.Engine {
 		}
 		s.Policy = policy
 		s.applyStore = newApplyStore(mongoStore)
+		// Edge authorization must run BEFORE ValidLogin: the login middleware
+		// proxies authorized /api requests to apiserver and aborts, so anything
+		// mounted after it never sees the /api surface (standalone-security-
+		// boundary §4.1 mounting-order gap, now closed).
 		ws.Use(authorization.Middleware(policy, true))
 	}
+	ws.Use(middleware.ValidLogin(*s.Config, s.Discovery(), s.ApiCli))
 	ws.Use(func(c *gin.Context) {
 		defer func() {
 			// suppresses logging of a stack when err is ErrAbortHandler, same as net/http

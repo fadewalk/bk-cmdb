@@ -78,7 +78,7 @@ async function freshLoad(page, hash) {
     console.log('✓ 冷加载深链正常渲染(mode 先探测)')
 
     // === 1. deny 资源 → 站内申请 payload 契约 ===
-    const state = await installIamMocks(page, { verifyDecide: (body) => !(body.object === 'cloud' && body.action === 'read') })
+    const state = await installIamMocks(page, { verifyDecide: (body) => !(body.object === 'instance' && body.action === 'read') })
     await freshLoad(page, '#/resource/cloud-area')
     await page.getByText('无操作权限').waitFor()
     const applyButton = page.getByRole('button', { name: '去申请权限' })
@@ -86,8 +86,8 @@ async function freshLoad(page, hash) {
     await applyButton.click()
     await page.getByText('权限申请已提交').waitFor()
     assert(state.applyBody, '未发出 /iam/apply 请求')
-    assert(state.applyBody.object === 'cloud' && state.applyBody.action === 'read' && state.applyBody.domain === '*',
-      `申请 payload 应为 {cloud,read,*}(归一化键空间),实际 ${JSON.stringify(state.applyBody)}`)
+    assert(state.applyBody.object === 'instance' && state.applyBody.action === 'read' && state.applyBody.domain === '*',
+      `申请 payload 应为 {instance,read,*}(镜像边缘键空间),实际 ${JSON.stringify(state.applyBody)}`)
     console.log(`✓ 站内申请 payload ${JSON.stringify(state.applyBody)}`)
 
     // === 2. 管理页审批区块 ===

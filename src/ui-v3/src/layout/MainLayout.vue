@@ -14,22 +14,28 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onMounted } from 'vue'
+import { computed, defineAsyncComponent, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TheHeader from './TheHeader.vue'
 import TheNav from './TheNav.vue'
 import TheBreadcrumbs from './TheBreadcrumbs.vue'
 import { resolveMenuByRoute, isHomeRoute } from './menu-config'
 import { useBizStore } from '../stores/biz'
+import { useUiStatusStore } from '../stores/ui-status'
 
 const route = useRoute()
 const bizStore = useBizStore()
-// meta.view 原位状态视图(error/permission),与老版 injectStatusComponents + dynamic-router-view 对齐
+const uiStatus = useUiStatusStore()
+// meta.view 原位状态视图(error/permission):导航期来自 router 守卫写 meta,
+// 运行时事件(边缘 403)来自 ui-status store——route.meta 运行时替换无响应性;
+// 路由切换即清 store
 const statusView = computed(() => {
+  if (uiStatus.view === 'permission') return defineAsyncComponent(() => import('../views/status/PermissionStatus.vue'))
   if (route.meta.view === 'error') return defineAsyncComponent(() => import('../views/status/ErrorStatus.vue'))
   if (route.meta.view === 'permission') return defineAsyncComponent(() => import('../views/status/PermissionStatus.vue'))
   return null
 })
+watch(() => route.fullPath, () => uiStatus.clear())
 const showNav = computed(() => {
   if (isHomeRoute(route)) return false
   return Boolean(resolveMenuByRoute(route))

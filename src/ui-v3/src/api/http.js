@@ -59,6 +59,17 @@ http.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       notifySessionExpired()
+    } else if (error.response?.status === 403 && error.response.data?.status === 'permission denied') {
+      // 独立授权边缘 403:转为可申请的权限事件(携带边缘键空间对象),原位渲染 permission 视图
+      const detail = {
+        object: error.response.data.object || '',
+        action: error.response.data.action || '',
+        domain: error.response.data.domain || '*'
+      }
+      window.dispatchEvent(new CustomEvent('cmdb-permission-denied', { detail }))
+      const permissionError = new Error('无权限执行该操作')
+      permissionError.permission = detail
+      return Promise.reject(permissionError)
     } else {
       ElMessage.error(error.response ? `HTTP ${error.response.status}` : '网络错误')
     }

@@ -44,6 +44,19 @@ type Authorizer struct {
 // confers iam:admin, whose check runs with domain "*".
 const BizAdminRole = "biz_admin"
 
+// BaselineUserRole is bound to every authenticated user at login (domain "*"):
+// read-only access across the resource families the UI reads on every page.
+// Writes stay denied until approved (in-app application) or creator-granted.
+const BaselineUserRole = "user"
+
+// baselineReadObjects mirrors PermissionForPath's object key space: the read
+// API families the UI hits on every page (lists, detail, statistics, topo).
+var baselineReadObjects = []string{"biz", "instance", "host", "search", "count", "topo", "object", "usercustom"}
+
+// baselineExtraGrants are per-user self-data writes allowed with the baseline
+// role (usercustom is the user's own preference store).
+var baselineExtraGrants = [][2]string{{"usercustom", "create"}}
+
 // seed applies the built-in admin rules and bootstrap user bindings. They are
 // re-applied on every start/reload so a broken policy store can never lock the
 // bootstrap administrator out.
@@ -56,6 +69,16 @@ func seed(e *casbin.Enforcer, cfg options.Authorization) error {
 	}
 	if _, err := e.AddPolicy(BizAdminRole, "*", "*", "*", "allow"); err != nil {
 		return err
+	}
+	for _, object := range baselineReadObjects {
+		if _, err := e.AddPolicy(BaselineUserRole, "*", object, "read", "allow"); err != nil {
+			return err
+		}
+	}
+	for _, grant := range baselineExtraGrants {
+		if _, err := e.AddPolicy(BaselineUserRole, "*", grant[0], grant[1], "allow"); err != nil {
+			return err
+		}
 	}
 	for _, user := range cfg.BootstrapUsers {
 		if strings.TrimSpace(user) == "" {
@@ -267,7 +290,7 @@ func PermissionForPath(method, path string) (object, action, domain string, ok b
 		object = "host"
 	case "insts", "findmany", "find":
 		object = "instance"
-	case "create", "update", "delete", "deletemany", "updatemany":
+	case "create", "update", "delete", "deletemany", "updatemany", "createmany":
 		if len(parts) > 1 {
 			object = parts[1]
 		}
@@ -341,6 +364,11 @@ func Middleware(a *Authorizer, enabled bool) gin.HandlerFunc {
 
 func isPublic(path string) bool {
 	p := strings.TrimPrefix(path, "/")
+	// Root serves the hash-router document (index.html); the SPA shell must
+	// load for any authenticated user before per-API authorization applies.
+	if p == "" {
+		return true
+	}
 	// Self-permission endpoints must stay reachable for any authenticated user
 	// (the UI renders its own permission states and submits applications from
 	// them); they gate users internally. Admin endpoints keep the edge check
@@ -348,5 +376,5 @@ func isPublic(path string) bool {
 	if p == "iam/me/permissions" || p == "iam/verify" || p == "iam/status" || p == "iam/apply" {
 		return true
 	}
-	return p == "healthz" || p == "metrics" || p == "static" || p == "login" || strings.HasPrefix(p, "login/") || p == "is_login" || p == "version"
+	return p == "healthz" || p == "metrics" || p == "favicon.ico" || strings.HasPrefix(p, "static") || p == "login" || strings.HasPrefix(p, "login/") || p == "is_login" || p == "userinfo" || p == "logout" || p == "version"
 }

@@ -12,6 +12,7 @@ import App from './App.vue'
 import router from './router'
 import { useSessionStore } from './stores/session'
 import { usePermissionStore } from './stores/permission'
+import { useUiStatusStore } from './stores/ui-status'
 import permDirective from './directives/perm'
 
 const app = createApp(App)
@@ -27,9 +28,8 @@ const permissionStore = usePermissionStore(pinia)
 const publicPaths = ['/login', '/404']
 
 window.addEventListener('cmdb-permission-denied', (event) => {
-  const route = router.currentRoute.value
-  route.meta.view = 'permission'
-  route.meta.extra = { ...(route.meta.extra || {}), permission: event.detail }
+  // 经 ui-status store 驱动原位 permission 视图(route.meta 运行时替换无响应性)
+  useUiStatusStore(pinia).setPermission(event.detail)
 })
 
 router.beforeEach(async (to) => {
