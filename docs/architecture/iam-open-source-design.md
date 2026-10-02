@@ -243,15 +243,15 @@ g, <IdP用户名>, admin, *        # 首个登录用户自动授予 admin（可�
 - 登录：内置账号登录（`CMDB_LOGIN_VERSION=opensource` + `CMDB_SESSION_USERINFO`）、OIDC 入口（`/login/oidc/start|callback`）、skip-login 开关、API-Key 机器凭据（B37 身份头清洗/fail-closed 均已上线）
 - 授权：Casbin 边缘骨架（`src/web_server/middleware/authorization/`，带 domain 与 deny 支持）+ `/iam/policies`、`/iam/groupings`、`/iam/me/permissions`、`/iam/policy/reload` 管理 API；默认关闭，`webServer.auth.enabled` 开启；策略仍为**进程内存**，重启回退 bootstrap
 
-### 8.3 剩余实施项（按依赖排序；2026-09-30 晚更新：第 1/2 项已完成）
+### 8.3 剩余实施项（2026-10-01 二次更新：第 1/2/3/5 项已完成，仅剩第 4 项前端管理页增强）
 
 1. ~~**策略持久化**~~ **已完成**（4a2bf9834b）：`PolicyStore` 接口 + `MongoStore`（`cc_Policy`，文档形状兼容 casbin mongodb-adapter）；`webServer.auth.mongoUri` 显式配置才启用（空=内存行为不变，配置后连不上启动失败不静默降级）；bootstrap 种子每次启动/热加载重放防锁死；增删写回失败回滚内存；`IAMPolicyReload` 已是真热加载。
 2. ~~**path→(dom,obj,act) 归一器**~~ **已完成**：`PermissionForPath` 本已存在（middleware 已挂 Enforce），本批补齐 §4.2 关键路径单测（9 用例）+ fakeStore 持久化/回滚/热加载行为测试。
-3. **前端权限契约切换**：ui-v3 `stores/permission.js` 当前按 `window.Site.authscheme==='iam'` 分流并调老契约 `/auth/verify`；自研 IAM 落地后补一个同形接口（或 `/iam/me/permissions` 扩展 act 集合），把 `verifyResource/ensureLoaded` 切到新源，删除对 BK IAM 语义的隐含依赖。`/auth/skip_url` 的站外申请跳转改为**站内申请流**（申请记录 → 管理员审批或自动规则），否则「去申请权限」按钮在无 IAM 部署下无意义。
-4. **ui-v3 权限指令与管理页**：`v-perm="{obj,act}"` 对齐老版灰置体验；平台管理下新增「权限管理」页（用户列表 + 角色绑定矩阵 + 策略编辑），复用 §5.1 已有管理 API。
-5. **资源域（原 P2）**：业务维度 domain 策略 + 创建者自动授权，完成后才算「完整替代」门禁达成。
+3. ~~**前端权限契约切换**~~ **已完成**（63504f4765 + a24bb9d721）：三档契约（standalone-iam 探测 `/iam/status`+判定 `/iam/verify` → legacy-iam 老契约不变 → open 默认允许）；`v-perm` 指令；权限管理页 `/platform/iam`；**站内申请流**（`POST /iam/apply` 自助提交 + 管理页审批，通过即写入持久化 allow 策略；记录持久化 cc_IAMRequest，未配 mongoUri 时待审记录内存态）；冷加载回归修复（判定前先探测 mode）。
+4. ~~ui-v3 权限指令与管理页~~ **已完成**（63504f4765）。可选增强：申请提交时带理由输入框；用户列表对接 IdP。
+5. ~~**资源域（原 P2）**~~ **已完成**（157e035919）：`biz_admin` 域角色（角色策略域无关、域范围由 grouping 决定，域内全资源、永不获得 iam:admin）；`CreatorAutoGrant` 中间件 tee 捕获 4 个创建路径响应（`/table/biz/:cc`、`/table/create/biz_set`、`/api/v3/create/biz_set`、`/api/v3/createmany/project`），成功创建即绑定 biz_admin；域策略/管理页域字段此前已支持。**边界说明**：数据级业务可见性过滤（"只 sees 所属业务"）属 scene_server 数据面，按 §4.2 边缘收敛原则不在 web_server 实现，待多用户真实场景再评估。
 
 ### 8.4 与 ui-v3 迁移剩余事项的关系
 
-迁移主线收官后唯一 deferred 的「权限点（cmdb-auth 按钮 + permission 空态）」依赖本方案第 3/4 项给出 standalone 下的可见性语义：skip-login 单管理员模式下按钮恒可用（现状已满足），多用户模式则由 Casbin 决策驱动显隐。**后端前提（第 1/2 项）已就绪**，权限点批次可直接进入第 3/4 项。真实多用户联调仍需先解决身份源（IdP/多账号，见 §2.1 与 B37 边界）。
+迁移替代门禁的前端侧与边缘 IAM 全部闭环。真实多用户联调仍需外部身份源（IdP/多账号，见 §2.1 与 B37 边界）；启用路径：`webServer.auth.enabled=true` +（可选）`mongoUri`，bootstrap 用户登录即全权。
 - 不做租户体系扩展（supplier account 维持 "0" 单租户）
