@@ -79,6 +79,10 @@ func (s *Service) WebService() *gin.Engine {
 	ws.Use(middleware.SanitizeExternalIdentityHeaders())
 	ws.Use(middleware.RequestIDMiddleware)
 	ws.Use(sessions.Sessions(s.Config.Session.Name, s.Session))
+	// Creator auto-grant must wrap the proxy/handler writers to see create
+	// responses; registered outer so the tee-capture wraps everything below.
+	// It is a no-op unless standalone authorization is enabled (s.Policy set).
+	ws.Use(s.CreatorAutoGrant())
 	// Machine clients can authenticate with the standalone API key without a browser session.
 	// When no key is configured, the existing browser session/skip-login flow is unchanged.
 	ws.Use(middleware.StandaloneAPIKeyProxy(s.Discovery()))

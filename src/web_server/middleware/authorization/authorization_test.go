@@ -125,3 +125,36 @@ func TestAuthorizerWithStore(t *testing.T) {
 		t.Fatal("reload kept out-of-band deleted policy")
 	}
 }
+
+func TestBizAdminDomainScope(t *testing.T) {
+	a, err := New(options.Authorization{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// biz_admin 角色种子策略存在;域范围完全由 grouping 决定
+	if _, err := a.AddGrouping("bob", BizAdminRole, "9"); err != nil {
+		t.Fatal(err)
+	}
+	// 域 9 内全资源控制
+	for _, check := range [][]string{
+		{"bob", "9", "biz", "update"},
+		{"bob", "9", "host", "delete"},
+		{"bob", "9", "topology", "create"},
+	} {
+		if allowed, err := a.Enforce(check[0], check[1], check[2], check[3]); err != nil || !allowed {
+			t.Fatalf("biz_admin should allow %v in own domain: %v %v", check, allowed, err)
+		}
+	}
+	// 域外一概拒绝
+	if allowed, _ := a.Enforce("bob", "10", "biz", "update"); allowed {
+		t.Fatal("biz_admin must not cross domains")
+	}
+	// 域内也不得管理 IAM(iam:admin 检查固定 domain "*")
+	if allowed, _ := a.Enforce("bob", "*", "iam", "admin"); allowed {
+		t.Fatal("biz_admin must not gain iam:admin")
+	}
+	// 其域内 iam 对象操作仍按角色策略放行(域内全资源语义)
+	if allowed, _ := a.Enforce("bob", "9", "iam", "admin"); !allowed {
+		t.Fatal("biz_admin domain-scoped wildcard should allow iam object within domain")
+	}
+}

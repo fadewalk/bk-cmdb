@@ -37,6 +37,13 @@ type Authorizer struct {
 	cfg      options.Authorization
 }
 
+// BizAdminRole is the domain-scoped creator role: bound per business domain,
+// it grants full resource control inside that domain only. Domain scope comes
+// from the grouping (g, subject, biz_admin, <bizId>); the role policy itself
+// is domain-agnostic, matching the standard casbin domain pattern. It never
+// confers iam:admin, whose check runs with domain "*".
+const BizAdminRole = "biz_admin"
+
 // seed applies the built-in admin rules and bootstrap user bindings. They are
 // re-applied on every start/reload so a broken policy store can never lock the
 // bootstrap administrator out.
@@ -45,6 +52,9 @@ func seed(e *casbin.Enforcer, cfg options.Authorization) error {
 		return err
 	}
 	if _, err := e.AddGroupingPolicy("admin", "admin", "*"); err != nil {
+		return err
+	}
+	if _, err := e.AddPolicy(BizAdminRole, "*", "*", "*", "allow"); err != nil {
 		return err
 	}
 	for _, user := range cfg.BootstrapUsers {
