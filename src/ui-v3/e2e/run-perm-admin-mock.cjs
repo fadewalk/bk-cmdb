@@ -50,6 +50,17 @@ async function installMocks(page, options = {}) {
     headers: { 'Cache-Control': 'no-cache' },
     body: JSON.stringify({ subject: 'admin', allowed: true })
   }))
+  await page.route('**/iam/apply/list', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'Cache-Control': 'no-cache' },
+    body: JSON.stringify({ applications: [] })
+  }))
+  await page.route('**/iam/apply/decision', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ application: { id: 'x', status: 'approved' } })
+  }))
   await page.route('**/iam/policies', (route) => {
     if (route.request().method() === 'POST') {
       posted.policy = route.request().postDataJSON()

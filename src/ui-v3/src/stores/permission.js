@@ -4,6 +4,19 @@ import { http } from '../api/cmdb'
 
 let loadPromise = null
 
+// meta.auth 老键空间(resource_type/action)→ 归一器键空间(object/action);
+// verifyResource 与站内申请共用,新增映射在此处补
+function normalizeAuthDecl(resource) {
+  if (!resource) return null
+  if (resource.resource_type === 'configAdmin') return { object: 'iam', action: 'admin' }
+  const objectMap = { cloud_area: 'cloud' }
+  const actionMap = { find: 'read' }
+  const object = objectMap[resource.resource_type] || resource.resource_type
+  const action = actionMap[resource.action] || resource.action
+  if (!object || !action) return null
+  return { object, action }
+}
+
 // 权限判定三档契约(优先级从高到低):
 // 1. standalone-iam:自研 IAM 开启(/iam/me/permissions 可达)→ /iam/verify 判定
 // 2. legacy-iam:window.Site.authscheme==='iam' 的老蓝鲸契约 → /auth/verify(行为不变)
@@ -70,6 +83,9 @@ export const usePermissionStore = defineStore('permission', {
 
     // 自研 IAM 判定(object/action 同归一器键空间,domain 缺省 *)
     async verify({ object, action, domain = '*' }) {
+      // 冷加载深链时路由守卫先于 Header 挂载执行,mode 可能未探测;必须先探测
+      // (404-fail-closed 的 /iam/verify 会把开放模式误判为无权限)
+      if (!this.mode) await this.ensureLoaded()
       const key = JSON.stringify([this.mode, object, action, domain])
       if (this.verifyResults[key] !== undefined) return this.verifyResults[key]
       if (this.mode === 'open' || this.mode === 'legacy-iam') {
@@ -90,6 +106,7 @@ export const usePermissionStore = defineStore('permission', {
     },
 
     async verifyResource(resource) {
+      if (!this.mode) await this.ensureLoaded()
       const key = JSON.stringify(resource)
       if (this.resourceResults[key] !== undefined) return this.resourceResults[key]
       const decide = async () => {
@@ -104,19 +121,23 @@ export const usePermissionStore = defineStore('permission', {
           }
         }
         // standalone-iam:meta.auth 的老键空间翻译到归一器键空间
-        if (resource?.resource_type === 'configAdmin') {
-          return this.verify({ object: 'iam', action: 'admin' })
-        }
-        const objectMap = { cloud_area: 'cloud' }
-        const object = objectMap[resource?.resource_type] || resource?.resource_type
-        const actionMap = { find: 'read' }
-        const action = actionMap[resource?.action] || resource?.action
-        if (!object || !action) return false
-        return this.verify({ object, action })
+        const norm = normalizeAuthDecl(resource)
+        if (!norm) return false
+        return this.verify({ ...norm, domain: '*' })
       }
       const allowed = await decide()
       this.resourceResults[key] = allowed
       return allowed
+    },
+
+    // 站内权限申请(standalone-iam 模式):写入待审批记录,管理员在
+    // /platform/iam 审批通过后即写入持久化 allow 策略
+    async applyInApp(authDecl) {
+      const norm = normalizeAuthDecl(authDecl)
+      if (!norm) throw new Error('无法解析权限申请对象')
+      const data = await http.post('/iam/apply', { ...norm, domain: '*', reason: '' }, { baseURL: '' })
+      if (!data?.id) throw new Error('申请提交失败')
+      return data
     },
 
     async applyPermission(permission) {

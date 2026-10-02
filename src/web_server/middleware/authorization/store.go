@@ -131,6 +131,12 @@ func (s *MongoStore) Close() error {
 	return s.client.Disconnect(ctx)
 }
 
+// Collection exposes a named collection in the policy database for related
+// standalone IAM data (e.g. permission applications).
+func (s *MongoStore) Collection(name string) *mongo.Collection {
+	return s.client.Database(s.database).Collection(name)
+}
+
 func (s *MongoStore) coll() *mongo.Collection {
 	return s.client.Database(s.database).Collection(s.collection)
 }

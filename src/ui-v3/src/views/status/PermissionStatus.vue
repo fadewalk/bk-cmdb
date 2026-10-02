@@ -29,8 +29,15 @@ const permission = computed(() => route.meta.extra?.permission || route.meta.per
 async function apply() {
   applying.value = true
   try {
-    await permissionStore.applyPermission(permission.value)
-    ElMessage.success('已打开权限申请页面')
+    // standalone-iam:站内申请流(管理员在权限管理页审批);
+    // legacy-iam:老蓝鲸 skip_url 站外申请;open:不会进入本页(判定恒真)
+    if (permissionStore.mode === 'standalone-iam') {
+      await permissionStore.applyInApp(route.meta.extra?.authDecl)
+      ElMessage.success('权限申请已提交,等待管理员审批')
+    } else {
+      await permissionStore.applyPermission(permission.value)
+      ElMessage.success('已打开权限申请页面')
+    }
   } catch (error) {
     ElMessage.error(error?.message || '权限申请失败')
   } finally { applying.value = false }

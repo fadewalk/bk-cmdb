@@ -332,9 +332,10 @@ func Middleware(a *Authorizer, enabled bool) gin.HandlerFunc {
 func isPublic(path string) bool {
 	p := strings.TrimPrefix(path, "/")
 	// Self-permission endpoints must stay reachable for any authenticated user
-	// (the UI renders its own permission states from them); they gate users
-	// internally. Admin endpoints keep the edge check plus iamAdmin.
-	if p == "iam/me/permissions" || p == "iam/verify" || p == "iam/status" {
+	// (the UI renders its own permission states and submits applications from
+	// them); they gate users internally. Admin endpoints keep the edge check
+	// plus iamAdmin.
+	if p == "iam/me/permissions" || p == "iam/verify" || p == "iam/status" || p == "iam/apply" {
 		return true
 	}
 	return p == "healthz" || p == "metrics" || p == "static" || p == "login" || strings.HasPrefix(p, "login/") || p == "is_login" || p == "version"

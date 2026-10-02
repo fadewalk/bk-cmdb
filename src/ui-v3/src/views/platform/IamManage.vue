@@ -76,6 +76,39 @@
           <el-button type="primary" :loading="saving" v-perm="{ object: 'iam', action: 'admin' }" @click="addGrouping">添加绑定</el-button>
         </div>
       </section>
+
+      <!-- 申请审批 -->
+      <section class="iam-section">
+        <div class="section-head">
+          <h2>权限申请审批</h2>
+          <span class="section-tip">用户站内提交的权限申请;通过即写入持久化 allow 策略</span>
+        </div>
+        <el-table :data="applications" size="small" border data-testid="iam-apply-table">
+          <el-table-column prop="subject" label="申请人" min-width="110" />
+          <el-table-column prop="object" label="对象" min-width="110" />
+          <el-table-column prop="action" label="动作" min-width="100" />
+          <el-table-column prop="domain" label="业务域" width="80" />
+          <el-table-column prop="reason" label="理由" min-width="140">
+            <template #default="{ row }">{{ row.reason || '--' }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'pending' ? 'warning' : (row.status === 'approved' ? 'success' : 'info')" size="small">
+                {{ { pending: '待审批', approved: '已通过', rejected: '已拒绝' }[row.status] || row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="130">
+            <template #default="{ row }">
+              <template v-if="row.status === 'pending'">
+                <el-button link type="primary" :data-testid="`iam-apply-approve-${row.id}`" @click="decide(row, true)">通过</el-button>
+                <el-button link type="danger" :data-testid="`iam-apply-reject-${row.id}`" @click="decide(row, false)">拒绝</el-button>
+              </template>
+              <span v-else class="decided-at">{{ formatDate(row.decided_at) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
     </template>
   </div>
 </template>
@@ -92,6 +125,7 @@ const iamEnabled = ref(false)
 const subject = ref('')
 const policies = ref([])
 const groupings = ref([])
+const applications = ref([])
 const policyForm = ref({ subject: '', domain: '*', object: '', action: '', effect: 'allow' })
 const groupingForm = ref({ subject: '', role: '', domain: '*' })
 
@@ -125,6 +159,11 @@ async function loadAll() {
     subject.value = res.data?.subject || ''
     policies.value = res.data?.policies || []
     groupings.value = res.data?.groupings || []
+    // 申请列表管理员专属:403 时静默隐藏(非 admin 打开管理页本就罕见)
+    const applyRes = await iamGet('/iam/apply/list')
+    if (applyRes.status === 200) {
+      applications.value = applyRes.data?.applications || []
+    }
   } catch (error) {
     loadError.value = error?.message || '加载失败'
   } finally {
@@ -194,6 +233,25 @@ async function removeGrouping(row) {
   }
 }
 
+// 审批决策:通过即由后端写入持久化 allow 策略并立即生效
+async function decide(row, approve) {
+  try {
+    await axios.post('/iam/apply/decision', { id: row.id, approve }, { baseURL: '', withCredentials: true, timeout: 8000 })
+    ElMessage.success(approve ? '已通过,策略已生效' : '已拒绝')
+    await loadAll()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.error || '操作失败')
+  }
+}
+
+function formatDate(value) {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 onMounted(loadAll)
 </script>
 
@@ -212,4 +270,5 @@ onMounted(loadAll)
 .w90 { width: 90px; }
 .w110 { width: 110px; }
 .w130 { width: 130px; }
+.decided-at { color: #979ba5; font-size: 12px; }
 </style>

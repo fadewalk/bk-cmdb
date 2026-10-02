@@ -278,7 +278,9 @@ router.beforeEach(async (to, from) => {
       const passed = await verifyViewAuth(authDecl)
       if (!passed) {
         to.meta.view = 'permission'
-        to.meta.extra = { ...(to.meta.extra || {}), permission: toIamPermission(authDecl) }
+        // permission 为老 IAM 申请结构(legacy skip_url 用);authDecl 保留
+        // 原始判定声明,站内申请流(standalone-iam)用
+        to.meta.extra = { ...(to.meta.extra || {}), permission: toIamPermission(authDecl), authDecl }
         return true
       }
     }

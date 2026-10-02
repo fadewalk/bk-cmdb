@@ -56,11 +56,12 @@ type Service struct {
 	Engine   *backbone.Engine
 	CacheCli redis.Client
 	*logics.Logics
-	Config    *options.Config
-	Session   redis.RedisStore
-	NoticeCli noticeCli.ClientI
-	ApiCli    apiserver.ApiServerClientInterface
-	Policy    *authorization.Authorizer
+	Config     *options.Config
+	Session    redis.RedisStore
+	NoticeCli  noticeCli.ClientI
+	ApiCli     apiserver.ApiServerClientInterface
+	Policy     *authorization.Authorizer
+	applyStore applyStore
 }
 
 // WebService TODO
@@ -84,20 +85,23 @@ func (s *Service) WebService() *gin.Engine {
 	ws.Use(middleware.ValidLogin(*s.Config, s.Discovery(), s.ApiCli))
 	if s.Config.Authorization.Enabled {
 		var store authorization.PolicyStore
+		var mongoStore *authorization.MongoStore
 		if s.Config.Authorization.MongoURI != "" {
 			// Explicitly configured persistence must not silently degrade to
 			// memory: fail startup so the operator fixes the configuration.
-			mongoStore, err := authorization.NewMongoStore(s.Config.Authorization.MongoURI, s.Config.Authorization.Collection)
+			ms, err := authorization.NewMongoStore(s.Config.Authorization.MongoURI, s.Config.Authorization.Collection)
 			if err != nil {
 				blog.Fatalf("initialize standalone authorization policy store failed: %v", err)
 			}
-			store = mongoStore
+			mongoStore = ms
+			store = ms
 		}
 		policy, err := authorization.New(s.Config.Authorization, store)
 		if err != nil {
 			blog.Fatalf("initialize standalone authorization failed: %v", err)
 		}
 		s.Policy = policy
+		s.applyStore = newApplyStore(mongoStore)
 		ws.Use(authorization.Middleware(policy, true))
 	}
 	ws.Use(func(c *gin.Context) {
@@ -182,6 +186,9 @@ func (s *Service) initService(ws *gin.Engine) {
 	ws.GET("/iam/me/permissions", s.IAMPermissions)
 	ws.GET("/iam/status", s.IAMStatus)
 	ws.POST("/iam/verify", s.IAMVerify)
+	ws.POST("/iam/apply", s.IAMApply)
+	ws.GET("/iam/apply/list", s.IAMApplyList)
+	ws.POST("/iam/apply/decision", s.IAMApplyDecision)
 	ws.GET("/iam/policies", s.IAMPolicies)
 	ws.POST("/iam/policies", s.IAMAddPolicy)
 	ws.DELETE("/iam/policies", s.IAMRemovePolicy)
