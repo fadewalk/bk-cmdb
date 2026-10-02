@@ -926,7 +926,8 @@ func (attribute *Attribute) validList(ctx context.Context, val interface{}, key 
 // validOrganization valid object attribute that is organization type
 func (attribute *Attribute) validOrganization(ctx context.Context, val interface{}, key string) errors.RawErrorInfo {
 	rid := util.ExtractRequestIDFromContext(ctx)
-	if val == nil {
+	// 对齐 validUser 惯例:UI 表单未填的可选字段提交空串,按未填写处理
+	if val == nil || val == "" {
 		if attribute.IsRequired {
 			blog.Errorf("params can not be null, rid: %s", rid)
 			return errors.RawErrorInfo{ErrCode: common.CCErrCommParamsNeedSet, Args: []interface{}{key}}

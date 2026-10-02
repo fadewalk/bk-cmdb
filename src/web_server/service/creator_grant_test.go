@@ -63,6 +63,11 @@ func TestExtractCreatorResourceIDs(t *testing.T) {
 			want: []string{"44"},
 		},
 		{
+			name: "createmany project ids array response",
+			body: `{"result":true,"data":{"ids":[22]}}`,
+			want: []string{"22"},
+		},
+		{
 			name: "invalid json",
 			body: `not-json`,
 			want: nil,

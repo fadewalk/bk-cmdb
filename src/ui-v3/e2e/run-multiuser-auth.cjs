@@ -86,6 +86,18 @@ async function login(page, username, password) {
   await page.waitForTimeout(1200)
 }
 
+// 按名预清理上一轮残留(唯一约束会挡住重跑)
+async function cleanupProjectByName(page, name) {
+  await page.evaluate(async (projectName) => {
+    const res = await fetch('/api/v3/findmany/project', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: { start: 0, limit: 50 } }) })
+    const data = (await res.json())?.data?.info || []
+    const ids = data.filter((p) => p.bk_project_name === projectName).map((p) => p.id)
+    if (ids.length) {
+      await fetch('/api/v3/deletemany/project', { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+    }
+  }, name)
+}
+
 async function createProjectViaUI(page, name) {
   await page.goto(`${BASE}/#/resource/project`, { waitUntil: 'load' })
   await page.reload({ waitUntil: 'load' }).catch(() => {})
@@ -159,6 +171,7 @@ async function createProjectViaUI(page, name) {
     admin.setDefaultTimeout(20000)
     const adminPage = await admin.newPage()
     await login(adminPage, 'admin', 'admin')
+    await cleanupProjectByName(adminPage, BIZ_NAME)
     await adminPage.goto(`${BASE}/#/platform/iam`, { waitUntil: 'load' })
     await adminPage.reload({ waitUntil: 'load' }).catch(() => {})
     const pendingRow = adminPage.getByTestId('iam-apply-table').locator('tbody tr').filter({ hasText: 'project' }).filter({ hasText: 'bob' })
@@ -169,25 +182,26 @@ async function createProjectViaUI(page, name) {
 
     // === bob 重试创建成功 + 创建者自动授权 biz_admin ===
     await createProjectViaUI(bobPage, BIZ_NAME)
-    await bobPage.waitForTimeout(2500)
-    // 授权链路验证终点:审批后同请求不再被边缘拒绝(到达后端业务校验即算放行;
-    // 后端字段校验 1199011 属另一维度,若字段合法则项目真实创建并清理)
+    await bobPage.waitForTimeout(3000)
+    // 授权终点断言:审批后创建真实成功(1209011 组织字段空串校验已修)
     const lastReq = projectRequests[projectRequests.length - 1]
     assert(lastReq, '审批后未发出创建请求')
-    assert(lastReq.response !== 403 && !String(lastReq.result || '').includes('permission denied'),
-      `审批后创建仍被边缘拒绝: ${JSON.stringify(lastReq)}`)
-    if (String(lastReq.result || '').includes('"result":true')) {
-      const created = JSON.parse(lastReq.result)
-      const id = created?.data?.[0]?.bk_project_id
-      if (id) {
-        await adminPage.evaluate(async (pid) => {
-          await fetch('/api/v3/deletemany/project', { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [Number(pid)] }) })
-        }, id)
-        console.log(`✓ 审批后 bob 创建项目成功(${id})并已清理`)
-      }
-    } else {
-      console.log(`✓ 审批后创建请求穿过边缘到达后端(授权链路闭环),后端校验响应: ${String(lastReq.result || '').slice(0, 80)}`)
-    }
+    assert(lastReq.response === 200 && String(lastReq.result || '').includes('"result":true'),
+      `审批后创建未成功: ${JSON.stringify(lastReq)}`)
+    // createmany/project 响应契约:data.ids 数组
+    const createdId = JSON.parse(lastReq.result)?.data?.ids?.[0]
+    console.log(`✓ 审批后 bob 创建项目成功(${createdId})`)
+
+    // === 创建者自动授权:成功创建即绑定 biz_admin@新项目域 ===
+    const bobPermAfterCreate = await bobPage.evaluate(async () => (await fetch('/iam/me/permissions', { credentials: 'include' })).json())
+    const creatorBinding = (bobPermAfterCreate.groupings || []).find((g) => g[0] === 'bob' && g[1] === 'biz_admin' && g[2] === String(createdId))
+    assert(creatorBinding, `创建者自动授权缺失 biz_admin@${createdId}: ${JSON.stringify(bobPermAfterCreate.groupings)}`)
+    console.log(`✓ 创建者自动授权 bob → biz_admin@${createdId}`)
+
+    // admin 清理测试项目
+    await adminPage.evaluate(async (pid) => {
+      await fetch('/api/v3/deletemany/project', { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [Number(pid)] }) })
+    }, createdId)
 
     // === biz_admin 域角色:真实后端 enforcer 上验证域语义 ===
     // (创建成功自动绑定钩子受项目模型 organization 字段空串校验 1199011 阻塞,已单独记录)

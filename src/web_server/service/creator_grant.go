@@ -74,6 +74,17 @@ func extractCreatorResourceIDs(body []byte) []string {
 						ids = append(ids, id)
 					}
 				}
+				// createmany 批量接口响应契约是 data.ids 数组(如 /api/v3/createmany/project)
+				if key == "ids" {
+					if arr, ok := child.([]interface{}); ok {
+						for _, item := range arr {
+							if id, ok := numericIDString(item); ok && !seen[id] && len(ids) < maxGrantIDsPerResponse {
+								seen[id] = true
+								ids = append(ids, id)
+							}
+						}
+					}
+				}
 				walk(child)
 			}
 		case []interface{}:
