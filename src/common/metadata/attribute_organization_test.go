@@ -3,12 +3,15 @@ package metadata
 import (
 	"context"
 	"testing"
+
+	"configcenter/src/common"
 )
 
 // 回归:非必填 organization 字段提交空串曾被类型校验拒绝(1199011),
 // 对齐 validUser 惯例后空串按未填写处理。
 func TestValidOrganizationEmptyString(t *testing.T) {
-	attr := Attribute{PropertyType: FieldTypeOrganization, IsRequired: false}
+	multiple := true
+	attr := Attribute{PropertyType: common.FieldTypeOrganization, IsRequired: false, IsMultiple: &multiple}
 
 	// 非必填 + 空串 → 放行
 	if rawErr := attr.validOrganization(context.Background(), "", "bk_project_team"); rawErr.ErrCode != 0 {
@@ -19,7 +22,7 @@ func TestValidOrganizationEmptyString(t *testing.T) {
 		t.Fatalf("optional nil should pass, got: %+v", rawErr)
 	}
 	// 必填 + 空串 → ParamsNeedSet
-	required := Attribute{PropertyType: FieldTypeOrganization, IsRequired: true}
+	required := Attribute{PropertyType: common.FieldTypeOrganization, IsRequired: true}
 	if rawErr := required.validOrganization(context.Background(), "", "bk_project_team"); rawErr.ErrCode != common.CCErrCommParamsNeedSet {
 		t.Fatalf("required empty string should be ParamsNeedSet, got: %+v", rawErr)
 	}

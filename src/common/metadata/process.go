@@ -2096,7 +2096,7 @@ func (ti *PropertyPortValue) Validate() error {
 		}
 		for _, tmpItem := range tmpPortArr {
 			if !(end < tmpItem.start || start > tmpItem.end) {
-				return fmt.Errorf("port format invalid,  port duplicate:" + strPortItem)
+				return fmt.Errorf("port format invalid,  port duplicate:%s", strPortItem)
 			}
 		}
 		tmpPortArr = append(tmpPortArr, propertyPortItem{start: start, end: end})

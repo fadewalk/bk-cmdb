@@ -38,55 +38,55 @@ func TestHostModuleRelationRequestEmpty(t *testing.T) {
 		t.Errorf("not empty, %#v", hmr)
 	}
 	hmr = HostModuleRelationRequest{
-		SetID: []int64{1},
+		SetIDArr: []int64{1},
 	}
 	if hmr.Empty() {
 		t.Errorf("not empty, %#v", hmr)
 	}
 	hmr = HostModuleRelationRequest{
-		ModuleID: []int64{1},
-	}
-	if hmr.Empty() {
-		t.Errorf("not empty, %#v", hmr)
-	}
-
-	hmr = HostModuleRelationRequest{
-		HostID: []int64{1},
+		ModuleIDArr: []int64{1},
 	}
 	if hmr.Empty() {
 		t.Errorf("not empty, %#v", hmr)
 	}
 
 	hmr = HostModuleRelationRequest{
+		HostIDArr: []int64{1},
+	}
+	if hmr.Empty() {
+		t.Errorf("not empty, %#v", hmr)
+	}
+
+	hmr = HostModuleRelationRequest{
 		ApplicationID: 1,
-		HostID:        []int64{1},
-		ModuleID:      []int64{1},
-		SetID:         []int64{1},
+		HostIDArr:     []int64{1},
+		ModuleIDArr:   []int64{1},
+		SetIDArr:      []int64{1},
 	}
 	if hmr.Empty() {
 		t.Errorf("not empty, %#v", hmr)
 	}
 	hmr = HostModuleRelationRequest{
 		ApplicationID: 1,
-		HostID:        []int64{1},
-		ModuleID:      []int64{1},
-		SetID:         []int64{1},
+		HostIDArr:     []int64{1},
+		ModuleIDArr:   []int64{1},
+		SetIDArr:      []int64{1},
 	}
 	if hmr.Empty() {
 		t.Errorf("not empty, %#v", hmr)
 	}
 	hmr = HostModuleRelationRequest{
-		HostID:   []int64{1},
-		ModuleID: []int64{1},
-		SetID:    []int64{1},
+		HostIDArr:   []int64{1},
+		ModuleIDArr: []int64{1},
+		SetIDArr:    []int64{1},
 	}
 	if hmr.Empty() {
 		t.Errorf("not empty, %#v", hmr)
 	}
 	hmr = HostModuleRelationRequest{
 		ApplicationID: 1,
-		HostID:        []int64{1},
-		SetID:         []int64{1},
+		HostIDArr:     []int64{1},
+		SetIDArr:      []int64{1},
 	}
 	if hmr.Empty() {
 		t.Errorf("not empty, %#v", hmr)

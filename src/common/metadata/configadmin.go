@@ -513,7 +513,7 @@ func (b *BaseCfgItem) ValidateValueFormat() error {
 		return fmt.Errorf("value cant't be empty")
 	}
 	if b.IsExceedMaxLength() {
-		return fmt.Errorf("value length can't exceed %s", common.AttributeOptionMaxLength)
+		return fmt.Errorf("value length can't exceed %d", common.AttributeOptionMaxLength)
 	}
 	return nil
 }

@@ -35,8 +35,9 @@ func TestHostMapStrAcceptsStringAndArrayIPFields(t *testing.T) {
 }
 
 func TestParseBsonStringArrayValueToStringRejectsNonStringArrayValues(t *testing.T) {
-	doc := bsoncore.BuildDocument(nil, bsoncore.AppendArrayElement(nil, "0", bsoncore.Value{Type: 0x10, Data: bsoncore.AppendInt32(nil, 1)}))
-	value, _ := bsoncore.Document(doc).Lookup("0")
+	// mongo-driver v1.17:AppendArrayElement 收编码值字节;单元素 int32 文档用 AppendInt32Element 构造
+	doc := bsoncore.BuildDocument(nil, bsoncore.AppendInt32Element(nil, "0", 1))
+	value := bsoncore.Document(doc).Lookup("0")
 	if _, err := parseBsonStringArrayValueToString(value); err == nil {
 		t.Fatal("expected non-string array value to fail")
 	}
