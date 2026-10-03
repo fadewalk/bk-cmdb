@@ -1,5 +1,23 @@
 ![](docs/resource/img/bk-cmdb.png)
 ---
+
+> ## 本仓库：bk-cmdb 独立部署版（standalone-docker）
+>
+> 这是 [TencentBlueKing/bk-cmdb](https://github.com/TencentBlueKing/bk-cmdb) 的独立部署分支。**默认分支 `standalone-docker`**：
+>
+> - **前端全量替换**：`src/ui-v3`（Vue 3 + Element Plus + Vite + Pinia）1:1 复刻老版交互与视觉，已完整替代旧版 Vue2 + MagicBox 前端（含主机/业务拓扑/服务与集群模板/模型管理全家族/审计/运营统计）
+> - **自研 IAM 替代蓝鲸权限中心**：Casbin 边缘授权（/api 面全量拦截）+ 站内权限申请/管理员审批 + 业务域角色 biz_admin + 创建者自动授权，策略可持久化（Mongo cc_Policy）+ 热加载
+> - **单容器开箱即用**：`docker compose` 一键起（zookeeper + mongo + redis + 12 个 Go 服务），无需任何蓝鲸平台组件（PaaS/ESB/IAM/GSE）
+> - **开箱默认** skip-login 单管理员模式；切换内置多账号（`CMDB_SESSION_USERINFO`）或 OIDC 即可多用户使用，授权链路已由真实多用户 E2E 验证（`src/ui-v3/e2e/run-multiuser-auth.cjs`）
+>
+> **快速开始**：`cd deploy/standalone && docker compose up -d` → 访问 `http://localhost:8090`（详见 [deploy/standalone/README.md](deploy/standalone/README.md)）。
+> 安全边界与生产门禁见 [docs/architecture/standalone-security-boundary.md](docs/architecture/standalone-security-boundary.md)；自研 IAM 设计与实施状态见 [docs/architecture/iam-open-source-design.md](docs/architecture/iam-open-source-design.md)。
+>
+> ---
+> 以下为上游蓝鲸 CMDB 原始说明（master 分支适用）：
+
+---
+
 [![license](https://img.shields.io/badge/license-mit-brightgreen.svg?style=flat)](https://github.com/TencentBlueKing/bk-cmdb/blob/master/LICENSE.txt)
 [![Release Version](https://img.shields.io/badge/release-3.2.19-brightgreen.svg)](https://github.com/TencentBlueKing/bk-cmdb/releases)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/TencentBlueKing/bk-cmdb/pulls)
@@ -21,6 +39,7 @@
 * [设计理念](docs/overview/design.md)
 * [架构设计](docs/overview/architecture.md)
 * [代码目录](docs/overview/code_framework.md)
+* [架构文档索引与当前审计](docs/architecture/README.md)
 * [数据库表结构设计](docs/db/README.md)
 
 ![front-page](docs/resource/img/frontpage.png)
