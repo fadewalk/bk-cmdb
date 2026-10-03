@@ -1,9 +1,9 @@
 ![](docs/resource/img/bk-cmdb.png)
 ---
 
-> ## 本仓库：bk-cmdb 独立部署版（standalone-docker）
+> ## 本仓库：Ops-CMDB —— bk-cmdb 独立部署版（standalone-docker）
 >
-> 这是 [TencentBlueKing/bk-cmdb](https://github.com/TencentBlueKing/bk-cmdb) 的独立部署分支。**默认分支 `standalone-docker`**：
+> 这是 [TencentBlueKing/bk-cmdb](https://github.com/TencentBlueKing/bk-cmdb) 的独立部署分支，产品名 **Ops-CMDB**。**默认分支 `standalone-docker`**：
 >
 > - **前端全量替换**：`src/ui-v3`（Vue 3 + Element Plus + Vite + Pinia）1:1 复刻老版交互与视觉，已完整替代旧版 Vue2 + MagicBox 前端（含主机/业务拓扑/服务与集群模板/模型管理全家族/审计/运营统计）
 > - **自研 IAM 替代蓝鲸权限中心**：Casbin 边缘授权（/api 面全量拦截）+ 站内权限申请/管理员审批 + 业务域角色 biz_admin + 创建者自动授权，策略可持久化（Mongo cc_Policy）+ 热加载
